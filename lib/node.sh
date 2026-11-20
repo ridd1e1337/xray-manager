@@ -464,9 +464,6 @@ _node_add() {
       validate_domain "$(jq -r '.domain // ""' <<<"$node")" || die 'TLS 需要有效的 --domain。'
     fi
   fi
-  if [[ "$protocol" == snell || "$protocol" == shadowtls ]]; then
-    node=$(jq '.credential_revision=1 | if .protocol=="snell" then .credential_mode="single" else . end' <<<"$node")
-  fi
   if [[ "$protocol" != vmess-ws-cf ]]; then
     node=$(jq --arg source "$address_source" '.server_address_source=$source' <<<"$node")
   fi
@@ -729,11 +726,6 @@ _node_user_add() {
     jq --arg nid "$node_id" '(.nodes[] | select(.id==$nid) | .credential_mode)="multi"' "$candidate" >"$candidate.tmp"
     mv "$candidate.tmp" "$candidate"
     log_warn "Shadowsocks 节点已切换到 2022 多用户模式；原单用户分享链接需要重新导出。"
-  fi
-  if [[ "$protocol" == snell ]] && ! protocol_snell_multiuser "$node"; then
-    jq --arg nid "$node_id" '(.nodes[] | select(.id==$nid) | .credential_mode)="multi"' "$candidate" >"$candidate.tmp" || return 1
-    mv "$candidate.tmp" "$candidate" || return 1
-    log_warn 'Snell 已切换到持久多用户模式；全部用户需要重新导入含 userkey 的 sing-box 配置，之后不会自动退回 PSK 单用户模式。'
   fi
   if ! apply_candidate_state "$candidate" "user-add-$node_id-$user_id"; then rm -f "$candidate"; return 1; fi
   rm -f "$candidate"
