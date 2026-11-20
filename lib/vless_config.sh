@@ -8,7 +8,9 @@ vless_config_apply() {
   local node=$1 key value network settings_key security client_security old_network old_security flow json
   shift
   local -A options=()
-  [[ $(jq -r '.protocol' <<<"$node") == vless ]] || { log_error '这些参数仅用于 VLESS。'; return 1; }
+  local protocol
+  protocol=$(jq -r '.protocol' <<<"$node")
+  xray_stream_protocol "$protocol" || { log_error '传输与安全层参数用于 VLESS、VMess、Trojan、Shadowsocks。'; return 1; }
   while (($#)); do
     (($# >= 2)) || { log_error "缺少参数值：$1"; return 1; }
     key=$1; value=$2; shift 2
@@ -21,6 +23,18 @@ vless_config_apply() {
     esac
     options[$key]=$value
   done
+  if [[ "$protocol" != vless ]]; then
+    for key in --flow --vless-encryption --vless-decryption --packet-encoding; do
+      [[ ! -v options[$key] ]] || { log_error "$key 仅用于 VLESS。"; return 1; }
+    done
+  fi
+  if [[ "${options[--security]:-}" == reality && ! "$protocol" =~ ^(vless|trojan)$ ]]; then
+    log_error 'Xray 的 REALITY 只用于 VLESS 与 Trojan。'; return 1
+  fi
+  if [[ ( -v options[--fallbacks] || -v options[--fallback-dest] ) && ! "$protocol" =~ ^(vless|trojan)$ ]]; then
+    log_error '回落只用于 VLESS 与 Trojan。'; return 1
+  fi
+  [[ "$(vless_network_normalize "${options[--transport]:-raw}" 2>/dev/null)" != xdrive || "$protocol" == vless ]] || { log_error 'XDrive 只用于 VLESS。'; return 1; }
   old_network=$(vless_node_network "$node") || return 1
   old_security=$(jq -r '.xray.inbound.streamSettings.security // .security // "none"' <<<"$node") || return 1
   for key in --xray-inbound-json --xray-outbound-json; do
@@ -30,7 +44,7 @@ vless_config_apply() {
     fi
   done
   network=$(vless_network_normalize "${options[--transport]:-$(vless_node_network "$node")}") || return 1
-  security=${options[--security]:-$(jq -r '.xray.inbound.streamSettings.security // .security // "none"' <<<"$node")}
+  security=${options[--security]:-$(jq -r '.xray.inbound.streamSettings.security // .security // (if .protocol=="trojan" then "tls" else "none" end)' <<<"$node")}
   case "$security" in none|tls|reality) ;; *) log_error 'VLESS 安全层只能是 none、tls 或 reality。'; return 1;; esac
   if [[ -v options[--frontend-address] ]]; then
     value=${options[--frontend-address]}
@@ -217,8 +231,9 @@ vless_config_apply() {
   if [[ -v options[--flow] ]]; then flow=${options[--flow]}
   elif [[ "$network" != "$old_network" || "$security" != "$old_security" ]]; then flow=auto; fi
   if [[ "$flow" == auto ]]; then
-    if [[ "$network" == raw && "$security" != none ]]; then flow=xtls-rprx-vision; else flow=''; fi
+    if [[ "$protocol" == vless && "$network" == raw && "$security" != none ]]; then flow=xtls-rprx-vision; else flow=''; fi
   fi
+  [[ "$protocol" == vless || -z "$flow" ]] || flow=''
   case "$flow" in ''|xtls-rprx-vision) ;; *) log_error 'flow 只能为空或 xtls-rprx-vision。'; return 1;; esac
   node=$(jq --arg flow "$flow" '.flow=(if $flow=="" then null else $flow end)' <<<"$node") || return 1
   vless_server_options_check "$node" || return 1
@@ -256,13 +271,10 @@ _node_vless_configure() {
   shift
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || { log_error 'VLESS 参数变更不接受 --dry-run。'; return 1; }
   previous=$(state_get_node "$id") || return 1
-  [[ -n "$previous" && $(jq -r '.protocol' <<<"$previous") == vless ]] || { log_error '请选择 VLESS 节点。'; return 1; }
+  [[ -n "$previous" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$previous")" || { log_error '请选择 VLESS、VMess、Trojan 或 Shadowsocks 节点。'; return 1; }
   node=$(vless_config_apply "$previous" "$@") || return 1
   domain=$(jq -r '.domain // ""' <<<"$node"); security=$(jq -r '.security' <<<"$node")
   if [[ "$security" != none ]]; then validate_domain "$domain" || { log_error 'TLS/Reality 需要有效域名。'; return 1; }; fi
-  if [[ $(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE") != xray ]]; then
-    log_error '请先运行 xm xray enable，把 VLESS 接入 Xray 后再设置 Xray 参数。'; return 1
-  fi
   [[ -x "$SBM_XRAY_BIN" ]] || _xray_install || return 1
   if [[ "$security" == reality ]]; then
     secret='{}'; [[ ! -r "$(state_secret_path "$id")" ]] || secret=$(state_get_secret "$id") || return 1
@@ -287,7 +299,7 @@ _node_vless_configure() {
   state_normalize_v2_file "$candidate" || { rm -f "$candidate"; return 1; }
   apply_candidate_state "$candidate" vless-configure || { rm -f "$candidate"; return 1; }
   rm -f "$candidate"
-  log_ok "VLESS 参数已更新：$id"
+  log_ok "传输与安全层参数已更新：$id"
 }
 
 node_vless_configure() {

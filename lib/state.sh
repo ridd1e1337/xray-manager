@@ -368,7 +368,7 @@ state_validate() {
       type == "object"
       and (.id | string and test("^[a-z0-9][a-z0-9._-]{0,47}$"))
       and (.name | nonempty and (explode | all(.[]; . >= 32 and . != 127)))
-      and (.protocol | IN("vmess-ws-cf", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed"))
+      and (.protocol | IN("vmess-ws-cf", "vmess", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed"))
       and (.enabled | type == "boolean")
       and (.listen | nonempty)
       and (.port | port)
@@ -387,7 +387,10 @@ state_validate() {
       and (.tags | type == "array" and length <= 32)
       and all(.tags[]; type == "string" and length > 0 and length <= 48 and test("^[^,[:cntrl:]]+$"));
     def node_protocol:
-      if .protocol == "vmess-ws-cf" then
+      if .protocol == "vmess" then
+        (.server_address | string) and ((.security // "none") | IN("none", "tls"))
+        and (if (.security // "none")=="tls" then (.domain|nonempty) else true end)
+      elif .protocol == "vmess-ws-cf" then
         (.listen == "127.0.0.1")
         and (.ws_path | nonempty and startswith("/"))
         and (.domain | string)
@@ -548,7 +551,7 @@ state_validate() {
     and all(.node_templates[];
       type == "object"
       and (.name | string and test("^[a-z0-9][a-z0-9._-]{0,47}$"))
-      and (.protocol | IN("vmess-ws-cf", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed"))
+      and (.protocol | IN("vmess-ws-cf", "vmess", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed"))
       and (.defaults | type == "object"))
     and (.certificates | type == "array")
     and (if .openlist==null then true else

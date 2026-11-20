@@ -261,31 +261,45 @@ vless_xray_client_outbound() {
 }
 
 _vless_xray_client_outbound() {
-  local node=$1 credential=$2 secret=$3 inbound stream override settings user_extra encryption decryption public='' verify='' network security flow client
+  local node=$1 credential=$2 secret=$3 inbound stream override settings user_extra encryption decryption public='' verify='' network security flow client protocol
+  protocol=$(jq -r '.protocol' <<<"$node")
   inbound=$(xray_inbound_for_node "$node" "$(jq -cn --argjson user "$credential" '[$user]')" "$secret") || return 1
   stream=$(vless_stream_normalize "$(jq -c '.streamSettings' <<<"$inbound")") || return 1
   inbound=$(jq --argjson stream "$stream" '.streamSettings=$stream' <<<"$inbound") || return 1
   network=$(jq -r '.network' <<<"$stream"); security=$(jq -r '.security' <<<"$stream")
-  override=$(vless_outbound_override_normalize "$(jq -c '.xray.outbound // {}' <<<"$node")") || return 1
-  user_extra=$(jq -c '.settings.vnext[0].users[0] // {}' <<<"$override") || return 1
-  decryption=$(jq -r '.settings.decryption // "none"' <<<"$inbound") || return 1
-  encryption=$(jq -r '.encryption // empty' <<<"$user_extra") || return 1
-  [[ -n "$encryption" ]] || encryption=$(vless_encryption_public "$decryption") || return 1
-  vless_encryption_pair_check "$decryption" "$encryption" || return 1
-  flow=$(jq -r '(.settings.clients[0].flow // "") as $user | if $user=="" then (.settings.flow // "") else $user end' <<<"$inbound") || return 1
+  if [[ "$protocol" == vless ]]; then
+    override=$(vless_outbound_override_normalize "$(jq -c '.xray.outbound // {}' <<<"$node")") || return 1
+    user_extra=$(jq -c '.settings.vnext[0].users[0] // {}' <<<"$override") || return 1
+    decryption=$(jq -r '.settings.decryption // "none"' <<<"$inbound") || return 1
+    encryption=$(jq -r '.encryption // empty' <<<"$user_extra") || return 1
+    [[ -n "$encryption" ]] || encryption=$(vless_encryption_public "$decryption") || return 1
+    vless_encryption_pair_check "$decryption" "$encryption" || return 1
+    flow=$(jq -r '(.settings.clients[0].flow // "") as $user | if $user=="" then (.settings.flow // "") else $user end' <<<"$inbound") || return 1
+  else
+    # Only the stream part of a client extension applies to other protocols.
+    override=$(jq -c '(.xray.outbound // {}) | {streamSettings:(.streamSettings // {})} + (if .mux then {mux} else {} end)' <<<"$node") || return 1
+    user_extra='{}'; encryption=none; flow=''
+  fi
   if [[ "$security" == reality ]]; then
     public=$(vless_x25519_public "$(jq -r '.realitySettings.privateKey // ""' <<<"$stream")") || return 1
     if [[ $(jq -r '.realitySettings.mldsa65Seed // ""' <<<"$stream") != "" ]]; then
       verify=$(vless_pq_public mldsa65 "$(jq -r '.realitySettings.mldsa65Seed' <<<"$stream")") || return 1
     fi
   fi
-  client=$(jq -n --argjson node "$node" --argjson user "$credential" --argjson ss "$stream" --arg flow "$flow" --arg encryption "$encryption" --arg public "$public" --arg verify "$verify" '
+  client=$(jq -n --argjson node "$node" --argjson user "$credential" --argjson ss "$stream" --arg flow "$flow" --arg encryption "$encryption" --arg public "$public" --arg verify "$verify" \
+    --arg server_psk "$(jq -r '.server_password // ""' <<<"$secret")" '
     ($ss | del(.sockopt,.tlsSettings,.realitySettings,.finalmask,.address,.port,.xdriveSettings)
       | if .rawSettings!=null then .rawSettings |= del(.acceptProxyProtocol,.header.response) else . end
       | if .wsSettings!=null then .wsSettings |= del(.acceptProxyProtocol) else . end
       | if .httpupgradeSettings!=null then .httpupgradeSettings |= del(.acceptProxyProtocol) else . end
       | if .hysteriaSettings!=null then .hysteriaSettings |= del(.masquerade) else . end) as $stream |
-    {tag:("proxy-"+$node.id),protocol:"vless",settings:{vnext:[{address:$node.server_address,port:$node.port,users:[{id:$user.uuid,encryption:$encryption,flow:$flow}]}]},streamSettings:$stream}
+    ($node.protocol) as $p |
+    {tag:("proxy-"+$node.id),protocol:$p,streamSettings:$stream,
+     settings:(if $p=="vless" then {vnext:[{address:$node.server_address,port:$node.port,users:[{id:$user.uuid,encryption:$encryption,flow:$flow}]}]}
+       elif $p=="vmess" then {vnext:[{address:$node.server_address,port:$node.port,users:[{id:$user.uuid,security:"auto"}]}]}
+       elif $p=="trojan" then {servers:[{address:$node.server_address,port:$node.port,password:$user.password}]}
+       else {servers:[{address:$node.server_address,port:$node.port,method:$node.method,
+         password:(if ($node.credential_mode // "legacy")=="multi" then $server_psk+":"+$user.password else $user.password end)}]} end)}
     | if $ss.security=="tls" then
         .streamSettings.tlsSettings={serverName:($ss.tlsSettings.serverName // $node.domain),fingerprint:"chrome"}
         | if $ss.tlsSettings.alpn!=null then .streamSettings.tlsSettings.alpn=$ss.tlsSettings.alpn else . end
@@ -300,9 +314,11 @@ _vless_xray_client_outbound() {
   client=$(jq --argjson override "$override" --argjson settings "$settings" --argjson extras "$user_extra" '
     . as $base | . * ($override|del(.settings,.protocol,.tag))
     | .settings=$settings
-    | .settings.vnext[0].users[0] += ($extras | del(.id,.email,.level))
-    | .settings.vnext[0].users[0].id=$base.settings.vnext[0].users[0].id
-    | .tag=$base.tag | .protocol="vless"
+    | if $base.protocol=="vless" then
+        .settings.vnext[0].users[0] += ($extras | del(.id,.email,.level))
+        | .settings.vnext[0].users[0].id=$base.settings.vnext[0].users[0].id
+      else . end
+    | .tag=$base.tag | .protocol=$base.protocol
   ' <<<"$client") || return 1
   stream=$(vless_stream_normalize "$(jq -c '.streamSettings' <<<"$client")") || return 1
   # Accept the legacy publicKey alias, then emit upstream's current name.
@@ -322,7 +338,7 @@ _vless_xray_client_outbound() {
 
 vless_profile_validate() (
   local node=$1 secret=$2 state=${3:-$SBM_STATE} credential outbound tmp log id
-  [[ $(jq -r '.protocol' <<<"$node") == vless ]] || return 0
+  xray_stream_protocol "$(jq -r .protocol <<<"$node")" || return 0
   id=$(jq -r '.id' <<<"$node") || return 1
   credential=$(node_enabled_credentials "$node" | jq -c '.[0] // empty') || return 1
   if [[ -z "$credential" ]]; then

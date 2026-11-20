@@ -12,9 +12,9 @@ node_share_uri() {
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
     vmess-ws-cf) protocol_vmess_share "$node" "$secret" "$node_secret" ;;
-    shadowsocks) protocol_ss_share "$node" "$secret" "$node_secret" ;;
+    shadowsocks|vmess) protocol_vless_share "$node" "$secret" "$node_secret" ;;
     hysteria2) protocol_hy2_share "$node" "$secret" "$node_secret" ;;
-    trojan) protocol_trojan_share "$node" "$secret" ;;
+    trojan) protocol_vless_share "$node" "$secret" "$node_secret" ;;
     vless) protocol_vless_share "$node" "$secret" "$node_secret" ;;
     socks|http|mixed) protocol_proxy_share "$node" "$secret" ;;
   esac
@@ -32,9 +32,9 @@ node_client_outbound() {
   tag="proxy-${id}-${user_id}"
   case "$protocol" in
     vmess-ws-cf) outbound=$(protocol_vmess_client_outbound "$node" "$secret" "$node_secret") ;;
-    shadowsocks) outbound=$(protocol_ss_client_outbound "$node" "$secret" "$node_secret") ;;
+    shadowsocks|vmess) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     hysteria2) outbound=$(protocol_hy2_client_outbound "$node" "$secret" "$node_secret") ;;
-    trojan) outbound=$(protocol_trojan_client_outbound "$node" "$secret") ;;
+    trojan) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     vless) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     socks|http|mixed) outbound=$(protocol_proxy_client_outbound "$node" "$secret") ;;
     *) die "不支持导出的协议：$protocol" ;;
@@ -279,7 +279,7 @@ export_client_config() {
 node_xray_client_outbound() {
   local id=$1 user_id=${2:-} node user secret node_secret='{}' outbound
   node=$(state_get_node "$id") || return 1
-  [[ -n "$node" && $(jq -r '.protocol' <<<"$node") == vless ]] || { log_warn '原生 Xray 客户端导出仅接入 VLESS。'; return 1; }
+  [[ -n "$node" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$node")" || { log_warn '原生 Xray 客户端导出支持 VLESS、VMess、Trojan 与 Shadowsocks。'; return 1; }
   if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node") || return 1; fi
   [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
   [[ -n "$user_id" ]] || return 1
@@ -303,7 +303,7 @@ node_mihomo_client_outbound() {
   secret=$(jq -s '.[0]+.[1]' <(printf '%s\n' "$user") <(state_get_user_secret "$id" "$user_id")) || return 1
   [[ ! -r "$(state_secret_path "$id")" ]] || node_secret=$(state_get_secret "$id") || return 1
   case "$(jq -r '.protocol' <<<"$node")" in
-    vless) native=$(protocol_vless_mihomo_outbound "$node" "$secret" "$node_secret") || return 1;;
+    vless|vmess|trojan|shadowsocks) native=$(protocol_vless_mihomo_outbound "$node" "$secret" "$node_secret") || return 1;;
     *)
       # Other protocols: convert the effective sing-box client outbound.
       local outbound result

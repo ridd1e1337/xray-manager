@@ -25,21 +25,31 @@ def ws_path:
       {path:($parts[0]+(if $rest=="" then "" else "?"+$rest end)),early:($ed|tonumber)} end end;
 def root_options:
   only(["protocol","tag","settings","streamSettings","mux"]; $mode) |
-  if .protocol!="vless" then unsupported("导出器只接受 VLESS") else . end |
+  if (.protocol|IN("vless","vmess","trojan","shadowsocks")|not) then unsupported("导出器只接受 VLESS/VMess/Trojan/Shadowsocks") else . end |
   if (.mux // {})!={} and .mux!={enabled:false} then unsupported($mode+" 无法完整表达 Xray Mux；请使用原生 Xray JSON") else . end |
   if .settings.reverse!=null then unsupported($mode+" 不支持 VLESS reverse；请使用原生 Xray JSON") else . end |
-  .settings |= only(["vnext"]; $mode+" settings") |
-  if (.settings.vnext|length)!=1 or (.settings.vnext[0].users|length)!=1 then unsupported("VLESS 导出需要单个目标和用户") else . end |
-  .settings.vnext[0] |= only(["address","port","users"]; $mode+" vnext") |
-  .settings.vnext[0].users[0] |= only(["id","email","level","encryption","flow"]; $mode+" user");
+  if (.protocol|IN("vless","vmess")) then
+    .settings |= only(["vnext"]; $mode+" settings") |
+    if (.settings.vnext|length)!=1 or (.settings.vnext[0].users|length)!=1 then unsupported("导出需要单个目标和用户") else . end |
+    .settings.vnext[0] |= only(["address","port","users"]; $mode+" vnext") |
+    .settings.vnext[0].users[0] |= only(["id","email","level","encryption","flow","security","alterId"]; $mode+" user")
+  else
+    .settings |= only(["servers"]; $mode+" settings") |
+    if (.settings.servers|length)!=1 then unsupported("导出需要单个服务器") else . end |
+    .settings.servers[0] |= only(["address","port","password","method","email","level","uot","UoTVersion"]; $mode+" server")
+  end;
 def stream_options:
   only(["network","security","tlsSettings","realitySettings","rawSettings","tcpSettings","wsSettings","grpcSettings","httpupgradeSettings","xhttpSettings","kcpSettings","hysteriaSettings","masqueSettings","xdriveSettings","finalmask"]; $mode+" streamSettings") |
   if $mode!="uri" and (.finalmask // {}|length)>0 then unsupported($mode+" 不支持 Xray finalmask；请使用原生 Xray JSON") else . end;
 def common($o):
-  ($o.settings.vnext[0]) as $v | ($v.users[0]) as $u |
   ($o.streamSettings // {} | stream_options) as $s |
-  {server:$v.address,port:$v.port,uuid:$u.id,encryption:($u.encryption // "none"),flow:($u.flow // ""),
-   network:(if ($s.network // "raw")=="tcp" then "raw" else ($s.network // "raw") end),security:($s.security // "none"),stream:$s};
+  (if ($o.protocol|IN("vless","vmess")) then ($o.settings.vnext[0]) as $v | ($v.users[0]) as $u |
+     {server:$v.address,port:$v.port,uuid:$u.id,encryption:($u.encryption // "none"),flow:($u.flow // ""),cipher:($u.security // "auto")}
+   else ($o.settings.servers[0]) as $v |
+     {server:$v.address,port:$v.port,password:$v.password,method:($v.method // ""),encryption:"none",flow:""} end)
+  + {protocol:$o.protocol,network:(if ($s.network // "raw")=="tcp" then "raw" else ($s.network // "raw") end),security:($s.security // "none"),stream:$s};
+def hostport($c): (if $c.server|contains(":") then "["+$c.server+"]" else $c.server end)+":"+($c.port|tostring);
+def qs: to_entries|map((.key|@uri)+"="+(.value|tostring|@uri))|join("&");
 def uri_tls($c):
   if $c.security=="none" then {} elif $c.security=="tls" then
     ($c.stream.tlsSettings // {} | only(["serverName","fingerprint","alpn","allowInsecure","echConfigList","verifyPeerCertByName","pinnedPeerCertSha256","cipherSuites"]; "VLESS URI TLS")) as $t |
@@ -77,13 +87,30 @@ def uri_transport($c):
     ($c.stream.kcpSettings // {} | only(["seed","header","mtu","tti"]; "VLESS URI mKCP")) as $k |
     {seed:$k.seed,headerType:($k.header.type // "none"),mtu:$k.mtu,tti:$k.tti}|compact
   else unsupported("此传输没有可完整表达的 VLESS URI；请使用原生 Xray JSON") end;
-def uri($c):
+def uri_vless($c):
   ({encryption:$c.encryption,security:$c.security,type:(if $c.network=="raw" then "tcp" else $c.network end)} +
     (if $c.flow=="" then {} else {flow:$c.flow} end) +
     (if $packet_encoding=="" then {} else {packetEncoding:$packet_encoding} end) + uri_tls($c) + uri_transport($c) +
     (if ($c.stream.finalmask // {}|length)>0 then {fm:($c.stream.finalmask|tojson)} else {} end)) as $query |
   "vless://"+($c.uuid|@uri)+"@"+(if $c.server|contains(":") then "["+$c.server+"]" else $c.server end)+":"+($c.port|tostring)+"?"+
     ($query|to_entries|map((.key|@uri)+"="+(.value|tostring|@uri))|join("&"))+"#"+($name|@uri);
+def uri($c):
+  if $c.protocol=="vless" then uri_vless($c)
+  elif $c.protocol=="trojan" then
+    ({security:$c.security,type:(if $c.network=="raw" then "tcp" else $c.network end)} + uri_tls($c) + uri_transport($c)) as $q |
+    "trojan://"+($c.password|@uri)+"@"+hostport($c)+"?"+($q|qs)+"#"+($name|@uri)
+  elif $c.protocol=="vmess" then
+    # v2rayN vmess:// JSON link.
+    (uri_tls($c) + uri_transport($c)) as $q |
+    {v:"2",ps:$name,add:$c.server,port:($c.port|tostring),id:$c.uuid,aid:"0",scy:$c.cipher,
+     net:(if $c.network=="raw" then "tcp" else $c.network end),type:($q.headerType // $q.mode // "none"),
+     host:($q.host // ""),path:($q.path // $q.serviceName // ""),tls:(if $c.security=="none" then "" else $c.security end),
+     sni:($q.sni // ""),alpn:($q.alpn // ""),fp:($q.fp // "")}
+    | "vmess://"+(tojson|@base64)
+  elif $c.protocol=="shadowsocks" then
+    if $c.network!="raw" or $c.security!="none" then unsupported("Shadowsocks 分享链接只能表达 RAW 且无 TLS 的配置；请使用原生 Xray JSON") else
+    "ss://"+(($c.method+":"+$c.password)|@base64|gsub("=+$";""))+"@"+hostport($c)+"#"+($name|@uri) end
+  else unsupported("未知协议") end;
 def singbox_tls($c):
   if $c.security=="none" then {} elif $c.security=="tls" then
     ($c.stream.tlsSettings // {} | only(["serverName","fingerprint","alpn","allowInsecure","minVersion","maxVersion","cipherSuites"]; "sing-box TLS")) as $t |
@@ -120,14 +147,22 @@ def singbox_transport($c):
   else unsupported("当前 sing-box 不支持此 Xray 传输；请使用 Xray 或兼容的 mihomo") end;
 def singbox($c):
   if $c.encryption!="none" then unsupported("当前 sing-box 不支持 VLESS Encryption；请使用 Xray 或支持该特性的 mihomo") else
-  ({type:"vless",tag:$name,server:$c.server,server_port:$c.port,uuid:$c.uuid} +
-    (if $c.flow=="" then {} else {flow:$c.flow} end) +
-    (if $packet_encoding=="" then {} else {packet_encoding:(if $packet_encoding=="none" then "" else $packet_encoding end)} end) +
-    singbox_tls($c) + singbox_transport($c)) end;
+  ({tag:$name,server:$c.server,server_port:$c.port} +
+    (if $c.protocol=="vless" then {type:"vless",uuid:$c.uuid}
+       + (if $c.flow=="" then {} else {flow:$c.flow} end)
+       + (if $packet_encoding=="" then {} else {packet_encoding:(if $packet_encoding=="none" then "" else $packet_encoding end)} end)
+     elif $c.protocol=="vmess" then {type:"vmess",uuid:$c.uuid,security:$c.cipher,alter_id:0}
+     elif $c.protocol=="trojan" then {type:"trojan",password:$c.password}
+     else (if $c.network!="raw" or $c.security!="none" then unsupported("sing-box Shadowsocks 不支持 Xray 传输或 TLS；请使用 Xray 或 mihomo") else . end)
+       | {type:"shadowsocks",method:$c.method,password:$c.password} end) +
+    (if $c.protocol=="shadowsocks" then {} else singbox_tls($c) + singbox_transport($c) end)) end;
 def mihomo_tls($c):
   if $c.security=="none" then {tls:false} elif $c.security=="tls" then
-    ($c.stream.tlsSettings // {} | only(["serverName","fingerprint","alpn","allowInsecure"]; "mihomo TLS")) as $t |
+    ($c.stream.tlsSettings // {} | only(["serverName","fingerprint","alpn","allowInsecure","pinnedPeerCertSha256"]; "mihomo TLS")) as $t |
+    ($t.pinnedPeerCertSha256 // null | if .==null then null elif type=="array" then join(",") else . end) as $pin |
+    if $pin!=null and ($pin|contains(",")) then unsupported("mihomo 只能固定一个证书指纹；请使用原生 Xray JSON") else . end |
     {tls:true,servername:$t.serverName,alpn:$t.alpn,"skip-cert-verify":$t.allowInsecure,
+     fingerprint:(if $pin==null then null else ($pin|ascii_downcase|gsub(":";"")) end),
      "client-fingerprint":(if $t.fingerprint=="unsafe" then null else $t.fingerprint end)}|compact
   elif $c.security=="reality" then
     ($c.stream.realitySettings // {} | only(["serverName","fingerprint","publicKey","password","shortId","spiderX","show"]; "mihomo Reality")) as $r |
@@ -174,11 +209,19 @@ def mihomo_transport($c):
   elif $c.network=="xhttp" then {network:"xhttp","xhttp-opts":($c.stream.xhttpSettings // {}|xhttp_mihomo)}
   else unsupported("mihomo VLESS 不支持此传输；请使用原生 Xray JSON") end;
 def mihomo($c):
-  if $packet_encoding=="none" then unsupported("mihomo VLESS 未提供关闭 packet encoding 的对应选项；请使用原生 Xray JSON") else
-  ({name:$name,type:"vless",server:$c.server,port:$c.port,uuid:$c.uuid,udp:true,encryption:$c.encryption} +
-    (if $c.flow=="" then {} else {flow:$c.flow} end) +
-    (if $packet_encoding=="" then {} else {"packet-encoding":$packet_encoding} end) +
-    mihomo_tls($c) + mihomo_transport($c)) end;
+  if $c.protocol=="vless" and $packet_encoding=="none" then unsupported("mihomo VLESS 未提供关闭 packet encoding 的对应选项；请使用原生 Xray JSON") else
+  ({name:$name,server:$c.server,port:$c.port,udp:true} +
+    (if $c.protocol=="vless" then {type:"vless",uuid:$c.uuid,encryption:$c.encryption}
+       + (if $c.flow=="" then {} else {flow:$c.flow} end)
+       + (if $packet_encoding=="" then {} else {"packet-encoding":$packet_encoding} end)
+     elif $c.protocol=="vmess" then {type:"vmess",uuid:$c.uuid,alterId:0,cipher:$c.cipher}
+     elif $c.protocol=="trojan" then
+       # Verified with mihomo v1.19.34: reality-opts is ignored for trojan.
+       (if $c.security=="reality" then unsupported("mihomo 的 Trojan 不支持 REALITY（实测 v1.19.34 未启用）；请使用 Xray 内核客户端") else . end)
+       | {type:"trojan",password:$c.password}
+     else (if $c.network!="raw" or $c.security!="none" then unsupported("mihomo Shadowsocks 不支持 Xray 传输或 TLS；请使用原生 Xray JSON") else . end)
+       | {type:"ss",cipher:$c.method,password:$c.password} end) +
+    (if $c.protocol=="shadowsocks" then {} else mihomo_tls($c) + mihomo_transport($c) end)) end;
 try (root_options | common(.) as $c |
   {ok:true,value:(if $mode=="uri" then uri($c) elif $mode=="singbox" then singbox($c) elif $mode=="mihomo" then mihomo($c) else unsupported("未知 VLESS 导出格式") end)})
 catch {ok:false,reason:(if type=="object" and has("sb_reason") then .sb_reason else "此格式无法安全转换当前参数；请使用原生 Xray JSON并检查字段类型。" end)}

@@ -3,6 +3,7 @@
 
 node_protocol_label() {
   case "$1" in
+    vmess) printf 'VMess' ;;
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
     shadowsocks) printf 'Shadowsocks 2022' ;;
     hysteria2) printf 'Hysteria2' ;;
@@ -167,6 +168,7 @@ _node_add() {
   local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' obfs_host='' obfs_min_packet_size=512 obfs_max_packet_size=1200 disable_chrome_parrot=false bbr_profile='' brutal_debug=false masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 congestion_control='cubic' strict_mode=true wildcard_sni='off' snell_version=5 snell_mode=default realm_id='' realm_ip_version=0 realm_port_mapping=false inbound_json='{}' outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
   local remark='' region='' purpose='' line='' tags='' proxy_listen='127.0.0.1' proxy_listen_supplied=0 vless_preview='' vless_network='' vless_listen='::'
   local -a vless_options=()
+  local security_supplied=0
   while (($#)); do
     case "$1" in
       --listen) proxy_listen=${2:?}; proxy_listen_supplied=1; shift 2;;
@@ -174,7 +176,7 @@ _node_add() {
       --domain) domain=${2:?}; shift 2;; --address) address=${2:?}; address_supplied=1; address_source=manual; shift 2;; --path) path=${2:?}; shift 2;;
       --method) method=${2:?}; shift 2;; --network) network=${2:?}; shift 2;; --no-mux) mux=false; shift;;
       --obfs) obfs=${2:?}; shift 2;; --obfs-host) obfs_host=${2:?}; shift 2;; --obfs-min-packet-size) obfs_min_packet_size=${2:?}; shift 2;; --obfs-max-packet-size) obfs_max_packet_size=${2:?}; shift 2;; --disable-chrome-parrot) disable_chrome_parrot=true; shift;; --bbr-profile) bbr_profile=${2:?}; shift 2;; --brutal-debug) brutal_debug=true; shift;; --masquerade) masquerade=${2:?}; shift 2;; --disabled) enabled=false; shift;;
-      --security) security=${2:?}; shift 2;;
+      --security) security=${2:?}; security_supplied=1; shift 2;;
       --flow) (($# >= 2)) || usage_die '缺少 flow 值；可显式传空字符串。'; flow=$2; shift 2;;
       --transport|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol)
         (($# >= 2)) || usage_die "缺少参数值：$1"
@@ -211,8 +213,8 @@ _node_add() {
     vless_network=$(vless_node_network "$vless_preview") || return 1
     xray_inbound_json=$(jq -c '.xray.inbound // {}' <<<"$vless_preview"); xray_outbound_json=$(jq -c '.xray.outbound // {}' <<<"$vless_preview")
     vless_listen=$(jq -r '.listen // "::"' <<<"$vless_preview")
-  elif (( ${#vless_options[@]} > 0 )); then
-    usage_die 'VLESS 传输和加密参数不能用于其他协议。'
+  elif (( ${#vless_options[@]} > 0 )) && [[ ! "$type" =~ ^(vmess|trojan|ss|shadowsocks)$ ]]; then
+    usage_die '传输与安全层参数用于 VLESS、VMess、Trojan、Shadowsocks。'
   fi
   [[ "$inbound_json" == '{}' ]] || usage_die 'xray-manager 的服务端是 Xray，请改用 --xray-inbound-json；--sing-box-outbound-json 仍可定制 sing-box 客户端导出。'
   case "$type" in
@@ -220,7 +222,16 @@ _node_add() {
   esac
   default_address=$(jq -r '.settings.default_server_address // ""' "$SBM_STATE")
   case "$type" in
-    vmess|vmess-ws-cf)
+    vmess)
+      # Generic VMess (3x-ui parity): any Xray transport, security none/tls.
+      protocol=vmess; base=vmess; transport=tcp; port=${port:-$(node_choose_port tcp)}
+      (( security_supplied )) || security=none
+      [[ "$security" == none || "$security" == tls ]] || die 'VMess 安全层只能是 none 或 tls。'
+      if [[ "$security" == tls ]]; then validate_domain "$domain" || die 'VMess TLS 需要 --domain。'; fi
+      name=${name:-VMess}; address=${address:-${default_address:-${domain:-}}}
+      secret=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}')
+      ;;
+    vmess-ws-cf)
       protocol=vmess-ws-cf; base=vmess-cf; transport=tcp
       [[ -n "$port" ]] || port=$(node_choose_port tcp)
       [[ -n "$path" ]] || path="/$(random_hex 16)-vm"
@@ -298,7 +309,11 @@ _node_add() {
     node_secret=$(jq -n --arg obfs_password "$(jq -r '.obfs_password // ""' <<<"$secret")" '{obfs_password:$obfs_password}')
     secret=$(jq '{password}' <<<"$secret")
   fi
-  if [[ "$protocol" == vless && "$security" == reality ]]; then
+  if [[ "$protocol" == trojan && "$security_supplied" == 1 && "$security" == reality ]]; then
+    [[ -n "$handshake_server" ]] || die 'Trojan Reality 必须指定 --handshake-server。'
+    reality_secret=$(protocol_vless_generate_reality_secret) || return 1
+  fi
+  if [[ ( "$protocol" == vless || "$protocol" == trojan ) && "$security" == reality && -n "$reality_secret" ]]; then
     node_secret=$(jq -n --arg hs "$handshake_server" --argjson hp "$handshake_port" --argjson reality "$reality_secret" '$reality + {handshake_server:$hs,handshake_port:$hp}')
   fi
   if website_mux_managed && [[ "$transport" == tcp && "$port" == 443 ]]; then
@@ -317,6 +332,10 @@ _node_add() {
   created_at=$(now_iso)
 
   case "$protocol" in
+    vmess)
+      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg security "$security" --arg now "$created_at" --argjson enabled "$enabled" \
+        '{id:$id,name:$name,protocol:"vmess",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,security:$security,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
+      ;;
     vmess-ws-cf)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg path "$path" --arg domain "$domain" --arg address "$address" --arg now "$created_at" --argjson enabled "$enabled" \
         '{id:$id,name:$name,protocol:"vmess-ws-cf",enabled:$enabled,listen:"127.0.0.1",port:$port,ws_path:$path,domain:$domain,client_address:$address,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
@@ -347,6 +366,19 @@ _node_add() {
   node=$(jq --argjson inbound "$xray_inbound_json" --argjson outbound "$xray_outbound_json" ".xray={inbound:\$inbound,outbound:\$outbound}" <<<"$node")
   if [[ "$protocol" == vless ]]; then
     node=$(jq --argjson xray "$(jq -c '.xray' <<<"$vless_preview")" '.xray=$xray' <<<"$node") || return 1
+  elif [[ "$protocol" =~ ^(vmess|trojan|shadowsocks)$ ]]; then
+    # Transport/security options share the VLESS profile engine.
+    local -a stream_args=()
+    (( ! security_supplied )) || stream_args+=(--security "$security")
+    if [[ "$security" == reality ]]; then
+      node=$(jq --arg hs "$handshake_server" --argjson hp "$handshake_port" '.handshake_server=$hs | .handshake_port=$hp' <<<"$node") || return 1
+    fi
+    [[ -z "$path" || "$protocol" == vmess-ws-cf ]] || stream_args+=(--path "$path")
+    stream_args+=("${vless_options[@]}")
+    if (( ${#stream_args[@]} > 0 )); then node=$(vless_config_apply "$node" "${stream_args[@]}") || return 1; fi
+    if [[ "$protocol" == shadowsocks || "$protocol" == vmess ]] && [[ $(jq -r '.security // "none"' <<<"$node") != none ]]; then
+      validate_domain "$(jq -r '.domain // ""' <<<"$node")" || die 'TLS 需要有效的 --domain。'
+    fi
   fi
   if [[ "$protocol" == snell || "$protocol" == shadowtls ]]; then
     node=$(jq '.credential_revision=1 | if .protocol=="snell" then .credential_mode="single" else . end' <<<"$node")
@@ -356,8 +388,11 @@ _node_add() {
   fi
   if [[ "$enabled" == true ]]; then
     case "$protocol" in
-      hysteria2|trojan) _cert_prepare_node_domain "$domain" || return 1;;
-      vless) if [[ "$security" == tls ]] && ! jq -e '(.xray.inbound.streamSettings.tlsSettings.certificates // [])|length>0' <<<"$node" >/dev/null; then _cert_prepare_node_domain "$domain" || return 1; fi;;
+      hysteria2) _cert_prepare_node_domain "$domain" || return 1;;
+      vless|vmess|trojan|shadowsocks)
+        if [[ $(xray_node_security "$node") == tls ]] && ! jq -e '(.xray.inbound.streamSettings.tlsSettings.certificates // [])|length>0' <<<"$node" >/dev/null; then
+          _cert_prepare_node_domain "$(jq -r '.domain' <<<"$node")" || return 1
+        fi;;
     esac
   fi
   user_secret_path=$(state_user_secret_path "$id" default)
@@ -435,7 +470,7 @@ _node_rotate() {
   state_user_exists "$id" "$user_id" || die "用户不存在：$id/$user_id"
   protocol=$(jq -r '.protocol' <<<"$node"); path=$(state_user_secret_path "$id" "$user_id"); backup=$(mktemp "$SBM_RUN/secret.backup.XXXXXX"); cp -a "$path" "$backup"
   case "$protocol" in
-    vmess-ws-cf) new=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') ;;
+    vmess|vmess-ws-cf) new=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') ;;
     shadowsocks) new=$(jq -n --arg password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{password:$password}') ;;
     hysteria2)
       new=$(jq -n --arg password "$(random_password 24)" '{password:$password}') ;;
@@ -520,7 +555,7 @@ _node_set() {
 node_set() {
   local id=$1 node; shift
   node=$(state_get_node "$id") || return 1
-  if [[ $(jq -r '.protocol // ""' <<<"$node") == vless ]]; then
+  if xray_stream_protocol "$(jq -r '.protocol // ""' <<<"$node")"; then
     local arg
     for arg in "$@"; do
       case "$arg" in --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol|--xray-inbound-json|--xray-outbound-json)
@@ -534,7 +569,7 @@ node_user_generate_secret() {
   local node=$1 user_id=${2:-default} protocol
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
-    vmess-ws-cf) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
+    vmess|vmess-ws-cf) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
     shadowsocks) jq -n --arg password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{password:$password}' ;;
     hysteria2|trojan) jq -n --arg password "$(random_password 24)" '{password:$password}' ;;
     vless) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;

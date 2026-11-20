@@ -130,6 +130,9 @@ xray_protocol_inbound() {
   base=$(jq -n --arg tag "in-$id" --arg listen "$(jq -r '.listen // "::"' <<<"$node")" --argjson port "$(jq -r '.port' <<<"$node")" \
     '{tag:$tag,listen:$listen,port:$port}') || return 1
   case "$protocol" in
+    vmess)
+      clients=$(jq --arg n "$id" '[.[] | {id:.uuid,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+      jq --argjson c "$clients" '. + {protocol:"vmess",settings:{clients:$c}}' <<<"$base";;
     vmess-ws-cf)
       clients=$(jq --arg n "$id" '[.[] | {id:.uuid,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
       jq --argjson c "$clients" --arg path "$(jq -r '.ws_path' <<<"$node")" \
@@ -168,20 +171,35 @@ xray_protocol_inbound() {
   esac
 }
 
+# Protocols whose transport and security are fully configurable (3x-ui
+# parity): VLESS, generic VMess, Trojan and Shadowsocks share one stream
+# builder; Hysteria, SOCKS/HTTP and the CF-tunnel VMess keep fixed streams.
+xray_stream_protocol() { [[ "$1" =~ ^(vless|vmess|trojan|shadowsocks)$ ]]; }
+
+xray_node_security() {
+  jq -r 'if .security!=null then .security elif .protocol=="trojan" then "tls" else "none" end' <<<"$1"
+}
+
 xray_inbound_for_node() {
-  local node=$1 credentials=$2 secret=$3 id domain rendered users security flow target
-  if [[ $(jq -r '.protocol' <<<"$node") != vless ]]; then
+  local node=$1 credentials=$2 secret=$3 id domain rendered users security flow target protocol
+  protocol=$(jq -r '.protocol' <<<"$node")
+  if ! xray_stream_protocol "$protocol"; then
     rendered=$(xray_protocol_inbound "$node" "$credentials" "$secret") || return 1
     xray_apply_override "$rendered" "$(xray_node_override "$node" inbound)"
     return
   fi
-  id=$(jq -r '.id' <<<"$node"); domain=$(jq -r '.domain' <<<"$node")
-  flow=$(jq -r '.flow // ""' <<<"$node"); security=$(jq -r '.security' <<<"$node")
-  # email is the per-user Stats API key; keep it unique across nodes.
-  users=$(jq --arg flow "$flow" --arg node "$id" '[.[] | {id:.uuid,email:($node+":"+.id),level:0} + (if $flow=="" then {} else {flow:$flow} end)]' <<<"$credentials") || return 1
-  rendered=$(jq -n --arg tag "in-$id" --arg listen "$(jq -r '.listen // "::"' <<<"$node")" \
-    --argjson port "$(jq -r '.port' <<<"$node")" --argjson clients "$users" \
-    '{tag:$tag,listen:$listen,port:$port,protocol:"vless",settings:{clients:$clients,decryption:"none"},streamSettings:{network:"raw"}}') || return 1
+  id=$(jq -r '.id' <<<"$node"); domain=$(jq -r '.domain // ""' <<<"$node")
+  flow=$(jq -r '.flow // ""' <<<"$node"); security=$(xray_node_security "$node")
+  if [[ "$protocol" == vless ]]; then
+    # email is the per-user Stats API key; keep it unique across nodes.
+    users=$(jq --arg flow "$flow" --arg node "$id" '[.[] | {id:.uuid,email:($node+":"+.id),level:0} + (if $flow=="" then {} else {flow:$flow} end)]' <<<"$credentials") || return 1
+    rendered=$(jq -n --arg tag "in-$id" --arg listen "$(jq -r '.listen // "::"' <<<"$node")" \
+      --argjson port "$(jq -r '.port' <<<"$node")" --argjson clients "$users" \
+      '{tag:$tag,listen:$listen,port:$port,protocol:"vless",settings:{clients:$clients,decryption:"none"},streamSettings:{network:"raw"}}') || return 1
+  else
+    # Reuse the protocol settings, then rebuild the stream generically.
+    rendered=$(xray_protocol_inbound "$node" "$credentials" "$secret" | jq '.streamSettings={network:"raw"}') || return 1
+  fi
   if [[ "$security" == reality ]]; then
     target=$(format_hostport "$(jq -r '.handshake_server' <<<"$node")" "$(jq -r '.handshake_port' <<<"$node")") || return 1
     rendered=$(jq --arg target "$target" --arg server_name "$domain" \
