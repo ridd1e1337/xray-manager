@@ -11,7 +11,7 @@ Simplified example:
 ```json
 {
   "schema_version": 2,
-  "manager_version": "0.1.0-alpha.21",
+  "manager_version": "0.1.0-alpha.22",
   "settings": {
     "log_level": "warn",
     "default_server_address": "",
@@ -30,7 +30,6 @@ Simplified example:
   "notifications": {"enabled": false, "provider": "none", "traffic_thresholds": [80, 90, 100]},
   "health": {"enabled": false, "certificate_warn_days": 21, "resources": {}},
   "certificates": [],
-  "node_templates": [],
   "nodes": [
     {
       "id": "vless-22ce8165",
@@ -146,8 +145,6 @@ disables the node while keeping credentials.
 - `openlist.sites[{domain,server,binary,config,port}]`; OpenList data lives in
   `/var/lib/xm-openlist` and is not part of manager backups.
 - `caddy` / `caddy_apt`: explicit Caddy program lifecycle enrollment (mutually exclusive).
-- `node_templates`: non-secret defaults captured from nodes; credentials are always
-  regenerated.
 - `certificates[]`: issued certificates; Cloudflare credentials are in
   `secrets/dns-cloudflare.env`. DNS records created for an operation are journaled so
   a failed operation deletes only its own records.

@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.22
+
+- 移除节点模板与批量操作：面板“节点模板与批量操作”、`xm node template list|save|delete|add`、
+  `xm node enable-all|disable-all`；状态中的 `node_templates` 自动删除。`xm node clone` 保留。
+- 主菜单其后各项前移：17 卸载管理器、18 Sub-Store 订阅管理。
+
 ## 0.1.0-alpha.21
 
 - 移除备份与恢复功能：`xm backup`、`xm restore`、面板“13. 备份与恢复”、Telegram `/backup` 与

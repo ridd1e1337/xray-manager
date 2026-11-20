@@ -80,8 +80,6 @@ sb_help_full() {
   xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
   xm node show <ID>
   xm node enable|disable|delete|rotate <ID>
-  xm node enable-all|disable-all --tag TAG|--region REGION
-  xm node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]
   xm node clone SRC_ID NEW_ID [--port N] [--name NAME]   复制节点设置，重新生成凭据
   xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH|--listen IP
                  [--remark TEXT] [--region REGION] [--purpose PURPOSE] [--line LINE] [--tags a,b]
@@ -411,25 +409,7 @@ main() {
           while (($#)); do if [[ "$1" == --dry-run ]]; then export SBM_DRY_RUN=1; shift; else set_args+=("$1"); shift; fi; done
           (( ${#set_args[@]} >= 2 )) || usage_die '缺少修改参数'; node_set "$id" "${set_args[@]}"
           ;;
-        enable-all|disable-all)
-          local tag='' region=''
-          while (($#)); do case "$1" in --tag) tag=${2:?缺少标签}; shift 2;; --region) region=${2:?缺少地区}; shift 2;; *) usage_die '用法：xm node enable-all|disable-all --tag TAG|--region REGION';; esac; done
-          [[ "$action" == enable-all ]] && node_batch_enable "$tag" "$region" || node_batch_disable "$tag" "$region"
-          ;;
         clone) (($# >= 2)) || usage_die '用法：xm node clone SRC_ID NEW_ID [--port N] [--name NAME] [--domain DOMAIN]'; node_clone "$@" ;;
-        template)
-          local template_action=${1:-list}; shift || true
-          case "$template_action" in
-            list)
-              if ! [[ $# == 0 || ( $# == 1 && $1 == --json ) ]]; then usage_die '用法：xm node template list [--json]'; fi
-              node_template_list "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
-              ;;
-            save) (($# == 2)) || usage_die '用法：xm node template save NAME NODE_ID'; node_template_save "$1" "$2" ;;
-            delete) (($# == 1)) || usage_die '用法：xm node template delete NAME'; node_template_delete "$1" ;;
-            add) (($# >= 2)) || usage_die '用法：xm node template add NAME ID [参数]'; node_template_add "$@" ;;
-            *) usage_die '用法：xm node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]' ;;
-          esac
-          ;;
         *) usage_die "未知 node 操作：$action" ;;
       esac
       ;;
