@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.12
+
+- 性能：同一份状态内容在一次命令里只完整校验一次（原来一次操作会重复校验最多三次）；分享页三种客户端格式在显示链接时并行生成
+  （4.2 → 2.5 秒）；状态页与健康检查对 UFW/Fail2ban 只探测一次（1.7 → 1.4 秒）。输出不变。
+
 ## 0.1.0-alpha.11
 
 - 出站订阅（3x-ui 对齐）：`xm xray outbound sub add NAME URL [--balancer leastPing|…|none]` 把远程订阅（链接列表或 base64）

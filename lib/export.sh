@@ -386,9 +386,26 @@ export_vless_compatibility_json() {
 # format is then exported independently, so a format that cannot express the
 # node (reason logged) never hides the others.
 node_share_files() {
-  local id=$1 user_id=$2 qr=$3 out_dir=$4 uri='' native outbound shown=0
+  local id=$1 user_id=$2 qr=$3 out_dir=$4 uri='' outbound shown=0 salamander=0
   rm -f "$out_dir/share.txt" "$out_dir/substore.txt" "$out_dir/outbound.json" "$out_dir/client.json" \
     "$out_dir/xray-outbound.json" "$out_dir/xray-client.json" "$out_dir/mihomo.json" "$out_dir/mihomo.yaml"
+  # Verified: sing-box's Salamander does not interoperate with Xray's (mihomo does).
+  if jq -e '.protocol=="hysteria2" and (.obfs.type // "")=="salamander"' <<<"$(state_get_node "$id")" >/dev/null; then salamander=1; fi
+  # Client formats are independent read-only exports: build them in the
+  # background while the link is shown, then report in a fixed order.
+  local -a jobs=()
+  { if outbound=$(node_xray_client_outbound "$id" "$user_id" 2>/dev/null); then
+      printf '%s\n' "$outbound" >"$out_dir/xray-outbound.json" && chmod 0600 "$out_dir/xray-outbound.json"
+      export_xray_client_config "$out_dir/xray-client.json" "$id" "$user_id" >/dev/null 2>&1 || rm -f "$out_dir/xray-client.json"
+    fi; } & jobs+=($!)
+  { export_mihomo_client_config "$out_dir/mihomo.json" "$id" "$user_id" >/dev/null 2>&1 \
+      && cp "$out_dir/mihomo.json" "$out_dir/mihomo.yaml" && chmod 0600 "$out_dir/mihomo.yaml" || rm -f "$out_dir/mihomo.json"; } & jobs+=($!)
+  if (( ! salamander )); then
+    { if outbound=$(node_client_outbound "$id" "$user_id" 2>/dev/null); then
+        printf '%s\n' "$outbound" >"$out_dir/outbound.json" && chmod 0600 "$out_dir/outbound.json"
+        export_node_client_config "$id" "$user_id" "$out_dir/client.json" >/dev/null 2>&1 || rm -f "$out_dir/client.json"
+      fi; } & jobs+=($!)
+  fi
   printf '\n%s节点/用户：%s/%s%s\n' "$C_BOLD" "$id" "$user_id" "$C_RESET"
   if uri=$(node_share_uri "$id" "$user_id" 2>/dev/null); then
     printf '%s\n' "$uri" >"$out_dir/share.txt" && chmod 0600 "$out_dir/share.txt" || return 1
@@ -400,28 +417,13 @@ node_share_files() {
   else
     log_info '该节点没有通用分享链接格式，请使用下方客户端配置文件。'
   fi
-  if native=$(node_xray_client_outbound "$id" "$user_id" 2>/dev/null); then
-    printf '%s\n' "$native" >"$out_dir/xray-outbound.json" && chmod 0600 "$out_dir/xray-outbound.json" || return 1
-    shown=1
-    if export_xray_client_config "$out_dir/xray-client.json" "$id" "$user_id" >/dev/null 2>&1; then
-      printf 'Xray 客户端配置（v2rayN/v2rayNG 可导入）：%s\n' "$out_dir/xray-client.json"
-    else printf 'Xray 原生 outbound：%s\n' "$out_dir/xray-outbound.json"; fi
-  fi
-  if export_mihomo_client_config "$out_dir/mihomo.json" "$id" "$user_id" >/dev/null 2>&1; then
-    cp "$out_dir/mihomo.json" "$out_dir/mihomo.yaml" && chmod 0600 "$out_dir/mihomo.yaml" || return 1
-    printf 'mihomo 客户端配置（Clash Verge/FlClash）：%s\n' "$out_dir/mihomo.yaml"; shown=1
-  fi
-  if jq -e '.protocol=="hysteria2" and (.obfs.type // "")=="salamander"' <<<"$(state_get_node "$id")" >/dev/null; then
-    # Verified: sing-box's Salamander does not interoperate with Xray's (mihomo does).
-    printf 'sing-box：sing-box 的 Hysteria2 Salamander 与 Xray 不互通，已跳过（mihomo 可用）。\n'
-  elif outbound=$(node_client_outbound "$id" "$user_id" 2>/dev/null); then
-    printf '%s\n' "$outbound" >"$out_dir/outbound.json" && chmod 0600 "$out_dir/outbound.json" || return 1
-    if export_node_client_config "$id" "$user_id" "$out_dir/client.json" >/dev/null 2>&1; then
-      printf 'sing-box 客户端配置：%s\n' "$out_dir/client.json"
-    else rm -f "$out_dir/client.json"; printf 'sing-box outbound：%s\n' "$out_dir/outbound.json"; fi
-    shown=1
-  else
-    printf 'sing-box：该节点组合无法由 sing-box 客户端完整表达，已跳过。\n'
-  fi
+  wait "${jobs[@]}" 2>/dev/null || true
+  if [[ -r "$out_dir/xray-client.json" ]]; then printf 'Xray 客户端配置（v2rayN/v2rayNG 可导入）：%s\n' "$out_dir/xray-client.json"; shown=1
+  elif [[ -r "$out_dir/xray-outbound.json" ]]; then printf 'Xray 原生 outbound：%s\n' "$out_dir/xray-outbound.json"; shown=1; fi
+  if [[ -r "$out_dir/mihomo.yaml" ]]; then printf 'mihomo 客户端配置（Clash Verge/FlClash）：%s\n' "$out_dir/mihomo.yaml"; shown=1; fi
+  if (( salamander )); then printf 'sing-box：sing-box 的 Hysteria2 Salamander 与 Xray 不互通，已跳过（mihomo 可用）。\n'
+  elif [[ -r "$out_dir/client.json" ]]; then printf 'sing-box 客户端配置：%s\n' "$out_dir/client.json"; shown=1
+  elif [[ -r "$out_dir/outbound.json" ]]; then printf 'sing-box outbound：%s\n' "$out_dir/outbound.json"; shown=1
+  else printf 'sing-box：该节点组合无法由 sing-box 客户端完整表达，已跳过。\n'; fi
   (( shown )) || { log_error "节点 $id 没有可用的客户端导出。"; return 1; }
 }
