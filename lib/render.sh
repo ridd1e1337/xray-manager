@@ -176,154 +176,47 @@ node_enabled_credentials() {
   printf '%s\n' "$credentials"
 }
 
-render_inbound_for_node() {
-  local node=$1 credentials=$2 node_secret=${3:-'{}'} protocol rendered override
-  protocol=$(jq -r '.protocol' <<<"$node")
-  case "$protocol" in
-    vmess-ws-cf) rendered=$(protocol_vmess_render "$node" "$credentials" "$node_secret") ;;
-    shadowsocks) rendered=$(protocol_ss_render "$node" "$credentials" "$node_secret") ;;
-    anytls) rendered=$(protocol_anytls_render "$node" "$credentials" "$node_secret") ;;
-    hysteria2) rendered=$(protocol_hy2_render "$node" "$credentials" "$node_secret") ;;
-    trojan) rendered=$(protocol_trojan_render "$node" "$credentials") ;;
-    tuic) rendered=$(protocol_tuic_render "$node" "$credentials") ;;
-    vless) log_error 'VLESS 只由 Xray 运行，sing-box 不渲染 VLESS 入站。'; return 1 ;;
-    socks|http|mixed) rendered=$(protocol_proxy_render "$node" "$credentials") ;;
-    naive) rendered=$(protocol_naive_render "$node" "$credentials") ;;
-    shadowtls) rendered=$(protocol_shadowtls_render "$node" "$credentials" "$node_secret") ;;
-    snell) rendered=$(protocol_snell_render "$node" "$credentials" "$node_secret") ;;
-    *) die "未知协议：$protocol" ;;
-  esac
-  override=$(singbox_node_override "$node" inbound)
-  singbox_apply_override "$rendered" "$override"
-}
-
+# xray-manager renders every node into one Xray configuration. The
+# candidate pipeline is the same as sb-manager: render, check with the
+# installed core, install atomically, reconcile, roll back on failure.
 render_config_from_state() {
-  local mux_config
-  local state=$1 output=$2 node node_id credentials node_secret inbound inbounds='[]' log_level api_enabled api_secret api_port dashboard strategy dns_optimistic dns_optimistic_timeout dns_timeout dns_advanced core_version realm_enabled realm_listen realm_port realm_url realm_token realm_user realm_max realm_domain
+  local state=$1 output=$2
   validate_state_semantics "$state" || return 1
-  mux_config=$(mux_builtin_config "$state") || return 1
-  while IFS= read -r node; do
-    [[ -n "$node" ]] || continue
-    node_id=$(jq -r '.id' <<<"$node")
-    if declare -F nginx_stream_effective_node >/dev/null 2>&1; then
-      node=$(nginx_stream_effective_node "$state" "$node")
-    fi
-    credentials=$(node_enabled_credentials "$node")
-    node_secret='{}'
-    [[ ! -r $(state_secret_path "$node_id") ]] || node_secret=$(state_get_secret "$node_id")
-    inbound=$(render_inbound_for_node "$node" "$credentials" "$node_secret") || return 1
-    inbounds=$(jq -c --argjson x "$inbound" '. + ($x | if type=="array" then . else [.] end)' <<<"$inbounds") || return 1
-  done < <(state_singbox_nodes "$state")
-  log_level=$(jq -r '.settings.log_level // "info"' "$state")
-  api_enabled=$(jq -r '.api.enabled // false' "$state")
-  api_secret=''; api_port=$(jq -r '.api.port // 9090' "$state"); dashboard=$(jq -r '.api.dashboard // false' "$state")
-  strategy=$(jq -r '.settings.outbound_ip_strategy // "prefer_ipv4"' "$state")
-  realm_enabled=$(jq -r '.realm.enabled // false' "$state")
-  realm_listen=$(jq -r '.realm.listen // "::"' "$state")
-  realm_port=$(jq -r '.realm.port // 9443' "$state")
-  realm_url=$(jq -r '.realm.public_url // ""' "$state")
-  realm_user=$(jq -r '.realm.user_name // "default"' "$state")
-  realm_max=$(jq -r '.realm.max_realms // 0' "$state")
-  realm_domain=$(jq -r '.realm.tls_domain // ""' "$state")
-  realm_token=''
-  [[ "$realm_enabled" != true ]] || realm_token=$(jq -r '.token' "$SBM_REALM_SECRET")
-  dns_optimistic=$(jq -r '.settings.dns_optimistic // false' "$state")
-  dns_optimistic_timeout=$(jq -r '.settings.dns_optimistic_timeout // "3d"' "$state")
-  dns_timeout=$(jq -r '.settings.dns_timeout // "10s"' "$state")
-  dns_advanced=false
-  if [[ "$dns_optimistic" == true || "$dns_timeout" != 10s ]]; then
-    core_version=$(core_current_version || true)
-    version_ge "$core_version" 1.14.0-rc.1 || die 'optimistic DNS 和 DNS 超时设置需要 sing-box 1.14.0-rc.1 或更高版本核心。'
-    dns_advanced=true
-  fi
-  [[ "$api_enabled" != true ]] || api_secret=$(state_get_secret api | jq -r '.secret')
-  jq -n --argjson metered_proxies "$(jq '[.nodes[]|select(.enabled and .traffic.enabled and (.protocol|IN("socks","mixed")))|"in-"+.id]' "$state")" --arg level "$log_level" --arg strategy "$strategy" --argjson inbounds "$inbounds" --argjson api_enabled "$api_enabled" \
-    --argjson mux "$mux_config" \
-    --arg secret "$api_secret" --argjson api_port "$api_port" --argjson dashboard "$dashboard" --arg dashboard_path "$SBM_VAR/dashboard" \
-    --argjson dns_advanced "$dns_advanced" --argjson dns_optimistic "$dns_optimistic" --arg dns_optimistic_timeout "$dns_optimistic_timeout" --arg dns_timeout "$dns_timeout" \
-    --argjson realm_enabled "$realm_enabled" --arg realm_listen "$realm_listen" --argjson realm_port "$realm_port" --arg realm_url "$realm_url" --arg realm_token "$realm_token" --arg realm_user "$realm_user" --argjson realm_max "$realm_max" --arg realm_domain "$realm_domain" --arg cert_dir "$SBM_CERTS" '{
-    "$schema":"https://sing-box.sagernet.org/schema.json",
-    log:{level:$level,timestamp:true},
-    inbounds:$inbounds,
-    dns:{servers:[{type:"local",tag:"dns-local"}],final:"dns-local",strategy:$strategy},
-    outbounds:[{type:"direct",tag:"direct"}],
-    route:{default_domain_resolver:"dns-local",final:"direct"}
-  }
-  | if ($metered_proxies|length)>0 then .route.rules=[{inbound:$metered_proxies,network:"udp",action:"reject"}] else . end
-  | if ($mux.inbounds|length)>0 then
-      .inbounds += $mux.inbounds
-      | .route.rules=($mux.rules + (.route.rules // []))
-    else . end
-  | if $dns_advanced then
-      .dns.timeout=$dns_timeout
-      | .dns.optimistic=(if $dns_optimistic then {enabled:true,timeout:$dns_optimistic_timeout} else false end)
-    else . end
-  | if $realm_enabled then
-      .services=[{type:"hysteria-realm",tag:"realm-local",listen:$realm_listen,listen_port:$realm_port,users:[{name:$realm_user,token:$realm_token,max_realms:$realm_max}]}]
-      | if $realm_domain=="" then . else .services[0].tls={enabled:true,server_name:$realm_domain,certificate_path:($cert_dir + "/" + $realm_domain + "/fullchain.pem"),key_path:($cert_dir + "/" + $realm_domain + "/key.pem")} end
-    else . end
-  | if $api_enabled then
-      .http_clients=[{tag:"http-direct",detour:"direct"}]
-      | .route.default_http_client="http-direct"
-      | .services=((.services // []) + [{
-          type:"api",tag:"api-local",listen:"127.0.0.1",listen_port:$api_port,secret:$secret,
-          access_control_allow_origin:[("http://127.0.0.1:" + ($api_port|tostring))],
-          dashboard:(if $dashboard then {enabled:true,path:$dashboard_path,http_client:"http-direct",update_interval:"1d"} else false end)
-        }])
-    else . end
-  ' >"$output"
-  jq -e . "$output" >/dev/null
+  xray_render_config "$state" "$output"
 }
 
-core_validate_config_with() {
-  local binary=$1 config=$2 log_file=${3:-$SBM_RUN/check.log}
-  [[ -x "$binary" ]] || die "sing-box 核心不存在：$binary"
-  if ! "$binary" check -c "$config" >"$log_file" 2>&1; then
-    log_error "sing-box 配置检查失败："
-    sed -n '1,80p' "$log_file" >&2 || true
-    return 1
-  fi
-}
-
-core_validate_config() { core_validate_config_with "$SBM_SING_BOX_BIN" "$1"; }
+core_validate_config() { xray_validate_config "$SBM_XRAY_BIN" "$1"; }
 
 runtime_render_candidates() {
-  local state=$1 singbox_config=$2 xray_config=$3
-  render_config_from_state "$state" "$singbox_config" && core_validate_config "$singbox_config" || return 1
+  local state=$1 config=$2
   if xray_runtime_required "$state" && [[ ! -x "$SBM_XRAY_BIN" ]]; then
-    _xray_install >&2 || return 1
+    _xray_install_binary >&2 || return 1
   fi
-  xray_render_config "$state" "$xray_config" || return 1
-  if xray_runtime_required "$state"; then xray_validate_config "$SBM_XRAY_BIN" "$xray_config" || return 1; fi
+  render_config_from_state "$state" "$config" || return 1
+  if [[ -x "$SBM_XRAY_BIN" ]]; then core_validate_config "$config" || return 1; fi
 }
 
 apply_candidate_state() (
-  local candidate=$1 reason=${2:-change} tmp_config tmp_xray
+  local candidate=$1 reason=${2:-change} tmp_config
   website_mux_sync_routes "$candidate" || return 1
   tmp_config=$(mktemp "$SBM_RUN/config.candidate.XXXXXX") || return 1
-  tmp_xray=$(mktemp "$SBM_RUN/xray.candidate.XXXXXX") || { rm -f "$tmp_config"; return 1; }
-  trap 'rm -f -- "$tmp_config" "$tmp_xray"' EXIT
-  runtime_render_candidates "$candidate" "$tmp_config" "$tmp_xray" || return 1
-  state_install_candidate "$candidate" "$tmp_config" "$reason" "$tmp_xray" || return 1
+  trap 'rm -f -- "$tmp_config"' EXIT
+  runtime_render_candidates "$candidate" "$tmp_config" || return 1
+  state_install_candidate "$candidate" "$tmp_config" "$reason" || return 1
   log_ok '配置已应用。'
 )
 
 render_current_config() (
-  local tmp tmp_xray backup retain=0 restored=1
+  local tmp backup retain=0 restored=1
   tmp=$(mktemp "$SBM_RUN/config.current.XXXXXX") || return 1
-  tmp_xray=$(mktemp "$SBM_RUN/xray.current.XXXXXX") || { rm -f "$tmp"; return 1; }
-  backup=$(mktemp -d "$SBM_BACKUPS/config-current.XXXXXX") || { rm -f "$tmp" "$tmp_xray"; return 1; }
-  trap 'rm -f -- "$tmp" "$tmp_xray"; (( retain )) || rm -rf -- "$backup"' EXIT
+  backup=$(mktemp -d "$SBM_BACKUPS/config-current.XXXXXX") || { rm -f "$tmp"; return 1; }
+  trap 'rm -f -- "$tmp"; (( retain )) || rm -rf -- "$backup"' EXIT
   printf '%s\n' "$$" >"$backup/.operation-pid" || return 1
-  runtime_render_candidates "$SBM_STATE" "$tmp" "$tmp_xray" || return 1
-  [[ ! -f "$SBM_CONFIG" ]] || cp -a "$SBM_CONFIG" "$backup/singbox" || return 1
-  [[ ! -f "$SBM_XRAY_CONFIG" ]] || cp -a "$SBM_XRAY_CONFIG" "$backup/xray" || return 1
-  if ! { safe_install_file "$tmp" "$SBM_CONFIG" 0640 && set_group_if_exists "$SBM_SERVICE_USER" "$SBM_CONFIG" \
-    && safe_install_file "$tmp_xray" "$SBM_XRAY_CONFIG" 0640 && set_group_if_exists "$SBM_SERVICE_USER" "$SBM_XRAY_CONFIG"; }; then
-    if [[ -f "$backup/singbox" ]]; then cp -a "$backup/singbox" "$SBM_CONFIG" || restored=0
+  runtime_render_candidates "$SBM_STATE" "$tmp" || return 1
+  [[ ! -f "$SBM_CONFIG" ]] || cp -a "$SBM_CONFIG" "$backup/config" || return 1
+  if ! { safe_install_file "$tmp" "$SBM_CONFIG" 0640 && set_group_if_exists "$SBM_SERVICE_USER" "$SBM_CONFIG"; }; then
+    if [[ -f "$backup/config" ]]; then cp -a "$backup/config" "$SBM_CONFIG" || restored=0
     else rm -f "$SBM_CONFIG" || restored=0; fi
-    if [[ -f "$backup/xray" ]]; then cp -a "$backup/xray" "$SBM_XRAY_CONFIG" || restored=0
-    else rm -f "$SBM_XRAY_CONFIG" || restored=0; fi
     if (( ! restored )); then
       retain=1; touch "$backup/.recovery-pending"
       log_error "配置恢复未完成，临时记录最多保留 23 小时：$backup"

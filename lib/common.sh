@@ -28,12 +28,13 @@ SBM_DOWNLOAD_TMP="${SBM_DOWNLOAD_TMP:-/tmp}"
 SBM_REALM_SECRET="${SBM_REALM_SECRET:-${SBM_SECRETS}/realm.json}"
 SBM_CORE_DIR="${SBM_CORE_DIR:-${SBM_LIB}/cores}"
 SBM_LOCK="${SBM_LOCK:-${SBM_RUN}/manager.lock}"
-SBM_SING_BOX_BIN="${SBM_SING_BOX_BIN:-${SBM_BIN_DIR}/sing-box}"
-SBM_XRAY_BIN="${SBM_XRAY_BIN:-${SBM_BIN_DIR}/xray}"
+# Xray lives in the manager's own tree so an official or panel-installed
+# /usr/local/bin/xray is never replaced.
+SBM_XRAY_BIN="${SBM_XRAY_BIN:-${SBM_LIB}/bin/xray}"
 SBM_CLOUDFLARED_BIN="${SBM_CLOUDFLARED_BIN:-${SBM_BIN_DIR}/cloudflared}"
-SBM_SERVICE="${SBM_SERVICE:-xm-sing-box.service}"
-SBM_XRAY_SERVICE="${SBM_XRAY_SERVICE:-xm-xray.service}"
-SBM_XRAY_CONFIG="${SBM_XRAY_CONFIG:-${SBM_GENERATED_DIR}/xray-config.json}"
+SBM_SERVICE="${SBM_SERVICE:-xm-xray.service}"
+SBM_XRAY_SERVICE="$SBM_SERVICE"
+SBM_XRAY_CONFIG="$SBM_CONFIG"
 SBM_XRAY_LOG="${SBM_XRAY_LOG:-$SBM_LOG_DIR/xray.log}"
 SBM_XRAY_ERROR_LOG="${SBM_XRAY_ERROR_LOG:-$SBM_LOG_DIR/xray.err.log}"
 SBM_OPENLIST_BIN="${SBM_OPENLIST_BIN:-${SBM_BIN_DIR}/openlist}"
@@ -49,8 +50,6 @@ SBM_SERVICE_USER="${SBM_SERVICE_USER:-xraymanager}"
 SBM_INIT_SYSTEM="${SBM_INIT_SYSTEM:-auto}"
 SBM_SKIP_INIT="${SBM_SKIP_INIT:-${SBM_SKIP_SYSTEMD:-0}}"
 SBM_SKIP_SYSTEMD="${SBM_SKIP_SYSTEMD:-$SBM_SKIP_INIT}" # backward compatibility
-SBM_SINGBOX_LOG="${SBM_SINGBOX_LOG:-$SBM_LOG_DIR/sing-box.log}"
-SBM_SINGBOX_ERROR_LOG="${SBM_SINGBOX_ERROR_LOG:-$SBM_LOG_DIR/sing-box.err.log}"
 SBM_TUNNEL_LOG="${SBM_TUNNEL_LOG:-$SBM_LOG_DIR/cloudflared.log}"
 SBM_TUNNEL_ERROR_LOG="${SBM_TUNNEL_ERROR_LOG:-$SBM_LOG_DIR/cloudflared.err.log}"
 SBM_NGINX_STREAM_LOG="${SBM_NGINX_STREAM_LOG:-$SBM_LOG_DIR/nginx-stream.log}"
@@ -147,8 +146,8 @@ random_password() {
   openssl rand -base64 "$bytes" | tr -d '\n' | tr '/+' '_-'
 }
 random_uuid() {
-  if [[ -x "$SBM_SING_BOX_BIN" ]]; then
-    "$SBM_SING_BOX_BIN" generate uuid 2>/dev/null && return 0
+  if [[ -x "$SBM_XRAY_BIN" ]]; then
+    "$SBM_XRAY_BIN" uuid 2>/dev/null && return 0
   fi
   if command_exists uuidgen; then uuidgen | tr 'A-Z' 'a-z'; return 0; fi
   local h
@@ -250,11 +249,11 @@ service_user_can_execute_core() {
   id "$SBM_SERVICE_USER" >/dev/null 2>&1 || return 1
   target_uid=$(id -u "$SBM_SERVICE_USER")
   if [[ ${EUID:-$(id -u)} == "$target_uid" ]]; then
-    "$SBM_SING_BOX_BIN" version >/dev/null 2>&1
+    "$SBM_XRAY_BIN" version >/dev/null 2>&1
   elif command_exists runuser; then
-    runuser -u "$SBM_SERVICE_USER" -- "$SBM_SING_BOX_BIN" version >/dev/null 2>&1
+    runuser -u "$SBM_SERVICE_USER" -- "$SBM_XRAY_BIN" version >/dev/null 2>&1
   else
-    su -s /bin/sh -c "'$SBM_SING_BOX_BIN' version >/dev/null 2>&1" "$SBM_SERVICE_USER"
+    su -s /bin/sh -c "'$SBM_XRAY_BIN' version >/dev/null 2>&1" "$SBM_SERVICE_USER"
   fi
 }
 service_user_can_read_config() {
