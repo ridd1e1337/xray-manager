@@ -29,7 +29,7 @@ dependency_package_hint() {
   local feature=${1:-base} distro packages
   distro=$(dependency_distro)
   case "$feature:$distro" in
-    base:alpine) printf 'apk add --no-cache bash curl ca-certificates jq openssl coreutils findutils flock gcompat libcap-utils\n' ;;
+    base:alpine) printf 'apk add --no-cache bash curl ca-certificates jq openssl coreutils findutils flock libcap-utils\n' ;;
     base:debian) printf 'apt-get install --no-install-recommends bash curl ca-certificates jq openssl coreutils findutils util-linux\n' ;;
     benchmark:alpine) printf 'apk add --no-cache iperf3\n' ;;
     benchmark:debian) printf 'apt-get install --no-install-recommends iperf3\n' ;;
@@ -121,9 +121,9 @@ dependency_install_base() {
   distro=$(dependency_distro)
   case "$distro" in
     alpine)
-      # Keep gcompat because official sing-box Linux archives use the glibc
-      # ABI.  libcap-utils is small but required for OpenRC low-port binding.
-      packages=(bash curl ca-certificates jq openssl coreutils findutils flock gcompat libcap-utils)
+      # Xray and cloudflared are static Go binaries; libcap-utils is small but
+      # required for OpenRC low-port binding.
+      packages=(bash curl ca-certificates jq openssl coreutils findutils flock libcap-utils)
       [[ "$profile" == full ]] && packages+=(iproute2 nftables python3 kmod logrotate dcron)
       if ! command_exists tar; then packages+=(tar); fi
       if ! command_exists gzip; then packages+=(gzip); fi

@@ -6,7 +6,7 @@ SBM_LIB="${SBM_LIB:-${SBM_PREFIX}/lib/xray-manager}"
 SBM_BIN_DIR="${SBM_BIN_DIR:-${SBM_PREFIX}/bin}"
 if [[ -z ${SBM_VERSION:-} ]]; then
   if [[ -r "$SBM_LIB/VERSION" ]]; then SBM_VERSION=$(tr -d '[:space:]' <"$SBM_LIB/VERSION" 2>/dev/null || true); fi
-  SBM_VERSION=${SBM_VERSION:-0.1.0-alpha.15}
+  SBM_VERSION=${SBM_VERSION:-0.1.0-alpha.16}
 fi
 SBM_ETC="${SBM_ETC:-/etc/xray-manager}"
 SBM_VAR="${SBM_VAR:-/var/lib/xray-manager}"
@@ -233,7 +233,7 @@ ensure_program_permissions() {
   done
   if [[ -d "$SBM_CORE_DIR" ]]; then
     find "$SBM_CORE_DIR" -type d -exec chmod 0755 {} +
-    find "$SBM_CORE_DIR" -type f \( -name sing-box -o -name xray -o -name cloudflared -o -name libcronet.so \) -exec chmod 0755 {} +
+    find "$SBM_CORE_DIR" -type f \( -name xray -o -name cloudflared \) -exec chmod 0755 {} +
   fi
 }
 validate_runtime_binary_path() {

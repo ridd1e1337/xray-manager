@@ -121,7 +121,7 @@ core_check_free_space() {
 }
 
 # --- Xray core (the only proxy core of xray-manager) ----------------------
-# Same public names as sb-manager's sing-box core helpers so status, doctor,
+# Core helpers (status, doctor,
 # backup, panel and CLI share one interface.
 core_current_version() { xray_current_version; }
 core_latest_version() { xray_latest_version; }

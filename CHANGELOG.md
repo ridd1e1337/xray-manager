@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.16
+
+- xray-manager 只使用 Xray：移除 sing-box 内置 TCP/SNI 复用后端（只保留 nginx/caddy/nginx-site，旧状态自动改为 nginx）、
+  对 sing-box 进程的端口识别、`xm api`/`xm realm`/`settings dns` 的专用提示、安装与卸载中的 sing-box 服务名、
+  Alpine 依赖中的 gcompat（Xray 与 cloudflared 均为静态程序）；导出 sing-box 客户端配置时不再调用本机 sing-box 检查。
+  sing-box 仍作为客户端格式之一保留在分享与订阅中。
+
 ## 0.1.0-alpha.15
 
 - 性能：状态内容与版本都未变化时跳过启动时的迁移、校验与凭据检查（`/run/xray-manager/.state-ready`），只读命令与面板每页更快；

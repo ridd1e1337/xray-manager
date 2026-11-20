@@ -277,7 +277,7 @@ xray_render_config() {
   if declare -F xray_routing_render >/dev/null 2>&1; then routing=$(xray_routing_render "$state") || return 1; fi
   # Loopback-only Stats API for per-user traffic and online-IP limits.
   # Shared manager settings apply to both cores: log level and the direct
-  # outbound's IP family preference (sing-box domain_strategy equivalent).
+  # outbound's IP family preference.
   local loglevel ip_strategy
   case "$(jq -r '.settings.log_level // "info"' "$state")" in
     trace|debug) loglevel=debug;; info) loglevel=info;; warn) loglevel=warning;; *) loglevel=error;;

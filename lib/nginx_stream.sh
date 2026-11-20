@@ -73,10 +73,7 @@ nginx_stream_validate_state() {
   port=$(jq -r '.port // 0' <<<"$cfg")
   routes=$(jq -c '.routes // []' <<<"$cfg")
   engine=$(mux_backend "$state") || return 1
-  case "$engine" in nginx|caddy|nginx-site) ;; sing-box) log_error 'xray-manager 没有 sing-box，TCP/SNI 复用请使用 nginx 或 caddy 后端。'; return 1;; *) log_error '无效的 TCP/SNI 复用方式。'; return 1;; esac
-  if [[ "$enabled" == true && "$engine" == sing-box ]]; then
-    version_ge "$(core_current_version)" 1.11.0 || { log_error '内置 TCP/SNI 分流需要 sing-box 1.11 或更高版本。'; return 1; }
-  fi
+  case "$engine" in nginx|caddy|nginx-site) ;; *) log_error '无效的 TCP/SNI 复用方式（nginx、caddy 或 nginx-site）。'; return 1;; esac
   [[ "$enabled" == true || "$enabled" == false ]] || { log_error 'nginx_stream.enabled 必须是布尔值。'; return 1; }
   [[ "$listen" == '::' ]] || { log_error 'TCP/SNI 当前只支持监听 ::（双栈）。'; return 1; }
   validate_port "$port" || { log_error "TCP/SNI 公网端口无效：$port"; return 1; }
@@ -429,7 +426,7 @@ _nginx_stream_enable() {
     [[ -z "$backend" || "$backend" == "$(mux_backend)" ]] || { log_error '请先 xm mux detach 再切换方式。'; return 1; }
     _website_mux_setup; return $?
   fi
-  case "$backend" in ''|sing-box|nginx|caddy) ;; *) usage_die '复用方式只能是 sing-box、nginx 或 caddy。';; esac
+  case "$backend" in ''|nginx|caddy) ;; *) usage_die '复用方式只能是 nginx 或 caddy。';; esac
   if [[ $(jq '.nginx_stream.routes|length' "$SBM_STATE") == 0 ]]; then
     log_error '请先添加至少一条 SNI 路由：xm mux route add NODE_ID SNI。'; return 1
   fi
@@ -479,7 +476,6 @@ nginx_stream_status() {
     return
   fi
   printf 'TCP/SNI 复用：%s，方式：%s，公网端口：%s/TCP，路由：%s 条\n' "$([[ "$enabled" == true ]] && echo '启用' || echo '停用')" "$(mux_backend_label)" "$port" "$routes"
-  if [[ $(mux_backend) == sing-box ]]; then printf '复用现有 sing-box 核心，无需额外代理进程；仅转发已登记的 TLS SNI。\n'; fi
   if website_mux_managed; then printf '网站自动接入已启用；节点变化会自动同步网站分流，后端只监听本机。\n'
   elif [[ $(mux_backend) == caddy ]]; then printf '公网由现有 Caddy 管理；节点只监听 loopback。使用 xm mux caddy 导出分流配置，变更路由后需同步并重载 Caddy。\n'; fi
   if [[ "$enabled" == true && "$SBM_SKIP_INIT" != 1 && ("$backend" == systemd || "$backend" == openrc) ]] && service_exists "$service"; then

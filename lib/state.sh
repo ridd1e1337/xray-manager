@@ -200,7 +200,7 @@ state_normalize_v2_file() {
     | .settings.public_ipv6 //= ""
     | .settings.public_ip_detected_at //= null
     | .settings.outbound_ip_strategy //= "prefer_ipv4"
-    # sing-box-only settings and services inherited from sb-manager states.
+    # Settings and services that are not part of the Xray state.
     | .settings |= del(.xray_update_policy, .vless_engine, .dns_optimistic, .dns_optimistic_timeout, .dns_timeout, .core_channel)
     | del(.api, .realm)
     | if (.nginx_stream.backend // "")=="sing-box" then .nginx_stream.backend="nginx" else . end
@@ -248,7 +248,7 @@ state_normalize_v2_file() {
         | if .protocol == "hysteria2" then
             .obfs //= {}
             | .obfs.type //= ""
-            # sing-box-only Hysteria2 options from sb-manager states.
+            # Hysteria2 options that Xray does not implement.
             | del(.disable_chrome_parrot, .bbr_profile, .brutal_debug,
                   .realm_enabled, .realm_id, .realm_ip_version, .realm_port_mapping, .obfs.min_packet_size, .obfs.max_packet_size)
             | if .obfs.type == "gecko" then .obfs = {} else . end
@@ -469,7 +469,7 @@ state_validate_schema() {
             and (.sha256|type=="string" and test("^[0-9a-f]{64}$"))) end)) end)
     and (.nginx_stream | type == "object"
       and (.enabled | type == "boolean")
-      and (.backend | IN("sing-box", "nginx", "caddy", "nginx-site"))
+      and (.backend | IN("nginx", "caddy", "nginx-site"))
       and (if .website==null then true else
         (.website | type=="object" and (.managed|type=="boolean")
           and (.server|IN("nginx","caddy")) and (.binary|web_path) and (.original_binary|web_path)

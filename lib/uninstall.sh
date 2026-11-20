@@ -127,7 +127,6 @@ uninstall_manager() {
     "$SBM_SYSTEMD_DIR/xm-health-check.timer" \
     "$SBM_SYSTEMD_DIR/xm-maintenance.service" \
     "$SBM_SYSTEMD_DIR/xm-maintenance.timer" \
-    "$SBM_OPENRC_DIR/xm-sing-box" \
     "$SBM_OPENRC_DIR/xm-xray" \
     "$SBM_OPENRC_DIR/xm-openlist" \
     "$SBM_OPENRC_DIR/xm-cloudflared" \

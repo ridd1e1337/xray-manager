@@ -31,7 +31,7 @@ vps_system_support() {
   printf '当前环境：%s / %s；包管理器分支：%s；服务管理：%s\n\n' \
     "$(uname -s)" "$(uname -m)" "$distro" "${backend:-未检测到}"
   cat <<'EOF_SYSTEMS'
-sing-box 安装与节点管理：
+Xray 安装与节点管理：
   Debian / Ubuntu       apt      systemd
   Alpine                apk      OpenRC
   Fedora / Rocky / Alma  dnf/yum  systemd

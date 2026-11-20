@@ -67,7 +67,6 @@ reality_site_port_owner() {
     if [[ "$row" == *"\"$server\""* ]]; then continue; fi
     if [[ -n "$node" ]] && jq -e '.enabled and .protocol=="vless" and .port==443' <<<"$node" >/dev/null; then
       if [[ "$row" == *'"xray"'* ]] && service_active "$SBM_XRAY_SERVICE"; then continue; fi
-      if [[ "$row" == *sing-box* || "$row" == *ld-musl* || "$row" == *ld-linux* ]] && service_active "$SBM_SERVICE"; then continue; fi
     fi
     log_error 'TCP/443 已由其他服务或节点使用，未迁移入口。'; return 1
   done < <(ss -H -ltnp | awk '$4 ~ /:443$/')

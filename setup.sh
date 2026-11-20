@@ -38,7 +38,7 @@ setup_rollback_on_error() {
       find "$TARGET_LIB" -mindepth 1 -maxdepth 1 ! -name cores -exec rm -rf {} + || restore_rc=1
       cp -a "$SETUP_ROLLBACK_DIR/program"/. "$TARGET_LIB"/ || restore_rc=1
     fi
-    rm -f "$SETUP_SYSTEMD_DIR/xm-sing-box.service" "$SETUP_SYSTEMD_DIR/xm-xray.service" "$SETUP_SYSTEMD_DIR/xm-openlist.service" "$SETUP_SYSTEMD_DIR/xm-cloudflared.service" "$SETUP_SYSTEMD_DIR/xm-nginx-stream.service" \
+    rm -f "$SETUP_SYSTEMD_DIR/xm-xray.service" "$SETUP_SYSTEMD_DIR/xm-openlist.service" "$SETUP_SYSTEMD_DIR/xm-cloudflared.service" "$SETUP_SYSTEMD_DIR/xm-nginx-stream.service" \
       "$SETUP_SYSTEMD_DIR/xm-core-update.service" "$SETUP_SYSTEMD_DIR/xm-core-update.timer" \
       "$SETUP_SYSTEMD_DIR/xm-manager-update.service" "$SETUP_SYSTEMD_DIR/xm-manager-update.timer" \
       "$SETUP_SYSTEMD_DIR/xm-acme-renew.service" "$SETUP_SYSTEMD_DIR/xm-acme-renew.timer" \
@@ -58,7 +58,7 @@ setup_rollback_on_error() {
       command -v systemctl >/dev/null 2>&1 && systemctl disable --now xm-manager-update.timer >/dev/null 2>&1 || true
       rm -f "$SETUP_SYSTEMD_DIR/timers.target.wants/xm-manager-update.timer"
     fi
-    rm -f "$SETUP_OPENRC_DIR/xm-sing-box" "$SETUP_OPENRC_DIR/xm-xray" "$SETUP_OPENRC_DIR/xm-openlist" "$SETUP_OPENRC_DIR/xm-cloudflared" "$SETUP_OPENRC_DIR/xm-nginx-stream" "$SETUP_OPENRC_DIR/xm-subscription" "$SETUP_OPENRC_DIR/xm-traffic"
+    rm -f "$SETUP_OPENRC_DIR/xm-xray" "$SETUP_OPENRC_DIR/xm-openlist" "$SETUP_OPENRC_DIR/xm-cloudflared" "$SETUP_OPENRC_DIR/xm-nginx-stream" "$SETUP_OPENRC_DIR/xm-subscription" "$SETUP_OPENRC_DIR/xm-traffic"
     [[ ! -d "$SETUP_ROLLBACK_DIR/openrc" ]] || cp -a "$SETUP_ROLLBACK_DIR/openrc"/. "$SETUP_OPENRC_DIR"/ || restore_rc=1
     rm -f "$SETUP_PERIODIC_DIR/15min/xm-health-check"
     if [[ -f "$SETUP_ROLLBACK_DIR/periodic/xm-health-check" ]]; then

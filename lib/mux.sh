@@ -9,7 +9,6 @@ mux_backend() {
 
 mux_backend_label() {
   case "$(mux_backend "${1:-$SBM_STATE}")" in
-    sing-box) printf 'sing-box 内置';;
     nginx) printf 'Nginx Stream';;
     caddy) printf '现有 Caddy L4';;
     nginx-site) printf '现有 Nginx 网站';;
@@ -23,7 +22,6 @@ mux_uses_nginx() {
 
 mux_service() {
   case "$(mux_backend "${1:-$SBM_STATE}")" in
-    sing-box) printf '%s\n' "$SBM_SERVICE";;
     nginx) printf '%s\n' "$SBM_NGINX_STREAM_SERVICE";;
     caddy) printf 'caddy.service\n';;
     nginx-site) printf 'nginx.service\n';;
@@ -52,9 +50,9 @@ mux_frontend_available() {
   if command_exists ss; then
     owner=$(ss -H -ltnp 2>/dev/null | awk -v p=":$port" '$0 ~ p {print $0; exit}' | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' || true)
   fi
-  if [[ "$owner" == *sing-box* || "$owner" == *ld-musl* || "$owner" == *ld-linux* ]]; then
+  if [[ "$owner" == xray ]]; then
     # The candidate transaction will move selected manager nodes behind the
-    # frontend before restarting sing-box. Other direct nodes are rejected by
+    # frontend before restarting Xray. Other direct nodes are rejected by
     # state validation, so an existing manager listener is safe to transition.
     return 0
   fi
@@ -82,7 +80,7 @@ _mux_auto_configure() {
   IFS=, read -r -a node_ids <<<"$ids"
   ((${#node_ids[@]} > 0)) || { log_error '没有可加入 TCP/SNI 复用的启用节点。'; return 1; }
   [[ -n "$backend" ]] || backend=$(mux_backend "$SBM_STATE") || return 1
-  case "$backend" in sing-box|nginx|caddy) ;; *) usage_die '复用方式只能是 sing-box、nginx 或 caddy。';; esac
+  case "$backend" in nginx|caddy) ;; *) usage_die '复用方式只能是 nginx 或 caddy。';; esac
   validate_port "$public_port" || { log_error '无效公网端口。'; return 1; }
   if [[ "$backend" != caddy ]]; then mux_frontend_available "$SBM_STATE" "$public_port" || return 1; fi
   candidate=$(state_candidate) || return 1
@@ -126,7 +124,7 @@ mux_auto_configure() { with_state_transaction mux-auto _mux_auto_configure "$@";
 _mux_set_backend() {
   local backend=$1 candidate
   website_mux_managed && { log_error '网站自动接入已启用；请使用 xm mux detach 恢复后再切换方式。'; return 1; }
-  case "$backend" in sing-box|nginx|caddy) ;; *) usage_die '复用方式只能是 sing-box、nginx 或 caddy。';; esac
+  case "$backend" in nginx|caddy) ;; *) usage_die '复用方式只能是 nginx 或 caddy。';; esac
   candidate=$(state_candidate) || return 1
   if ! jq --arg backend "$backend" '.nginx_stream.backend=$backend' "$SBM_STATE" >"$candidate" \
     || ! apply_candidate_state "$candidate" mux-backend; then
@@ -180,13 +178,13 @@ mux_cli() {
       [[ "$alias" != nginx-stream ]] || backend=nginx
       if [[ $# -gt 0 && "$1" != --backend ]]; then port=$1; shift; fi
       if [[ ${1:-} == --backend ]]; then backend=${2:?缺少复用方式}; shift 2; fi
-      (($# == 0)) || usage_die '用法：xm mux enable [PORT] [--backend sing-box|nginx|caddy]'
+      (($# == 0)) || usage_die '用法：xm mux enable [PORT] [--backend nginx|caddy]'
       nginx_stream_enable "$port" "$backend";;
     disable)
       (($# == 0)) || usage_die '用法：xm mux disable'
       nginx_stream_disable;;
     backend)
-      (($# == 1)) || usage_die '用法：xm mux backend sing-box|nginx|caddy'
+      (($# == 1)) || usage_die '用法：xm mux backend nginx|caddy'
       mux_set_backend "$1";;
     auto)
       local ids=all auto_port=443 auto_backend=''
@@ -195,7 +193,7 @@ mux_cli() {
         case "$1" in
           --port) auto_port=${2:?缺少端口}; shift 2;;
           --backend) auto_backend=${2:?缺少复用方式}; shift 2;;
-          *) usage_die '用法：xm mux auto [all|NODE1,NODE2,...] [--port 443] [--backend sing-box|nginx|caddy]';;
+          *) usage_die '用法：xm mux auto [all|NODE1,NODE2,...] [--port 443] [--backend nginx|caddy]';;
         esac
       done
       mux_auto_configure "$ids" "$auto_port" "$auto_backend";;
@@ -212,6 +210,6 @@ mux_cli() {
           nginx_stream_route_remove "$1";;
         *) usage_die '用法：xm mux route list|add NODE_ID SNI [BACKEND_PORT]|remove NODE_ID';;
       esac;;
-    *) usage_die '用法：xm mux status|enable [PORT] [--backend sing-box|nginx|caddy]|disable|backend sing-box|nginx|caddy|auto [NODE_IDS]|route ...';;
+    *) usage_die '用法：xm mux status|enable [PORT] [--backend nginx|caddy]|disable|backend nginx|caddy|auto [NODE_IDS]|route ...';;
   esac
 }

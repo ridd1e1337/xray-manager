@@ -551,8 +551,6 @@ main() {
         *) usage_die '用法：xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL] | list | status | revoke ID_OR_TOKEN' ;;
       esac
       ;;
-    api|realm)
-      usage_die "xm $cmd 是 sing-box 专属功能（Clash API / Hysteria Realm），xray-manager 不提供；Xray 统计见 xm xray traffic 与 xm user stats。" ;;
     bbr)
       local action=${2:-status}
       case "$action" in
@@ -808,7 +806,6 @@ main() {
         detect-ip) settings_detect_public_ip ;;
         address) settings_set_default_address "${3:?缺少地址}" ;;
         outbound-ip) settings_set_outbound_ip_strategy "${3:?缺少出站 IP 策略}" ;;
-        dns) usage_die 'DNS 乐观缓存与查询超时是 sing-box DNS 模块设置，xray-manager 不提供。' ;;
         *) usage_die '用法：xm settings show|detect-ip|address <auto|HOST>|outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>' ;;
       esac
       ;;
