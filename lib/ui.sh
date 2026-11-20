@@ -22,7 +22,7 @@ ui_clear() { [[ -t 1 && -n ${TERM:-} && ${TERM:-} != dumb ]] && command_exists c
 # would disable it inside the backend and could let failed actions continue.
 ui_worker_allowed() {
   case "$1" in
-    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_stream_node_add|ui_wireguard_add|ui_tunnel_add|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
+    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_stream_node_add|ui_wireguard_add|ui_tunnel_add|ui_tools_menu|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
     *) return 1;;
   esac
 }
@@ -534,6 +534,11 @@ ui_vless_collect() {
       handshake_port=$(jq -r '.handshake_port // 443' <<<"$node") || return 1
       prompt_value handshake_server 'Reality 目标域名或 IP' "$handshake_server" || return 1
       prompt_value handshake_port 'Reality 目标端口' "$handshake_port" || return 1
+      # Advisory only: a custom target that fails the check still works for
+      # the operator who knows better, but most users want a warning.
+      if [[ "$handshake_port" == 443 && "$handshake_server" != "$SBM_RECOMMENDED_REALITY_SNI" ]] && validate_domain "$handshake_server"; then
+        tools_reality_check "$handshake_server" || log_warn '该目标不满足 REALITY 推荐条件，客户端可能无法连接；建议换一个网站（如 www.apple.com）。'
+      fi
       __vless_args+=(--domain "$domain" --handshake-server "$handshake_server" --handshake-port "$handshake_port");;
     none) domain=''; printf '公网明文入口需启用 VLESS 加密；本机反代可使用回环监听。\n';;
   esac
@@ -836,6 +841,9 @@ ui_stream_node_add() {
         prompt_value domain 'Reality SNI' "$domain" || return 1
         prompt_value hs 'Reality 握手目标' "$domain" || return 1
         prompt_value hp 'Reality 握手端口' 443 || return 1
+        if [[ "$hp" == 443 && "$hs" != "$SBM_RECOMMENDED_REALITY_SNI" ]] && validate_domain "$hs"; then
+          tools_reality_check "$hs" || log_warn '该目标不满足 REALITY 推荐条件，客户端可能无法连接；建议换一个网站。'
+        fi
       fi
       args+=(--domain "$domain" --handshake-server "$hs" --handshake-port "$hp");;
   esac
@@ -1079,8 +1087,8 @@ ui_update_menu() {
 ui_xray_menu() {
   local choice policy
   xray_status
-  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 回滚上一版 Xray\n4. 生成并校验 Xray 配置\n5. 设置 Xray 自动更新策略\n6. 入站/出站流量统计\n7. 出站、WARP、负载均衡与路由\n0. 返回\n'
-  ui_menu_choice choice '选择 Xray 操作' 7
+  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 回滚上一版 Xray\n4. 生成并校验 Xray 配置\n5. 设置 Xray 自动更新策略\n6. 入站/出站流量统计\n7. 出站、WARP、负载均衡与路由\n8. 出站连通性测试\n9. 工具：生成密钥、REALITY 目标检查、证书哈希\n0. 返回\n'
+  ui_menu_choice choice '选择 Xray 操作' 9
   case "$choice" in
     1) core_update latest;;
     2) prompt_value policy 'Xray 版本号，如 26.11.9' '' || return 1; core_update "$policy";;
@@ -1095,6 +1103,20 @@ ui_xray_menu() {
       core_set_policy "$policy";;
     6) xray_traffic;;
     7) ui_open_submenu ui_xray_routing_menu;;
+    8) xray_outbound_test || true;;
+    9) ui_open_submenu ui_tools_menu;;
+  esac
+}
+
+ui_tools_menu() {
+  local choice value
+  printf '1. UUID\n2. X25519 密钥对（REALITY / VLESS 加密）\n3. WireGuard 密钥对\n4. ML-KEM-768 密钥对\n5. ML-DSA-65 密钥对\n6. VLESS 加密参数对\n7. ECH 配置\n8. REALITY 目标网站检查\n9. 证书 SHA-256（文件或 域名[:端口]）\n0. 返回\n'
+  ui_menu_choice choice '选择工具' 9 || return 0
+  case "$choice" in
+    1) tools_cli uuid;; 2) tools_cli x25519;; 3) tools_cli wg;; 4) tools_cli mlkem768;; 5) tools_cli mldsa65;; 6) tools_cli vlessenc;;
+    7) prompt_value value 'ECH 服务器名称' '' || return 1; tools_cli ech "$value";;
+    8) prompt_value value '目标域名' "$SBM_RECOMMENDED_REALITY_SNI" || return 1; tools_cli reality-check "$value" || true;;
+    9) prompt_value value '证书文件或 域名[:端口]' '' || return 1; tools_cli cert-hash "$value";;
   esac
 }
 
@@ -1103,9 +1125,9 @@ ui_xray_routing_menu() {
   local -a args=()
   xray_routing_show
   printf '\n1. 添加原生出站（SOCKS/HTTP/VLESS/Trojan/Shadowsocks 等 JSON）\n2. 添加 WARP（自动注册）\n3. 导入已有 WARP/WireGuard 参数\n4. 删除出站\n'
-  printf '5. 设置负载均衡\n6. 删除负载均衡\n7. 添加分流规则\n8. 删除分流规则\n9. 设置默认出口\n10. geoip/geosite 数据（%s）\n0. 返回\n' \
+  printf '5. 设置负载均衡\n6. 删除负载均衡\n7. 添加分流规则\n8. 删除分流规则\n9. 设置默认出口\n10. geoip/geosite 数据（%s）\n11. 路由测试（某个域名/IP 会走哪个出口）\n12. 出站连通性测试\n0. 返回\n' \
     "$(xray_geo_installed && echo 已安装 || echo 未安装)"
-  ui_menu_choice choice '路由操作' 10 || return 0
+  ui_menu_choice choice '路由操作' 12 || return 0
   case "$choice" in
     1)
       prompt_value tag '出站标签' '' || return 1
@@ -1144,6 +1166,8 @@ ui_xray_routing_menu() {
       printf '\n1. 下载/更新（约 28 MiB，Loyalsoldier/v2ray-rules-dat）\n2. 删除\n0. 返回\n'
       ui_menu_choice value 'geo 数据' 2 || return 0
       case "$value" in 1) xray_geo_cli update;; 2) xray_geo_cli remove;; esac;;
+    11) prompt_value value '域名或 IP[:端口]' www.google.com || return 1; xray_route_test "$value" || true;;
+    12) xray_outbound_test || true;;
   esac
 }
 

@@ -4,6 +4,14 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.6
+
+- `xm xray outbound test [TAG]`：为每个出站临时启动本机 Xray 测连通与延迟，支持链式出站，不影响运行中的服务。
+- `xm xray route test DOMAIN|IP[:PORT]`：用当前规则（含 geosite、负载均衡）判断目标会走哪个出口，出站全部替换为黑洞，不发出流量。
+- `xm tools`：用当前 Xray 生成 UUID/X25519/WireGuard/ML-KEM-768/ML-DSA-65/VLESS 加密/ECH；`reality-check` 检查 TLS 1.3、
+  X25519MLKEM768 与证书覆盖；`cert-hash` 计算证书 SHA-256。自定义 REALITY 目标时面板自动检查并提示。
+- 面板：Xray 菜单 8/9、分流菜单 11/12。
+
 ## 0.1.0-alpha.5
 
 - 用户（3x-ui 对齐）：`xm user add NODE --count N` 在一个事务里批量添加并可同时设配额/天数/在线 IP；

@@ -304,6 +304,7 @@ xray_routing_cli() {
           [[ -n "$tag" && -n "$json" ]] || usage_die '用法：xm xray outbound add TAG --json JSON|@FILE [--via TAG]'
           require_root; with_state_transaction xray-outbound _xray_outbound_add "$tag" "$json" "$via";;
         remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray outbound remove TAG'; require_root; with_state_transaction xray-outbound _xray_outbound_remove "$3";;
+        test) require_root; xray_outbound_test "${3:-}";;
         *) usage_die '用法：xm xray outbound add|remove ...';;
       esac;;
     balancer)
@@ -322,8 +323,71 @@ xray_routing_cli() {
         add) shift 2; require_root; with_state_transaction xray-route _xray_route_add "$@";;
         remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray route remove INDEX'; require_root; with_state_transaction xray-route _xray_route_remove "$3";;
         default) [[ -n "${3:-}" ]] || usage_die '用法：xm xray route default direct|OUTBOUND|balancer:TAG'; require_root; with_state_transaction xray-route _xray_route_default "$3";;
-        *) usage_die '用法：xm xray route add|remove|default ...';;
+        test) shift 2; require_root; xray_route_test "$@";;
+        *) usage_die '用法：xm xray route add|remove|default|test ...';;
       esac;;
     *) usage_die '用法：xm xray routing|outbound|balancer|route ...';;
   esac
 }
+
+
+# Connectivity test for outbounds (3x-ui "test outbound"): each tag gets a
+# throwaway loopback SOCKS inbound routed to it; the full outbound list is
+# kept so chained (--via) outbounds work. Nothing touches the live service.
+xray_outbound_test() (
+  local only=${1:-} routing tags tag dir port pid='' result url="${SBM_XRAY_TEST_URL:-https://www.gstatic.com/generate_204}" failed=0
+  [[ -x "$SBM_XRAY_BIN" ]] || die 'Xray 尚未安装。'
+  routing=$(xray_routing_render "$SBM_STATE") || return 1
+  tags=$(jq -r '.outbounds[] | select(.protocol!="blackhole") | .tag' <<<"$routing")
+  if [[ -n "$only" ]]; then grep -qxF "$only" <<<"$tags" || die "出站不存在：$only"; tags=$only; fi
+  dir=$(mktemp -d "$SBM_RUN/outbound-test.XXXXXX") || return 1
+  pid=''
+  trap '[[ -z "$pid" ]] || kill "$pid" 2>/dev/null || true; rm -rf -- "$dir"' EXIT
+  printf '%-20s %-10s %s\n' 出站 结果 耗时
+  while IFS= read -r tag; do
+    port=$(node_choose_port tcp) || return 1
+    jq --arg tag "$tag" --argjson port "$port" '{log:{loglevel:"none"},
+      inbounds:[{tag:"test-in",listen:"127.0.0.1",port:$port,protocol:"socks",settings:{udp:false}}],
+      outbounds:([.outbounds[] | select(.tag==$tag)] + [.outbounds[] | select(.tag!=$tag)]),
+      routing:{rules:[{type:"field",inboundTag:["test-in"],outboundTag:$tag}]}}' <<<"$routing" >"$dir/config.json" || return 1
+    XRAY_LOCATION_ASSET="${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}" "$SBM_XRAY_BIN" run -config "$dir/config.json" >"$dir/log" 2>&1 & pid=$!
+    for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | grep -q ":$port " && break; sleep 0.2; done
+    if result=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 10 -x "socks5h://127.0.0.1:$port" "$url") \
+      && [[ "${result%% *}" =~ ^(204|200)$ ]]; then
+      printf '%-20s %-10s %s ms\n' "$tag" 通 "$(awk -v t="${result#* }" 'BEGIN{printf "%.0f", t*1000}')"
+    else
+      printf '%-20s %-10s %s\n' "$tag" 不通 "$([[ "${result%% *}" == 000 ]] && echo '连接失败或超时' || echo "HTTP ${result%% *}")"; failed=1
+    fi
+    kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; pid=''
+  done <<<"$tags"
+  return "$failed"
+)
+
+
+# Which outbound would the live rules pick for DOMAIN|IP[:PORT]? A throwaway
+# core runs the current routing with every outbound replaced by a blackhole of
+# the same tag, so no traffic leaves; the access log records the decision.
+# Rules scoped to a node or user (inboundTag/user) cannot match this probe.
+xray_route_test() (
+  local target=${1:?用法：xm xray route test DOMAIN|IP[:PORT] [--network tcp|udp]} host port routing dir pid='' lport line
+  host=${target%:*}; port=${target##*:}; [[ "$port" != "$target" && "$port" =~ ^[0-9]+$ ]] || { host=$target; port=443; }
+  host=${host#[}; host=${host%]}
+  validate_domain "$host" || validate_ipv4 "$host" || validate_ipv6 "$host" || die "无效目标：$host"
+  [[ -x "$SBM_XRAY_BIN" ]] || die 'Xray 尚未安装。'
+  routing=$(xray_routing_render "$SBM_STATE") || return 1
+  dir=$(mktemp -d "$SBM_RUN/route-test.XXXXXX") || return 1
+  trap '[[ -z "$pid" ]] || kill "$pid" 2>/dev/null || true; rm -rf -- "$dir"' EXIT
+  lport=$(node_choose_port tcp) || return 1
+  jq --argjson port "$lport" --arg log "$dir/access.log" '{
+      log:{loglevel:"warning",access:$log},
+      inbounds:[{tag:"route-test",listen:"127.0.0.1",port:$port,protocol:"socks",settings:{udp:false}}],
+      outbounds:[.outbounds[] | {tag,protocol:"blackhole"}],
+      routing:.routing}' <<<"$routing" >"$dir/config.json" || return 1
+  XRAY_LOCATION_ASSET="${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}" "$SBM_XRAY_BIN" run -config "$dir/config.json" >"$dir/log" 2>&1 & pid=$!
+  for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | grep -q ":$lport " && break; sleep 0.2; done
+  curl -s -o /dev/null --max-time 3 -x "socks5h://127.0.0.1:$lport" "http://$(format_hostport "$host" "$port")/" || true
+  for _ in 1 2 3 4 5; do [[ -s "$dir/access.log" ]] && break; sleep 0.2; done
+  line=$(grep -m1 'accepted' "$dir/access.log" 2>/dev/null || true)
+  [[ -n "$line" ]] || { log_error "未能得到路由结果；日志：$(tail -1 "$dir/log" 2>/dev/null)"; return 1; }
+  printf '%s:%s → %s\n' "$host" "$port" "$(sed -E 's/.*\[route-test (->|>>) ([^]]+)\].*/\2/' <<<"$line")"
+)

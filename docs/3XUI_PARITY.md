@@ -59,7 +59,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | 入站 | 入站级配额、到期、端口冲突检查、回落 | ✅ | `xm traffic set`、`xm node expiry` |
 | Xray | 出站、WARP、负载均衡、分流规则 | ✅ | `xm xray outbound/warp/balancer/route` |
 | Xray | geoip/geosite 数据下载与 `geosite:`/`geoip:` 规则 | ✅ | `xm xray geo update` |
-| Xray | 出站连通性测试、路由测试 | ⬜ | |
+| Xray | 出站连通性测试、路由测试 | ✅ | `xm xray outbound test`、`xm xray route test DOMAIN|IP[:PORT]` |
 | Xray | Observatory、DNS / FakeDNS、日志级别与访问日志查看 | ⬜ / ⬜ / 部分 | 日志级别已有 |
 | Xray | NordVPN / PIA 账号出站 | ➖ | 需第三方账号 API；可用 `xm xray outbound add` 导入 WireGuard 出站 |
 | Xray | 出站订阅（远程链接池作为出站） | ⬜ | |
@@ -68,7 +68,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | 订阅 | 按 User-Agent 自动选择格式、备注模板、到期/耗尽占位节点 | ⬜ | |
 | 机器人 | 状态、节点、用户、启停、续期、订阅 | ✅ | `xm notify bot` |
 | 机器人 | 用户自助查询（tgId）、到期/流量预警、备份发送到 Telegram | ⬜ | |
-| 工具 | UUID/X25519/ML-KEM/ECH 密钥生成、REALITY 目标扫描 | ⬜ | |
+| 工具 | UUID/X25519/ML-KEM/ECH 密钥生成、REALITY 目标检查、证书哈希 | ✅ | `xm tools` |
 | 运维 | 备份恢复、面板自更新、BBR、证书、防火墙、Fail2ban | ✅ | |
 | 多机 | 多节点管理 | ➖ | 由配套项目 sb-manager-web 负责 |
 | Web | 网页登录 2FA/LDAP、PWA、主题与多语言、Discord、SMTP | ➖ | 终端脚本无网页登录；通知已有 Telegram/Webhook |

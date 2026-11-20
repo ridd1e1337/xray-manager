@@ -40,6 +40,7 @@ source "$SBM_LIB/lib/expiry.sh"
 source "$SBM_LIB/lib/user_limits.sh"
 source "$SBM_LIB/lib/xray_routing.sh"
 source "$SBM_LIB/lib/xray_geo.sh"
+source "$SBM_LIB/lib/tools.sh"
 source "$SBM_LIB/lib/telegram_bot.sh"
 source "$SBM_LIB/lib/firewall.sh"
 source "$SBM_LIB/lib/vps.sh"
@@ -164,11 +165,14 @@ sb_help_full() {
   xm xray status|config [文件]|api-port PORT
   xm xray traffic [--json|reset]  Xray 入站/出站累计流量
   xm xray routing [--json]         查看 Xray 出站、负载均衡与路由
-  xm xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG
+  xm xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG | test [TAG]
   xm xray warp [--tag warp] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c]
   xm xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG] | remove TAG
   xm xray route add [--node ID] [--user NODE:USER] [--domain domain:x|geosite:cn] [--ip CIDR|geoip:cn] [--network tcp|udp] [--port P] --to TAG|balancer:TAG
-  xm xray route remove INDEX | default direct|TAG|balancer:TAG
+  xm xray route remove INDEX | default direct|TAG|balancer:TAG | test DOMAIN|IP[:PORT]
+  xm tools uuid|x25519|wg|mldsa65|mlkem768|vlessenc|ech DOMAIN   用当前 Xray 生成密钥/参数
+  xm tools reality-check DOMAIN    检查网站是否适合作为 REALITY 目标
+  xm tools cert-hash FILE|HOST[:PORT]  证书 SHA-256（用于 --pinned-cert-sha256）
   xm xray geo status|update|remove  geoip/geosite 数据（约 28 MiB，按需下载），启用 geosite:/geoip: 规则
   xm openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN
   xm reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach
@@ -207,7 +211,7 @@ sb_help_full() {
 EOF_HELP
 }
 
-SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network probe vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config doctor repair logs backup restore restart uninstall'
+SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network probe vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config tools doctor repair logs backup restore restart uninstall'
 
 sb_help_overview() {
   cat <<EOF_OVERVIEW
@@ -230,7 +234,7 @@ xray-manager ${SBM_VERSION}：状态驱动的 Xray-core 多协议管理器
 流量与监控：  traffic  notify  health  probe
 网络调优：    tcp  bbr  hy2  network
 服务器与网站：vps  firewall  mux  caddy  openlist  reality  maintenance  settings
-核心与维护：  core  xray  cloudflared  deps  acme  config
+核心与维护：  core  xray  tools  cloudflared  deps  acme  config
 备份与卸载：  backup  restore  restart  uninstall
 
 通用选项：--json  --yes|-y  --dry-run  --quiet|-q  --no-color  --version
@@ -662,6 +666,7 @@ main() {
         *) usage_die '用法：xm xray status|update|config|policy <manual|notify|patch|stable>|api-port PORT|traffic|routing|outbound|warp|balancer|route|geo' ;;
       esac
       ;;
+    tools) shift; tools_cli "$@" ;;
     openlist)
       local action=${2:-status}
       case "$action" in
