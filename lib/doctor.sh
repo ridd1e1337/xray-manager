@@ -202,7 +202,7 @@ doctor_network_probe() {
       failures=$((failures + 1))
     fi
   done < <(node_transport_kinds "$node")
-  case "$protocol" in anytls|trojan|vless|naive|shadowtls) tls_probe=1;; esac
+  case "$protocol" in trojan|vless) tls_probe=1;; esac
   if [[ "$protocol" == naive && "$(jq -r '.network // "tcp"' <<<"$node")" == udp ]]; then tcp_probe=0; fi
   if (( tls_probe )); then
     domain=$(jq -r '.domain // ""' <<<"$node")

@@ -5,10 +5,9 @@ node_transport_kinds() {
   local node=$1 protocol network
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
-    vmess-ws-cf|anytls|trojan|shadowtls|snell|http|socks|mixed) printf 'tcp\n' ;;
+    vmess-ws-cf|trojan|http|socks|mixed) printf 'tcp\n' ;;
     vless) vless_node_listener_kinds "$node" ;;
-    hysteria2|tuic) printf 'udp\n' ;;
-    naive) jq -r '.network // "tcp"' <<<"$node" ;;
+    hysteria2) printf 'udp\n' ;;
     shadowsocks)
       network=$(jq -r '.network // "tcp"' <<<"$node")
       case "$network" in tcp) printf 'tcp\n';; udp) printf 'udp\n';; *) printf 'tcp\nudp\n';; esac
@@ -101,7 +100,7 @@ validate_state_semantics() {
     port=$(jq -r '.port' <<<"$node")
     validate_node_id "$id" || die "节点 ID 不规范：$id"
     validate_port "$port" || die "节点 $id 的端口无效：$port"
-    case "$protocol" in vmess-ws-cf|shadowsocks|anytls|hysteria2|trojan|tuic|vless|naive|shadowtls|snell|socks|http|mixed) ;; *) die "节点 $id 使用未知协议：$protocol" ;; esac
+    case "$protocol" in vmess-ws-cf|shadowsocks|hysteria2|trojan|vless|socks|http|mixed) ;; *) die "节点 $id 使用未知协议：$protocol" ;; esac
     if [[ $(jq -r '.enabled' <<<"$node") == true ]]; then
       if [[ "$protocol" != vmess-ws-cf ]]; then
         local endpoint_address

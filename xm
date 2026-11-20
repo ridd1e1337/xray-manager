@@ -22,15 +22,10 @@ source "$SBM_LIB/lib/caddy.sh"
 source "$SBM_LIB/lib/maintenance.sh"
 source "$SBM_LIB/protocols/vmess_ws_cf.sh"
 source "$SBM_LIB/protocols/shadowsocks.sh"
-source "$SBM_LIB/protocols/anytls.sh"
 source "$SBM_LIB/protocols/hysteria2.sh"
 source "$SBM_LIB/protocols/trojan.sh"
-source "$SBM_LIB/protocols/tuic.sh"
 source "$SBM_LIB/protocols/vless.sh"
-source "$SBM_LIB/protocols/naive.sh"
 source "$SBM_LIB/protocols/proxy.sh"
-source "$SBM_LIB/protocols/shadowtls.sh"
-source "$SBM_LIB/protocols/snell.sh"
 source "$SBM_LIB/lib/render.sh"
 source "$SBM_LIB/lib/xray.sh"
 source "$SBM_LIB/lib/vless_profile.sh"
@@ -83,7 +78,7 @@ sb_help_full() {
   xm vps systems                 查看各功能支持的 Linux 系统与当前环境
   xm node list [--json] [--tag TAG] [--region REGION] 列出节点
   xm quick                       添加节点向导
-  xm node add <vmess|ss|anytls|hy2|trojan|tuic|vless|naive|shadowtls|snell|socks|http|mixed> [参数]
+  xm node add <vmess|ss|hy2|trojan|vless|socks|http|mixed> [参数]
   xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
   xm node show <ID>
   xm node enable|disable|delete|rotate <ID>

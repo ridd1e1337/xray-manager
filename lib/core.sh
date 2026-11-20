@@ -72,92 +72,6 @@ github_api() {
   return 1
 }
 
-core_release_json() {
-  local version=${1:-latest}
-  if [[ "$version" == latest ]]; then github_api 'https://api.github.com/repos/SagerNet/sing-box/releases/latest';
-  else github_api "https://api.github.com/repos/SagerNet/sing-box/releases/tags/v${version#v}"; fi
-}
-
-core_fallback_version() {
-  local version=${SBM_CORE_FALLBACK_VERSION:-1.14.4}
-  version=${version#v}
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || die "无效的 sing-box fallback 版本：$version"
-  printf '%s\n' "$version"
-}
-
-core_latest_version_strict() {
-  local channel=${1:-stable} json tag
-  json=$(github_api 'https://api.github.com/repos/SagerNet/sing-box/releases?per_page=20') || return 1
-  case "$channel" in
-    stable) tag=$(jq -r 'map(select(.draft == false and (.prerelease // false) == false)) | first.tag_name // empty' <<<"$json") ;;
-    preview|beta|latest) tag=$(jq -r 'map(select(.draft == false)) | first.tag_name // empty' <<<"$json") ;;
-    *) return 1 ;;
-  esac
-  tag=${tag#v}
-  [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || return 1
-  printf '%s\n' "$tag"
-}
-
-core_latest_version() {
-  local latest
-  if latest=$(core_latest_version_strict "${SBM_CORE_CHANNEL:-stable}"); then
-    printf '%s\n' "$latest"
-    return 0
-  fi
-  latest=$(core_fallback_version)
-  log_warn "无法获取 sing-box 最新 Release，回退到 $latest；如需确认最新版本，请稍后运行 xm core check。"
-  printf '%s\n' "$latest"
-}
-
-core_fallback_asset_digest() {
-  local version=${1#v} arch=$2
-  [[ "$version" == "$(core_fallback_version)" ]] || return 1
-  case "$arch" in
-    amd64) printf '%s\n' 'sha256:699a1b510aa4396b2176d32d1181920399ebf1e267835da6f3b598d0f7c24968' ;;
-    arm64) printf '%s\n' 'sha256:436441f76ee2f7fe21b5b2d426d3cb261a480455a704865789ad533e4273ec26' ;;
-    armv7) printf '%s\n' 'sha256:fd164ed45ebc784f657a3e1d0e0ad0f68afdcff864ee57122c2cfed3ddb80a00' ;;
-    386) printf '%s\n' 'sha256:efb46daaa48ee55e090bd1dfcaee34bfbe9bdbd9b89fa9f328d25f81a619e865' ;;
-    *) return 1 ;;
-  esac
-}
-
-core_fallback_release_json() {
-  local version=$1 arch=$2 asset_name digest
-  digest=$(core_fallback_asset_digest "$version" "$arch") || return 1
-  asset_name="sing-box-${version#v}-linux-${arch}.tar.gz"
-  jq -n --arg tag "v${version#v}" --arg name "$asset_name" \
-    --arg url "https://github.com/SagerNet/sing-box/releases/download/v${version#v}/$asset_name" \
-    --arg digest "$digest" \
-    '{tag_name:$tag,assets:[{name:$name,browser_download_url:$url,digest:$digest}]}'
-}
-core_current_version() {
-  local output
-  [[ -x "$SBM_SING_BOX_BIN" ]] || return 0
-  output=$("$SBM_SING_BOX_BIN" version 2>/dev/null) || return 1
-  extract_semver "$output"
-}
-
-core_version_series() {
-  local version=${1#v}
-  [[ "$version" =~ ^([0-9]+)\.([0-9]+)\. ]] || return 1
-  printf '%s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
-}
-
-core_validate_build_tags() {
-  local binary=$1 state=${2:-$SBM_STATE} output
-  [[ -s "$state" ]] || return 0
-  output=$("$binary" version 2>/dev/null) || return 1
-  if jq -e '.nodes[]? | select(.enabled==true and (.protocol=="hysteria2" or .protocol=="tuic"))' "$state" >/dev/null; then
-    grep -Eq '(^|[,[:space:]])with_quic([,[:space:]]|$)' <<<"$output" || { log_error '当前配置需要 with_quic 构建标签。'; return 1; }
-  fi
-  if jq -e '.nodes[]? | select(.enabled==true and .protocol=="snell")' "$state" >/dev/null; then
-    version_ge "$(extract_semver "$output")" 1.14.0-rc.1 || { log_error '当前 Snell 配置需要 sing-box 1.14.0-rc.1 或更高版本核心。'; return 1; }
-  fi
-  if jq -e '.nodes[]? | select(.enabled==true and .protocol=="snell" and (.snell_version // 5)==6)' "$state" >/dev/null; then
-    version_ge "$(extract_semver "$output")" 1.14.0-rc.2 || { log_error '当前 Snell v6 配置需要 sing-box 1.14.0-rc.2 或更高版本核心。'; return 1; }
-  fi
-}
-
 verify_asset_digest() {
   local file=$1 digest=${2:-}
   [[ -n "$digest" && "$digest" == sha256:* ]] || return 2
@@ -206,274 +120,42 @@ core_check_free_space() {
   fi
 }
 
-core_prune_cached_versions() {
-  local keep=${SBM_CORE_RETENTION:-1} current path version
-  local -a dirs=()
-  [[ "$keep" =~ ^[0-9]+$ ]] || keep=1
-  [[ -z $(find "$SBM_BACKUPS" -maxdepth 4 -type f -name .recovery-pending -print -quit 2>/dev/null) ]] || return 0
-  (( keep >= 1 )) || keep=1
-  current=$(readlink -f "$SBM_SING_BOX_BIN" 2>/dev/null || true)
-  [[ -d "$SBM_CORE_DIR/sing-box" ]] || return 0
-  while IFS= read -r path; do [[ -n "$path" ]] && dirs+=("$path"); done < <(
-    find "$SBM_CORE_DIR/sing-box" -mindepth 2 -maxdepth 2 -type f -name sing-box -perm -u+x -printf '%T@ %p\n' 2>/dev/null |
-      sort -nr | awk '{sub(/^[^ ]+ /, ""); print}'
-  )
-  # Always retain the active target, then retain the newest candidates up to
-  # the configured limit.  Each entry is the binary; its parent is the
-  # version directory containing the optional libcronet.so.
-  local retained=0 max_others=$((keep - 1))
-  [[ -n "$current" ]] || max_others=$keep
-  for path in "${dirs[@]}"; do
-    if [[ "$path" == "$current" ]]; then
-      continue
-    fi
-    if (( retained < max_others )); then
-      retained=$((retained + 1))
-      continue
-    fi
-    version=$(dirname "$path")
-    rm -rf -- "$version"
-  done
-}
-
-core_download_version() (
-  local version=$1 arch json asset_name asset_url digest checksum_url tmpdir archive target expected member library archive_bytes expanded_bytes install_dir='' complete=false
-  arch=$(sb_arch)
-  if [[ "$version" == latest ]]; then
-    version=$(core_latest_version)
-  fi
-  if ! json=$(core_release_json "$version") || ! jq -e 'type == "object" and (.assets | type == "array")' <<<"$json" >/dev/null 2>&1; then
-    if [[ "$version" == "$(core_fallback_version)" ]]; then
-      log_warn "无法获取 sing-box $version 的 Release API 详情，使用内置且已校验的资产信息。"
-      json=$(core_fallback_release_json "$version" "$arch") || die "内置 sing-box fallback 不支持架构：$arch"
-    else
-      die "无法获取 sing-box $version Release 信息。"
-    fi
-  fi
-  version=$(jq -r '.tag_name // empty' <<<"$json" | sed 's/^v//')
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || die "sing-box Release 版本号无效。"
-  asset_name="sing-box-${version}-linux-${arch}.tar.gz"
-  asset_url=$(jq -r --arg n "$asset_name" 'first(.assets[] | select(.name==$n) | .browser_download_url) // empty' <<<"$json")
-  digest=$(jq -r --arg n "$asset_name" 'first(.assets[] | select(.name==$n) | (.digest // "")) // empty' <<<"$json")
-  [[ -n "$asset_url" ]] || die "官方 Release 中未找到：$asset_name"
-  target="$SBM_CORE_DIR/sing-box/$version/sing-box"
-  if [[ -x "$target" ]]; then
-    "$target" version 2>/dev/null | grep -Fq "$version" || die "已缓存的 sing-box $version 无法通过版本校验。"
-    ensure_program_permissions
-    prepare_singbox_binary_for_backend "$target"
-    artifact_record sing-box "$version" "$asset_url" "${digest:-previously-verified}" "$target"
-    printf '%s\n' "$target"
-    return 0
-  fi
-  mkdir -p "$SBM_CORE_DIR" "$SBM_DOWNLOAD_TMP" || return 1
-  archive_bytes=$(jq -r --arg n "$asset_name" 'first(.assets[]|select(.name==$n)).size // 40000000' <<<"$json") || return 1
-  [[ "$archive_bytes" =~ ^[1-9][0-9]*$ ]] || return 1
-  core_check_free_space "$SBM_DOWNLOAD_TMP" "$((archive_bytes + 8388608))" || return 1
-  tmpdir=$(mktemp -d "$SBM_DOWNLOAD_TMP/xray-manager-sing-box.XXXXXX") || return 1
-  trap 'rm -rf -- "$tmpdir"; [[ "$complete" == true || -z "$install_dir" ]] || rm -rf -- "$install_dir"' EXIT
-  archive="$tmpdir/$asset_name"
-  log_info "下载 sing-box $version ($arch)…"
-  download_file_with_retries "$asset_url" "$archive" "sing-box $version" 5 || return 1
-  if ! verify_asset_digest "$archive" "$digest"; then
-    checksum_url=$(jq -r 'first(.assets[] | select(.name|test("checksums.*\\.txt$|checksum.*\\.txt$";"i")) | .browser_download_url) // empty' <<<"$json")
-    [[ -n "$checksum_url" ]] || { rm -rf "$tmpdir"; die "Release 未提供可用 SHA-256 摘要，已拒绝安装。"; }
-    download_file_with_retries "$checksum_url" "$tmpdir/checksums.txt" "sing-box checksum" 5
-    expected=$(awk -v n="$asset_name" '$NF==n {print $1; exit}' "$tmpdir/checksums.txt")
-    [[ -n "$expected" && "$expected" == "$(sha256sum "$archive" | awk '{print $1}')" ]] || { rm -rf "$tmpdir"; die "sing-box 下载文件校验失败。"; }
-    digest="sha256:$expected"
-  fi
-  member=$(tar -tzf "$archive" | awk '$0 ~ /(^|\/)sing-box$/ {print}') || return 1
-  [[ -n "$member" && "$member" != *$'\n'* ]] || die '压缩包中未找到唯一 sing-box 程序。'
-  library=$(tar -tzf "$archive" | awk '$0 ~ /(^|\/)libcronet[.]so$/ {print}') || return 1
-  [[ "$library" != *$'\n'* ]] || die '压缩包中 companion library 不唯一。'
-  expanded_bytes=$(tar -tvzf "$archive" | awk '$NF ~ /(^|\/)(sing-box|libcronet[.]so)$/ {total += $3} END {printf "%.0f",total}') || return 1
-  [[ "$expanded_bytes" =~ ^[1-9][0-9]*$ ]] || return 1
-  core_check_free_space "$SBM_CORE_DIR" "$((expanded_bytes + 33554432))" || return 1
-  install_dir="$SBM_CORE_DIR/sing-box/$version"
-  install -d -m 0755 "$SBM_CORE_DIR/sing-box" "$install_dir" || return 1
-  # Extract only required payload directly onto its destination filesystem;
-  # keep the compressed archive in the configured temporary directory.
-  tar -xOzf "$archive" "$member" >"$target" || return 1
-  chmod 0755 "$target" || return 1
-  if [[ -n "$library" ]]; then
-    tar -xOzf "$archive" "$library" >"$install_dir/libcronet.so" || return 1
-    chmod 0755 "$install_dir/libcronet.so" || return 1
-  fi
-  ensure_program_permissions
-  if ! "$target" version >/dev/null 2>&1; then
-    rm -rf "$tmpdir" "$(dirname "$target")"
-    if [[ -f /etc/alpine-release ]]; then
-      die "sing-box 官方核心无法在当前 Alpine 运行；请确认已安装 gcompat。"
-    fi
-    die "下载的 sing-box 核心无法执行。"
-  fi
-  prepare_singbox_binary_for_backend "$target"
-  artifact_record sing-box "$version" "$asset_url" "$digest" "$target" || return 1
-  complete=true
-  printf '%s\n' "$target"
-)
-
-core_switch_to() {
-  local version=$1 binary current_target previous recovery
-  binary="$SBM_CORE_DIR/sing-box/${version#v}/sing-box"
-  [[ -x "$binary" ]] || binary=$(core_download_version "$version") || return 1
-  validate_runtime_binary_path sing-box "$binary"
-  ensure_program_permissions
-  prepare_singbox_binary_for_backend "$binary"
-  if [[ -s "$SBM_CONFIG" ]]; then core_validate_config_with "$binary" "$SBM_CONFIG" "$SBM_RUN/core-candidate-check.log" || return 1; fi
-  core_validate_build_tags "$binary" "$SBM_STATE" || return 1
-  current_target=$(readlink -f "$SBM_SING_BOX_BIN" 2>/dev/null || true)
-  previous=${current_target:-none}
-  mkdir -p "$SBM_BIN_DIR" || return 1
-  ln -sfn "$binary" "$SBM_SING_BOX_BIN.new" || return 1
-  mv -Tf "$SBM_SING_BOX_BIN.new" "$SBM_SING_BOX_BIN" || return 1
-  ensure_program_permissions
-  if [[ "$SBM_SKIP_INIT" != "1" ]] && service_exists "$SBM_SERVICE"; then
-    if ! singbox_service_reconcile; then
-      log_error "新核心启动失败，恢复旧核心。"
-      if [[ -n "$current_target" && -x "$current_target" ]]; then
-        if ! { prepare_singbox_binary_for_backend "$current_target" && ln -sfn "$current_target" "$SBM_SING_BOX_BIN" && singbox_service_reconcile; }; then
-          recovery=$(mktemp -d "$SBM_BACKUPS/core-recovery-$(now_stamp).XXXXXX") || return 1
-          printf '%s\n' "$current_target" >"$recovery/previous-program"
-          touch "$recovery/.recovery-pending"
-          log_error "旧核心恢复未完成，资料最多保留 23 小时：$recovery"
-        else
-          core_prune_cached_versions || return 1
-        fi
-      else
-        rm -f "$SBM_SING_BOX_BIN" || return 1
-      fi
-      return 1
-    fi
-  fi
-  if [[ ${SBM_CORE_RETENTION:-1} =~ ^[0-9]+$ ]] && (( SBM_CORE_RETENTION > 1 )); then
-    mkdir -p "$SBM_VAR/core-history" || return 1
-    printf '%s\t%s\t%s\t\n' "$(now_iso)" "$previous" "$binary" >"$SBM_VAR/core-history/sing-box.tsv" || return 1
-  else
-    rm -f "$SBM_VAR/core-history/sing-box.tsv" || return 1
-  fi
-  core_prune_cached_versions || return 1
-  log_ok "sing-box 已切换到 $(core_current_version)。"
-}
-
-_core_update() {
-  local version=${1:-latest} latest current
-  local requested=$version
-  if [[ "$version" == latest ]]; then
-    latest=$(core_latest_version) || die "无法查询 sing-box 最新官方版本。"
-  else
-    latest=${version#v}
-  fi
-  current=$(core_current_version || true)
-  if [[ "$requested" == latest && -n "$current" && "$current" != "$latest" ]] && version_ge "$current" "$latest"; then
-    log_warn "解析到的目标核心 $latest 不高于当前 $current，跳过可能的降级（可能是 Release API 暂时不可用）。"
-    return 0
-  fi
-  if [[ "$current" == "$latest" ]]; then log_ok "sing-box 已是目标版本 $latest。"; return 0; fi
-  core_download_version "$latest" >/dev/null || return 1
-  core_switch_to "$latest"
-}
-core_update() { with_lock _core_update "${1:-latest}"; }
+# --- Xray core (the only proxy core of xray-manager) ----------------------
+# Same public names as sb-manager's sing-box core helpers so status, doctor,
+# backup, panel and CLI share one interface.
+core_current_version() { xray_current_version; }
+core_latest_version() { xray_latest_version; }
+core_download_version() { xray_download_version "${1:-latest}"; }
+core_prune_cached_versions() { xray_prune_versions; }
+core_update() { require_root; with_lock _xray_install "${1:-latest}"; }
 
 core_check_update() {
   local current latest
-  current=$(core_current_version || true)
-  latest=$(core_latest_version) || die "无法查询 sing-box 最新官方版本。"
-  printf '当前版本：%s\n最新官方版本：%s\n' "${current:-未安装}" "$latest"
-  if [[ -n "$current" && "$current" != "$latest" ]] && version_ge "$current" "$latest"; then
-    log_warn "当前核心 $current 不低于目标 $latest，跳过可能的降级。"
-    return 0
-  fi
-  [[ "$current" == "$latest" ]] || return 10
-}
-
-core_schema() {
-  local output=${1:-} version
-  version=$(core_current_version || true)
-  version_ge "$version" 1.14.0-beta.2 || die 'sing-box schema 命令需要 1.14.0-beta.2 或更高版本核心。'
-  [[ -x "$SBM_SING_BOX_BIN" ]] || die "sing-box 核心不存在：$SBM_SING_BOX_BIN"
-  if [[ -n "$output" ]]; then
-    mkdir -p "$(dirname "$output")"
-    "$SBM_SING_BOX_BIN" schema >"$output"
-    chmod 0644 "$output"
-    jq -e . "$output" >/dev/null || die 'sing-box schema 输出不是有效 JSON。'
-    log_ok "已导出 sing-box JSON Schema：$output"
-  else
-    "$SBM_SING_BOX_BIN" schema
-  fi
+  current=$(core_current_version || true); latest=$(core_latest_version) || { log_error '无法查询 Xray 最新官方版本。'; return 1; }
+  printf '当前 Xray：%s\n最新 Xray：%s\n' "${current:-未安装}" "$latest"
+  if [[ -n "$current" && "$current" != "$latest" ]] && version_ge "$latest" "$current"; then printf '可运行 xm core update 更新。\n'; fi
 }
 
 core_capabilities() {
-  local json=${1:-0} output version tags tag_list
-  [[ -x "$SBM_SING_BOX_BIN" ]] || die "sing-box 核心不存在：$SBM_SING_BOX_BIN"
-  output=$("$SBM_SING_BOX_BIN" version 2>/dev/null) || die '无法读取 sing-box 核心版本信息。'
-  version=$(extract_semver "$output") || die '无法解析 sing-box 核心版本。'
-  tags=$(sed -n 's/^Tags:[[:space:]]*//p' <<<"$output" | head -n 1)
-  tag_list=$(tr ',' '\n' <<<"$tags" | sed '/^$/d' | jq -R -s 'split("\n") | map(select(length>0))')
-  if [[ "$json" == 1 ]]; then
-    jq -n --arg version "$version" --argjson tags "$tag_list" \
-      '{version:$version,tags:$tags,features:{quic:("with_quic"|IN($tags[])),utls:("with_utls"|IN($tags[])),naive_outbound:("with_naive_outbound"|IN($tags[])),acme:("with_acme"|IN($tags[])),cloudflared:("with_cloudflared"|IN($tags[])),tailscale:("with_tailscale"|IN($tags[])),openvpn:("with_openvpn"|IN($tags[])),openconnect:("with_openconnect"|IN($tags[])),usbip:("with_usbip"|IN($tags[])),clash_api:("with_clash_api"|IN($tags[]))}}'
-  else
-    printf 'sing-box：%s\nBuild tags：%s\n' "$version" "${tags:--}"
-    printf 'QUIC=%s  uTLS=%s  Naive=%s  ACME=%s  Cloudflared=%s\n' \
-      "$([[ "$tags" == *with_quic* ]] && echo yes || echo no)" "$([[ "$tags" == *with_utls* ]] && echo yes || echo no)" \
-      "$([[ "$tags" == *with_naive_outbound* ]] && echo yes || echo no)" "$([[ "$tags" == *with_acme* ]] && echo yes || echo no)" "$([[ "$tags" == *with_cloudflared* ]] && echo yes || echo no)"
-    printf 'Tailscale=%s  OpenVPN=%s  OpenConnect=%s  USB/IP=%s  Clash API=%s\n' \
-      "$([[ "$tags" == *with_tailscale* ]] && echo yes || echo no)" "$([[ "$tags" == *with_openvpn* ]] && echo yes || echo no)" \
-      "$([[ "$tags" == *with_openconnect* ]] && echo yes || echo no)" "$([[ "$tags" == *with_usbip* ]] && echo yes || echo no)" "$([[ "$tags" == *with_clash_api* ]] && echo yes || echo no)"
-  fi
+  printf 'Xray-core %s\n' "$(core_current_version || printf '未安装')"
+  printf '入站协议：VLESS（RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP/Hysteria，TLS/Reality/VLESS 加密）、VMess、Trojan、Shadowsocks 2022、Hysteria2、SOCKS、HTTP\n'
+  printf '统计 API：用户/入站/出站流量与在线 IP（仅本机回环监听）\n'
 }
 
 _core_set_policy() {
   local policy=$1 candidate
-  case "$policy" in manual|notify|patch|stable) ;; *) die "策略必须是 manual、notify、patch 或 stable。";; esac
+  case "$policy" in manual|notify|patch|stable) ;; *) die '更新策略必须是 manual、notify、patch 或 stable。';; esac
   candidate=$(state_candidate)
   jq --arg p "$policy" '.settings.core_update_policy=$p' "$SBM_STATE" >"$candidate"
   if ! apply_candidate_state "$candidate" core-policy; then rm -f "$candidate"; return 1; fi
   rm -f "$candidate"
-  log_ok "自动更新策略：$policy"
+  log_ok "Xray 自动更新策略：$policy（patch 只更新同一年月发布，stable 更新任意新版本）"
 }
 core_set_policy() { with_state_transaction core-policy _core_set_policy "$@"; }
 
-_core_set_channel() {
-  local channel=$1 candidate
-  case "$channel" in stable|preview) ;; *) die '核心渠道必须是 stable 或 preview。';; esac
-  candidate=$(state_candidate)
-  jq --arg c "$channel" '.settings.core_channel=$c' "$SBM_STATE" >"$candidate"
-  if ! apply_candidate_state "$candidate" core-channel; then rm -f "$candidate"; return 1; fi
-  rm -f "$candidate"
-  log_ok "核心渠道：$channel"
-}
-core_set_channel() { with_state_transaction core-channel _core_set_channel "$@"; }
-
 core_auto_update() {
-  local policy channel current latest cmj cmi lmj lmi
-  policy=$(jq -r '.settings.core_update_policy // "notify"' "$SBM_STATE")
-  channel=$(jq -r '.settings.core_channel // "stable"' "$SBM_STATE")
-  [[ "$policy" != manual ]] || return 0
-  current=$(core_current_version || true)
-  latest=$(core_latest_version_strict "$channel") || { log_warn "无法查询 sing-box 最新官方版本，本次自动更新已跳过。"; return 1; }
-  [[ "$current" != "$latest" ]] || return 0
-  mkdir -p "$SBM_VAR/updates"
-  jq -n --arg now "$(now_iso)" --arg current "$current" --arg latest "$latest" --arg policy "$policy" '{checked_at:$now,current:$current,latest:$latest,policy:$policy}' >"$SBM_VAR/updates/sing-box.json"
-  case "$policy" in
-    notify) log_warn "发现 sing-box 更新：$current → $latest。运行 xm core update。" ;;
-    patch)
-      IFS=. read -r cmj cmi _ <<<"$current"; IFS=. read -r lmj lmi _ <<<"$latest"
-      if [[ "$cmj.$cmi" == "$lmj.$lmi" ]]; then _core_update "$latest"; else log_warn "发现跨 minor 更新 $latest；patch 策略不自动安装。"; fi
-      ;;
-    stable)
-      if [[ $(core_version_series "$current" 2>/dev/null || true) == "$(core_version_series "$latest" 2>/dev/null || true)" ]]; then
-        _core_update "$latest"
-      else
-        log_warn "发现跨 minor 版本 $latest；为避免配置迁移风险，仅通知并保留当前 $current。请手动运行 xm core update $latest。"
-      fi
-      ;;
-  esac
+  xray_auto_update || log_warn 'Xray 自动更新检查未完成。'
   cloudflared_auto_update || log_warn 'cloudflared 自动更新检查未完成。'
-  if declare -F xray_auto_update >/dev/null 2>&1; then
-    xray_auto_update || log_warn 'Xray 自动更新检查未完成。'
-  fi
 }
 
 cloudflared_auto_update() {
@@ -502,21 +184,11 @@ cloudflared_auto_update() {
 }
 
 _core_rollback() {
-  local current candidate version history_line previous paired_snapshot
-  current=$(readlink -f "$SBM_SING_BOX_BIN" 2>/dev/null || true)
-  if [[ -s "$SBM_VAR/core-history/sing-box.tsv" ]]; then
-    history_line=$(awk -F '\t' -v cur="$current" '$3==cur && $2!="none" {line=$0} END {print line}' "$SBM_VAR/core-history/sing-box.tsv")
-    if [[ -n "$history_line" ]]; then
-      IFS=$'\t' read -r _ previous _ paired_snapshot <<<"$history_line"
-      [[ -x "$previous" ]] && candidate=$previous
-    fi
-  fi
-  if [[ -z ${candidate:-} ]]; then
-    candidate=$(find "$SBM_CORE_DIR/sing-box" -mindepth 2 -maxdepth 2 -type f -name sing-box -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk -v cur="$current" '$2!=cur {print $2; exit}')
-  fi
-  [[ -n "$candidate" ]] || { log_error '默认仅保留当前核心；如需旧版，请运行 xm core update VERSION 指定官方版本。'; return 1; }
-  version=$(basename "$(dirname "$candidate")")
-  core_switch_to "$version"
+  local active previous
+  active=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
+  previous=$(find "$SBM_CORE_DIR/xray" -mindepth 2 -maxdepth 2 -type f -name xray ! -path "$active" -printf '%T@ %p\n' 2>/dev/null | sort -rn | awk 'NR==1{print $2}')
+  [[ -n "$previous" && -x "$previous" ]] || { log_error '没有可回滚的上一版 Xray。'; return 1; }
+  _xray_switch_to "$previous"
 }
 core_rollback() { require_root; with_lock _core_rollback; }
 

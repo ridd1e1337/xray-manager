@@ -13,15 +13,10 @@ node_share_uri() {
   case "$protocol" in
     vmess-ws-cf) protocol_vmess_share "$node" "$secret" "$node_secret" ;;
     shadowsocks) protocol_ss_share "$node" "$secret" "$node_secret" ;;
-    anytls) protocol_anytls_share "$node" "$secret" "$node_secret" ;;
     hysteria2) protocol_hy2_share "$node" "$secret" "$node_secret" ;;
     trojan) protocol_trojan_share "$node" "$secret" ;;
-    tuic) protocol_tuic_share "$node" "$secret" ;;
     vless) protocol_vless_share "$node" "$secret" "$node_secret" ;;
     socks|http|mixed) protocol_proxy_share "$node" "$secret" ;;
-    naive) protocol_naive_share "$node" "$secret" ;;
-    shadowtls) protocol_shadowtls_share "$node" "$secret" "$node_secret" ;;
-    snell) protocol_snell_share "$node" "$secret" "$node_secret" ;;
   esac
 }
 
@@ -38,15 +33,10 @@ node_client_outbound() {
   case "$protocol" in
     vmess-ws-cf) outbound=$(protocol_vmess_client_outbound "$node" "$secret" "$node_secret") ;;
     shadowsocks) outbound=$(protocol_ss_client_outbound "$node" "$secret" "$node_secret") ;;
-    anytls) outbound=$(protocol_anytls_client_outbound "$node" "$secret" "$node_secret") ;;
     hysteria2) outbound=$(protocol_hy2_client_outbound "$node" "$secret" "$node_secret") ;;
     trojan) outbound=$(protocol_trojan_client_outbound "$node" "$secret") ;;
-    tuic) outbound=$(protocol_tuic_client_outbound "$node" "$secret") ;;
     vless) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     socks|http|mixed) outbound=$(protocol_proxy_client_outbound "$node" "$secret") ;;
-    naive) outbound=$(protocol_naive_client_outbound "$node" "$secret") ;;
-    shadowtls) outbound=$(protocol_shadowtls_client_outbound "$node" "$secret" "$node_secret" "$tag") || return 1 ;;
-    snell) outbound=$(protocol_snell_client_outbound "$node" "$secret" "$node_secret") ;;
     *) die "不支持导出的协议：$protocol" ;;
   esac
   [[ -n "$outbound" ]] || return 1
@@ -303,7 +293,6 @@ node_mihomo_client_outbound() {
   [[ ! -r "$(state_secret_path "$id")" ]] || node_secret=$(state_get_secret "$id") || return 1
   case "$(jq -r '.protocol' <<<"$node")" in
     vless) native=$(protocol_vless_mihomo_outbound "$node" "$secret" "$node_secret") || return 1;;
-    snell) native=$(protocol_snell_mihomo_share "$node" "$secret" "$node_secret") || return 1;;
     *) log_warn '本原生 mihomo 导出入口转换 VLESS/Snell；其他协议请使用 Sub-Store。'; return 1;;
   esac
   name=$(jq -r '.name' <<<"$node") || return 1

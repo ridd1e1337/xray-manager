@@ -372,7 +372,7 @@ state_validate() {
       type == "object"
       and (.id | string and test("^[a-z0-9][a-z0-9._-]{0,47}$"))
       and (.name | nonempty and (explode | all(.[]; . >= 32 and . != 127)))
-      and (.protocol | IN("vmess-ws-cf", "shadowsocks", "anytls", "hysteria2", "trojan", "tuic", "vless", "naive", "shadowtls", "snell", "socks", "http", "mixed"))
+      and (.protocol | IN("vmess-ws-cf", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed"))
       and (.enabled | type == "boolean")
       and (.listen | nonempty)
       and (.port | port)
@@ -553,7 +553,7 @@ state_validate() {
     and all(.node_templates[];
       type == "object"
       and (.name | string and test("^[a-z0-9][a-z0-9._-]{0,47}$"))
-      and (.protocol | IN("vmess-ws-cf", "shadowsocks", "anytls", "hysteria2", "trojan", "tuic", "vless", "naive", "shadowtls", "snell", "socks", "http", "mixed"))
+      and (.protocol | IN("vmess-ws-cf", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed"))
       and (.defaults | type == "object"))
     and (.certificates | type == "array")
     and (if .openlist==null then true else

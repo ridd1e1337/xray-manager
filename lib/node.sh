@@ -5,17 +5,12 @@ node_protocol_label() {
   case "$1" in
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
     shadowsocks) printf 'Shadowsocks 2022' ;;
-    anytls) printf 'AnyTLS' ;;
     hysteria2) printf 'Hysteria2' ;;
     trojan) printf 'Trojan TLS' ;;
-    tuic) printf 'TUIC' ;;
     vless) printf 'VLESS' ;;
     socks) printf 'SOCKS5' ;;
     http) printf 'HTTP Proxy' ;;
     mixed) printf 'SOCKS5 + HTTP' ;;
-    naive) printf 'NaiveProxy' ;;
-    shadowtls) printf 'ShadowTLS v3' ;;
-    snell) printf 'Snell' ;;
     *) printf '%s' "$1" ;;
   esac
 }
@@ -220,6 +215,9 @@ _node_add() {
   elif (( ${#vless_options[@]} > 0 )); then
     usage_die 'VLESS 传输和加密参数不能用于其他协议。'
   fi
+  case "$type" in
+    anytls|tuic|naive|shadowtls|snell) usage_die "xray-manager 只使用 Xray-core，Xray 不支持 $type；请使用 sb-manager。";;
+  esac
   default_address=$(jq -r '.settings.default_server_address // ""' "$SBM_STATE")
   case "$type" in
     vmess|vmess-ws-cf)
@@ -240,49 +238,8 @@ _node_add() {
       [[ "$network" == tcp ]] || die "首个版本仅启用推荐的 Shadowsocks TCP + multiplex 模式。"
       secret=$(jq -n --arg password "$(ss2022_key "$method")" '{password:$password}')
       ;;
-    anytls)
-      protocol=anytls; base=anytls; transport=tcp
-      [[ -n "$port" ]] || port=443
-      [[ -n "$domain" ]] || die "AnyTLS 必须指定 --domain。"
-      validate_domain "$domain" || die "无效域名：$domain"
-      [[ -n "$name" ]] || name='AnyTLS'
-      [[ -n "$address" ]] || address=${default_address:-$domain}
-      secret=$(jq -n --arg password "$(random_password 24)" '{password:$password}')
-      ;;
-    hy2|hysteria2)
-      protocol=hysteria2; base=hy2; transport=udp
-      [[ -n "$port" ]] || port=443
-      [[ -n "$domain" ]] || die "Hysteria2 必须指定 --domain。"
-      validate_domain "$domain" || die "无效域名：$domain"
-      [[ -n "$name" ]] || name='Hysteria2'
-      [[ -n "$address" ]] || address=${default_address:-$domain}
-      if [[ -n "$obfs" && "$obfs" != salamander && "$obfs" != gecko ]]; then die "Hysteria2 混淆必须是 salamander 或 gecko。"; fi
-      if [[ "$obfs" == gecko ]]; then
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Gecko 混淆需要 sing-box 1.14+ 核心。'
-        [[ "$obfs_min_packet_size" =~ ^[0-9]+$ ]] && (( obfs_min_packet_size >= 64 && obfs_min_packet_size <= 1500 )) || die 'Gecko 最小包长必须是 64-1500 的整数。'
-        [[ "$obfs_max_packet_size" =~ ^[0-9]+$ ]] && (( obfs_max_packet_size >= 64 && obfs_max_packet_size <= 1500 )) || die 'Gecko 最大包长必须是 64-1500 的整数。'
-        (( obfs_min_packet_size <= obfs_max_packet_size )) || die 'Gecko 最小包长不能大于最大包长。'
-      fi
-      if [[ "$disable_chrome_parrot" == true ]]; then
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Chrome QUIC 指纹开关需要 sing-box 1.14+ 核心。'
-      fi
-      case "$bbr_profile" in ''|conservative|standard|aggressive) ;; *) die 'Hysteria2 BBR profile 必须是 conservative、standard 或 aggressive。';; esac
-      if [[ -n "$bbr_profile" || "$brutal_debug" == true ]]; then
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Hysteria2 BBR profile/debug 需要 sing-box 1.14+ 核心。'
-      fi
-      case "$realm_ip_version" in 0|4|6) ;; *) die 'Realm IP 版本必须是 0、4 或 6。';; esac
-      if [[ -n "$realm_id" ]]; then
-        [[ "$realm_id" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] || die "无效 Realm ID：$realm_id"
-        [[ $(jq -r '.realm.enabled // false' "$SBM_STATE") == true ]] || die '请先启用全局 Hysteria Realm，再为节点指定 --realm-id。'
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Hysteria Realm 需要 sing-box 1.14+ 核心。'
-      fi
-      secret=$(jq -n --arg password "$(random_password 24)" --arg obfs_password "$([[ -n "$obfs" ]] && random_password 18 || true)" '{password:$password,obfs_password:$obfs_password}')
-      ;;
     trojan)
       protocol=trojan; base=trojan; transport=tcp; port=${port:-443}; domain=${domain:?Trojan 必须指定 --domain。}; validate_domain "$domain" || die "无效域名：$domain"; name=${name:-Trojan}; address=${address:-${default_address:-$domain}}; secret=$(jq -n --arg password "$(random_password 24)" '{password:$password}')
-      ;;
-    tuic)
-      protocol=tuic; base=tuic; transport=udp; port=${port:-443}; domain=${domain:?TUIC 必须指定 --domain。}; validate_domain "$domain" || die "无效域名：$domain"; name=${name:-TUIC}; address=${address:-${default_address:-$domain}}; case "$congestion_control" in cubic|new_reno|bbr) ;; *) die 'TUIC 拥塞控制必须是 cubic、new_reno 或 bbr。';; esac; secret=$(jq -n --arg uuid "$(random_uuid)" --arg password "$(random_password 24)" '{uuid:$uuid,password:$password}')
       ;;
     vless)
       protocol=vless; base=vless
@@ -305,37 +262,6 @@ _node_add() {
       secret=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') || return 1
       [[ "$security" != reality ]] || reality_secret=$(protocol_vless_generate_reality_secret) || return 1
       ;;
-    naive)
-      protocol=naive; base=naive; [[ "$network" == tcp || "$network" == udp ]] || die 'Naive network 必须是 tcp 或 udp。'; transport=$network; port=${port:-443}; domain=${domain:?Naive 必须指定 --domain。}; validate_domain "$domain" || die "无效域名：$domain"; name=${name:-Naive}; address=${address:-${default_address:-$domain}}; secret=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}')
-      ;;
-    shadowtls)
-      protocol=shadowtls; base=shadowtls; transport=tcp; port=${port:-443}; handshake_server=${handshake_server:?ShadowTLS 必须指定 --handshake-server。}; validate_domain "$handshake_server" || die "无效握手域名：$handshake_server"; validate_port "$handshake_port" || die "无效握手端口：$handshake_port"; case "$strict_mode" in true|false) ;; *) die 'strict-mode 必须是 true 或 false。';; esac; case "$wildcard_sni" in off|authed|all) ;; *) die 'wildcard-sni 必须是 off、authed 或 all。';; esac; name=${name:-ShadowTLS}; address=${address:-${default_address:-$handshake_server}}; domain=$handshake_server; secret=$(jq -n --arg password "$(random_password 24)" '{password:$password}')
-      secret=$(jq --arg key "$(ss2022_key 2022-blake3-aes-128-gcm)" '.shadowsocks_password=$key' <<<"$secret")
-      node_secret=$(jq -n --arg key "$(ss2022_key 2022-blake3-aes-128-gcm)" '{shadowsocks_server_password:$key}')
-      ;;
-    socks|socks5|http|mixed)
-      protocol=$type; [[ "$protocol" != socks5 ]] || protocol=socks
-      base=$protocol; transport=tcp; port=${port:-1080}; name=${name:-$protocol}
-      case "$proxy_listen" in 127.0.0.1|::1|0.0.0.0|::) ;; *) die '代理监听仅支持 127.0.0.1、::1、0.0.0.0、::。';; esac
-      secret=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}')
-      if [[ "$address_supplied" == 0 && ( "$proxy_listen" == 127.0.0.1 || "$proxy_listen" == ::1 ) ]]; then address=$proxy_listen; address_supplied=1; address_source=manual; fi
-      ;;
-    snell)
-      [[ "$enabled" != true ]] || version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Snell 需要 sing-box 1.14.0-rc.1 或更高版本核心。'
-      protocol=snell; base=snell; transport=tcp; port=${port:-6160}; name=${name:-Snell}; address=${address:-$default_address}
-      case "$snell_version" in 5|6) ;; *) die 'Snell 版本必须是 5 或 6。';; esac
-      case "$snell_mode" in default|unshaped|unsafe-raw) ;; *) die 'Snell v6 mode 必须是 default、unshaped 或 unsafe-raw。';; esac
-      if [[ "$snell_version" == 6 ]]; then
-        [[ "$enabled" != true ]] || version_ge "$(core_current_version)" 1.14.0-rc.2 || die 'Snell v6 需要 sing-box 1.14.0-rc.2 或更高版本核心。'
-        case "$obfs" in ''|none) ;; *) die 'Snell v6 使用 traffic shaping mode，不支持 HTTP obfs。';; esac
-        snell_obfs_mode=none; snell_obfs_host=bing.com
-      else
-        case "$obfs" in ''|none) snell_obfs_mode=none;; http) snell_obfs_mode=http;; *) die 'Snell v5 混淆必须是 none 或 http。';; esac
-        snell_obfs_host=${obfs_host:-bing.com}; [[ "$snell_obfs_mode" != http ]] || { validate_domain "$snell_obfs_host" || die "无效 Snell HTTP 混淆 Host：$snell_obfs_host"; }
-      fi
-      secret=$(jq -n --arg userkey "$(random_password 24)" '{userkey:$userkey}')
-      node_secret=$(jq -n --arg psk "$(random_password 24)" '{psk:$psk}')
-      ;;
     *) die "不支持的协议：$type";;
   esac
   if [[ "$address_supplied" == 0 ]]; then
@@ -343,7 +269,6 @@ _node_add() {
       vless)
         if [[ "$security" != tls ]]; then address=$(node_auto_address ''); else address=$(node_auto_address "$domain"); fi
         ;;
-      shadowtls) address=$(node_auto_address '') ;;
       *) address=$(node_auto_address "$domain");;
     esac
     address_source=auto
@@ -356,7 +281,7 @@ _node_add() {
     node_secret=$(jq -n --arg hs "$handshake_server" --argjson hp "$handshake_port" --argjson reality "$reality_secret" '$reality + {handshake_server:$hs,handshake_port:$hp}')
   fi
   if website_mux_managed && [[ "$transport" == tcp && "$port" == 443 ]]; then
-    case "$protocol" in anytls|trojan|vless|shadowtls|naive) port=$(node_choose_port tcp) || return 1;; esac
+    case "$protocol" in trojan|vless) port=$(node_choose_port tcp) || return 1;; esac
   fi
   validate_port "$port" || die "无效端口：$port"
   [[ -n "$id" ]] || id=$(state_unique_id "$base")
@@ -379,34 +304,14 @@ _node_add() {
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg network "$network" --arg method "$method" --arg address "$address" --arg address_source "$address_source" --arg now "$created_at" --argjson mux "$mux" --argjson enabled "$enabled" \
         '{id:$id,name:$name,protocol:"shadowsocks",enabled:$enabled,listen:"::",port:$port,network:$network,method:$method,multiplex:$mux,server_address:$address,server_address_source:$address_source,credential_mode:"legacy",created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
-    anytls)
-      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg now "$created_at" --argjson enabled "$enabled" \
-        '{id:$id,name:$name,protocol:"anytls",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
-      ;;
-    hysteria2)
-      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg obfs "$obfs" --argjson obfs_min "$obfs_min_packet_size" --argjson obfs_max "$obfs_max_packet_size" --argjson disable_chrome "$disable_chrome_parrot" --arg bbr "$bbr_profile" --argjson brutal "$brutal_debug" --argjson realm_enabled "$([[ -n "$realm_id" ]] && echo true || echo false)" --arg realm_id "$realm_id" --argjson realm_ip "$realm_ip_version" --argjson realm_map "$realm_port_mapping" --arg masquerade "$masquerade" --arg now "$created_at" --argjson enabled "$enabled" \
-        '{id:$id,name:$name,protocol:"hysteria2",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,obfs:(if $obfs=="" then {} elif $obfs=="gecko" then {type:$obfs,min_packet_size:$obfs_min,max_packet_size:$obfs_max} else {type:$obfs} end),disable_chrome_parrot:$disable_chrome,bbr_profile:$bbr,brutal_debug:$brutal,realm_enabled:$realm_enabled,realm_id:$realm_id,realm_ip_version:$realm_ip,realm_port_mapping:$realm_map,masquerade:$masquerade,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
-      ;;
     trojan)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:"trojan",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
-      ;;
-    tuic)
-      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg cc "$congestion_control" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:"tuic",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,congestion_control:$cc,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
     vless)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg security "$security" --arg flow "$flow" --arg hs "$handshake_server" --argjson hp "$handshake_port" --arg now "$created_at" --argjson enabled "$enabled" --arg listen "$vless_listen" '{id:$id,name:$name,protocol:"vless",enabled:$enabled,listen:$listen,port:$port,domain:$domain,server_address:$address,security:$security,flow:(if $flow=="" then null else $flow end),handshake_server:(if $hs=="" then null else $hs end),handshake_port:$hp,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
-    naive)
-      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg network "$network" --arg cc "$congestion_control" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:"naive",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,network:$network,quic_congestion_control:$cc,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
-      ;;
-    shadowtls)
-      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg address "$address" --arg hs "$handshake_server" --argjson hp "$handshake_port" --argjson strict "$strict_mode" --arg wildcard "$wildcard_sni" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:"shadowtls",enabled:$enabled,listen:"::",port:$port,server_address:$address,handshake_server:$hs,handshake_port:$hp,strict_mode:$strict,wildcard_sni:$wildcard,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
-      ;;
     socks|http|mixed)
       node=$(jq -n --arg id "$id" --arg name "$name" --arg protocol "$protocol" --arg listen "$proxy_listen" --argjson port "$port" --arg address "$address" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:$protocol,enabled:$enabled,listen:$listen,port:$port,server_address:$address,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
-      ;;
-    snell)
-      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg address "$address" --argjson snell_version "$snell_version" --arg snell_mode "$snell_mode" --arg obfs_mode "$snell_obfs_mode" --arg obfs_host "$snell_obfs_host" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:"snell",enabled:$enabled,listen:"::",port:$port,server_address:$address,snell_version:$snell_version,snell_mode:$snell_mode,obfs_mode:$obfs_mode,obfs_host:$obfs_host,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
   esac
   node=$(jq --arg remark "$remark" --arg region "$region" --arg purpose "$purpose" --arg line "$line" --arg tags "$tags" '
@@ -426,7 +331,7 @@ _node_add() {
   fi
   if [[ "$enabled" == true ]]; then
     case "$protocol" in
-      anytls|hysteria2|trojan|tuic|naive) _cert_prepare_node_domain "$domain" || return 1;;
+      hysteria2|trojan) _cert_prepare_node_domain "$domain" || return 1;;
       vless) if [[ "$security" == tls ]] && ! jq -e '(.xray.inbound.streamSettings.tlsSettings.certificates // [])|length>0' <<<"$node" >/dev/null; then _cert_prepare_node_domain "$domain" || return 1; fi;;
     esac
   fi
@@ -507,22 +412,11 @@ _node_rotate() {
   case "$protocol" in
     vmess-ws-cf) new=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') ;;
     shadowsocks) new=$(jq -n --arg password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{password:$password}') ;;
-    anytls) new=$(jq -n --arg password "$(random_password 24)" '{password:$password}') ;;
     hysteria2)
       new=$(jq -n --arg password "$(random_password 24)" '{password:$password}') ;;
     trojan) new=$(jq -n --arg password "$(random_password 24)" '{password:$password}') ;;
-    tuic) new=$(jq -n --arg uuid "$(random_uuid)" --arg password "$(random_password 24)" '{uuid:$uuid,password:$password}') ;;
     vless) new=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') ;;
-    socks|http|mixed|naive) new=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}') ;;
-    shadowtls) new=$(node_user_generate_secret "$node" "$user_id") ;;
-    snell)
-      new=$(jq -n --arg userkey "$(random_password 24)" '{userkey:$userkey}')
-      if ! protocol_snell_multiuser "$node"; then
-        node_secret=$(state_get_secret "$id") || return 1
-        node_secret=$(jq --arg psk "$(random_password 24)" '.psk=$psk' <<<"$node_secret") || return 1
-        state_write_secret "$id" "$node_secret" || return 1
-      fi
-      ;;
+    socks|http|mixed) new=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}') ;;
   esac
   state_write_user_secret "$id" "$user_id" "$new" || return 1
   candidate=$(state_candidate); cp "$SBM_STATE" "$candidate"
@@ -623,12 +517,9 @@ node_user_generate_secret() {
   case "$protocol" in
     vmess-ws-cf) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
     shadowsocks) jq -n --arg password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{password:$password}' ;;
-    anytls|hysteria2|trojan) jq -n --arg password "$(random_password 24)" '{password:$password}' ;;
-    tuic) jq -n --arg uuid "$(random_uuid)" --arg password "$(random_password 24)" '{uuid:$uuid,password:$password}' ;;
+    hysteria2|trojan) jq -n --arg password "$(random_password 24)" '{password:$password}' ;;
     vless) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
-    socks|http|mixed|naive) jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}' ;;
-    shadowtls) jq -n --arg password "$(random_password 24)" --arg key "$(ss2022_key 2022-blake3-aes-128-gcm)" '{password:$password,shadowsocks_password:$key}' ;;
-    snell) jq -n --arg userkey "$(random_password 24)" '{userkey:$userkey}' ;;
+    socks|http|mixed) jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}' ;;
     *) die "协议暂不支持多用户：$protocol" ;;
   esac
 }

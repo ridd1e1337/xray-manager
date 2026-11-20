@@ -14,7 +14,7 @@ nginx_stream_supported_node() {
   local node=$1 protocol network security
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
-    anytls|trojan|shadowtls) return 0 ;;
+    trojan) return 0 ;;
     vless)
       security=$(jq -r '.security // ""' <<<"$node")
       [[ "$security" == tls || "$security" == reality ]]
@@ -31,8 +31,7 @@ nginx_stream_node_sni() {
   local node=$1 protocol
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
-    shadowtls) jq -r '.handshake_server // ""' <<<"$node" ;;
-    anytls|trojan|vless|naive) jq -r '.domain // ""' <<<"$node" ;;
+    trojan|vless) jq -r '.domain // ""' <<<"$node" ;;
     *) return 1 ;;
   esac
 }
@@ -126,7 +125,7 @@ nginx_stream_validate_state() {
       node_id=$(jq -r '.id' <<<"$node"); protocol=$(jq -r '.protocol' <<<"$node")
       if [[ -z ${seen_nodes[$node_id]+x} ]]; then
         case "$protocol" in
-          vmess-ws-cf|anytls|trojan|shadowtls|vless|shadowsocks|snell)
+          vmess-ws-cf|trojan|vless|shadowsocks)
             [[ $(jq -r '.port' <<<"$node") != "$port" ]] || { log_error "节点 $node_id 占用 TCP/SNI 公网端口 ${port}/TCP。"; return 1; }
             ;;
           naive)

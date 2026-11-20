@@ -84,9 +84,12 @@ xray_prune_versions() {
   [[ -z $(find "$SBM_BACKUPS" -name .recovery-pending -print -quit 2>/dev/null) ]] || return 0
   active=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
   [[ "$active" == "$SBM_CORE_DIR/xray/"* ]] || return 0
+  # Keep the active build and the newest other build for xm core rollback.
+  local keep=''
+  keep=$(find "$SBM_CORE_DIR/xray" -mindepth 1 -maxdepth 1 -type d ! -path "$(dirname "$active")" -printf '%T@ %p\n' 2>/dev/null | sort -rn | awk 'NR==1{print $2}')
   for directory in "$SBM_CORE_DIR/xray"/*; do
     [[ -d "$directory" && ! -L "$directory" ]] || continue
-    [[ "$active" == "$directory/xray" ]] || rm -rf -- "$directory" || return 1
+    [[ "$active" == "$directory/xray" || "$directory" == "$keep" ]] || rm -rf -- "$directory" || return 1
   done
 }
 
@@ -105,13 +108,73 @@ xray_apply_override() {
       | if .streamSettings==null then del(.streamSettings) else . end
       | del(.protocol,.tag,.listen,.port,.settings.clients,.settings.accounts,.settings.password))
     | .protocol=$base.protocol | .tag=$base.tag | .listen=$base.listen | .port=$base.port
-    | .settings=((.settings // {}) + {clients:$base.settings.clients})
+    | .settings=((.settings // {})
+        + (if $base.settings.clients!=null then {clients:$base.settings.clients} else {} end)
+        + (if $base.settings.accounts!=null then {accounts:$base.settings.accounts} else {} end)
+        + (if $base.settings.password!=null then {password:$base.settings.password} else {} end))
   ' <<<"$rendered"
+}
+
+# Per-protocol Xray inbounds. Client `email` is "<node>:<user>" for every
+# protocol so the Stats API and per-user limits work uniformly.
+xray_tls_settings() {
+  local domain=$1 alpn=${2:-}
+  jq -n --arg cert "$SBM_CERTS/$domain/fullchain.pem" --arg key "$SBM_CERTS/$domain/key.pem" --arg alpn "$alpn" \
+    '{security:"tls",tlsSettings:({certificates:[{certificateFile:$cert,keyFile:$key}]}
+      + (if $alpn=="" then {} else {alpn:($alpn|split(","))} end))}'
+}
+
+xray_protocol_inbound() {
+  local node=$1 credentials=$2 secret=$3 id protocol base clients domain mode
+  id=$(jq -r '.id' <<<"$node"); protocol=$(jq -r '.protocol' <<<"$node"); domain=$(jq -r '.domain // ""' <<<"$node")
+  base=$(jq -n --arg tag "in-$id" --arg listen "$(jq -r '.listen // "::"' <<<"$node")" --argjson port "$(jq -r '.port' <<<"$node")" \
+    '{tag:$tag,listen:$listen,port:$port}') || return 1
+  case "$protocol" in
+    vmess-ws-cf)
+      clients=$(jq --arg n "$id" '[.[] | {id:.uuid,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+      jq --argjson c "$clients" --arg path "$(jq -r '.ws_path' <<<"$node")" \
+        '. + {protocol:"vmess",settings:{clients:$c},streamSettings:{network:"ws",wsSettings:{path:$path}}}' <<<"$base";;
+    trojan)
+      clients=$(jq --arg n "$id" '[.[] | {password,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+      jq --argjson c "$clients" --argjson tls "$(xray_tls_settings "$domain")" \
+        '. + {protocol:"trojan",settings:{clients:$c},streamSettings:({network:"raw"}+$tls)}' <<<"$base";;
+    shadowsocks)
+      mode=$(jq -r '.credential_mode // "legacy"' <<<"$node")
+      if [[ "$mode" == multi ]]; then
+        clients=$(jq --arg n "$id" '[.[] | {password,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+        jq --argjson c "$clients" --arg method "$(jq -r '.method' <<<"$node")" --arg psk "$(jq -r '.server_password' <<<"$secret")" \
+          --arg network "$(jq -r 'if (.network // "tcp")=="udp" then "udp" elif (.network // "tcp")=="tcp" then "tcp,udp" else .network end' <<<"$node")" \
+          '. + {protocol:"shadowsocks",settings:{method:$method,password:$psk,clients:$c,network:$network}}' <<<"$base"
+      else
+        jq --arg n "$id" --argjson u "$(jq -c '.[0]' <<<"$credentials")" --arg method "$(jq -r '.method' <<<"$node")" \
+          --arg network "$(jq -r 'if (.network // "tcp")=="udp" then "udp" else "tcp,udp" end' <<<"$node")" \
+          '. + {protocol:"shadowsocks",settings:{method:$method,password:$u.password,email:($n+":"+$u.id),level:0,network:$network}}' <<<"$base"
+      fi;;
+    hysteria2)
+      clients=$(jq --arg n "$id" '[.[] | {auth:.password,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+      jq --argjson c "$clients" --argjson tls "$(xray_tls_settings "$domain" h3)" --arg obfs "$(jq -r '.obfs.type // ""' <<<"$node")" \
+        --arg obfs_password "$(jq -r '.obfs_password // ""' <<<"$secret")" --arg masquerade "$(jq -r '.masquerade // ""' <<<"$node")" '
+        . + {protocol:"hysteria",settings:{version:2,clients:$c},
+             streamSettings:({network:"hysteria",hysteriaSettings:({version:2}
+               + (if $masquerade=="" then {} else {masquerade:{type:"proxy",url:$masquerade,rewriteHost:true}} end))} + $tls
+               + (if $obfs=="salamander" then {finalmask:{udp:[{type:"salamander",settings:{password:$obfs_password}}]}} else {} end))}' <<<"$base";;
+    socks|mixed)
+      clients=$(jq '[.[] | {user:.username,pass:.password}]' <<<"$credentials") || return 1
+      jq --argjson a "$clients" '. + {protocol:"socks",settings:{auth:"password",accounts:$a,udp:true}}' <<<"$base";;
+    http)
+      clients=$(jq '[.[] | {user:.username,pass:.password}]' <<<"$credentials") || return 1
+      jq --argjson a "$clients" '. + {protocol:"http",settings:{accounts:$a}}' <<<"$base";;
+    *) log_error "Xray 不支持此协议：$protocol"; return 1;;
+  esac
 }
 
 xray_inbound_for_node() {
   local node=$1 credentials=$2 secret=$3 id domain rendered users security flow target
-  [[ $(jq -r '.protocol' <<<"$node") == vless ]] || { log_error 'Xray 运行时仅接管 VLESS。'; return 1; }
+  if [[ $(jq -r '.protocol' <<<"$node") != vless ]]; then
+    rendered=$(xray_protocol_inbound "$node" "$credentials" "$secret") || return 1
+    xray_apply_override "$rendered" "$(xray_node_override "$node" inbound)"
+    return
+  fi
   id=$(jq -r '.id' <<<"$node"); domain=$(jq -r '.domain' <<<"$node")
   flow=$(jq -r '.flow // ""' <<<"$node"); security=$(jq -r '.security' <<<"$node")
   # email is the per-user Stats API key; keep it unique across nodes.
@@ -259,32 +322,21 @@ xray_render_validate() (
   mv -f "$config" "$output"
 )
 
-_xray_install() {
-  local target old active=0 config backup rc=0
+# Switch the managed binary to TARGET after checking the current config with
+# it; restore the previous binary and runtime snapshot on any failure.
+_xray_switch_to() {
+  local target=$1 old config backup rc=0
   old=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
-  service_active "$SBM_XRAY_SERVICE" && active=1
-  [[ -L "$SBM_XRAY_BIN" || ! -e "$SBM_XRAY_BIN" ]] || { log_error '已有非托管 Xray 程序，拒绝覆盖。'; return 1; }
-  if (( active )) && ! xray_runtime_required; then
-    log_error '旧 Xray 服务尚未按 VLESS 分工接入，请先执行 xm xray enable。'; return 1
-  fi
-  target=$(xray_download_version latest) || return 1
-  if [[ "$old" == "$target" ]]; then
-    xray_prune_versions || return 1
-    log_ok "Xray 已是最新版：$(xray_current_version)"
-    return 0
-  fi
+  [[ -L "$SBM_XRAY_BIN" || ! -e "$SBM_XRAY_BIN" ]] || { log_error "已有非托管 Xray 程序：$SBM_XRAY_BIN，拒绝覆盖。"; return 1; }
+  if [[ "$old" == "$target" ]]; then log_ok "Xray 已是 $(xray_current_version)"; return 0; fi
   config=$(mktemp "$SBM_RUN/xray-candidate.XXXXXX") || return 1
-  if xray_runtime_required; then
-    xray_render_config "$SBM_STATE" "$config" && xray_validate_config "$target" "$config" || { rm -f "$config"; return 1; }
-  fi
-  backup=$(snapshot_create xray-install) || { rm -f "$config"; return 1; }
-  touch "$backup/force-xray-restart" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
-  mkdir -p "$SBM_BIN_DIR" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
+  render_config_from_state "$SBM_STATE" "$config" && xray_validate_config "$target" "$config" || { rm -f "$config"; return 1; }
+  backup=$(snapshot_create core-switch) || { rm -f "$config"; return 1; }
+  touch "$backup/force-core-restart" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
+  mkdir -p "$(dirname "$SBM_XRAY_BIN")" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
   if ln -sfn "$target" "$SBM_XRAY_BIN.new" && mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"; then
-    if xray_runtime_required; then
-      safe_install_file "$config" "$SBM_XRAY_CONFIG" 0640 && set_group_if_exists "$SBM_SERVICE_USER" "$SBM_XRAY_CONFIG" || rc=1
-      (( rc != 0 )) || xray_service_reconcile 1 || rc=1
-    fi
+    safe_install_file "$config" "$SBM_CONFIG" 0640 && set_group_if_exists "$SBM_SERVICE_USER" "$SBM_CONFIG" || rc=1
+    (( rc != 0 )) || xray_service_reconcile 1 || rc=1
   else rc=1; fi
   rm -f "$config"
   if (( rc != 0 )); then
@@ -296,62 +348,46 @@ _xray_install() {
   fi
   rm -rf -- "$backup"
   xray_prune_versions || return 1
-  log_ok "Xray 已安装：$(xray_current_version)；仅负责 VLESS。"
+  log_ok "Xray 已切换到 $(xray_current_version)"
 }
 
-xray_install() { require_root; with_lock _xray_install; }
-xray_update() { xray_install; }
-
-_xray_set_policy() {
-  local policy=$1 candidate
-  case "$policy" in manual|notify|patch|stable) ;; *) usage_die 'Xray 更新策略必须是 manual、notify、patch 或 stable。';; esac
-  candidate=$(state_candidate) || return 1
-  jq --arg policy "$policy" '.settings.xray_update_policy=$policy' "$SBM_STATE" >"$candidate" || return 1
-  apply_candidate_state "$candidate" xray-policy || { rm -f "$candidate"; return 1; }
-  rm -f "$candidate"
-  log_ok "Xray 自动更新策略：$policy"
+# First install (setup or a transaction that needs the core): link only.
+_xray_install_binary() {
+  local target
+  [[ ! -x "$SBM_XRAY_BIN" ]] || return 0
+  target=$(xray_download_version latest) || return 1
+  mkdir -p "$(dirname "$SBM_XRAY_BIN")" && ln -sfn "$target" "$SBM_XRAY_BIN.new" && mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"
 }
-xray_set_policy() { with_state_transaction xray-policy _xray_set_policy "$@"; }
 
-_xray_set_engine() {
-  local engine=$1 candidate
-  candidate=$(state_candidate) || return 1
-  jq --arg engine "$engine" '.settings.vless_engine=$engine' "$SBM_STATE" >"$candidate" || return 1
-  apply_candidate_state "$candidate" "vless-$engine" || { rm -f "$candidate"; return 1; }
-  rm -f "$candidate"
-  if [[ "$engine" == xray ]]; then log_ok 'VLESS 已交给 Xray；其他协议由 sing-box 运行。'
-  else log_ok 'VLESS 已暂停；其他协议继续由 sing-box 运行。'; fi
+_xray_install() {
+  local version=${1:-latest} target
+  target=$(xray_download_version "$version") || return 1
+  _xray_switch_to "$target"
 }
-_xray_set_api_port() {
-  local port=$1 candidate
-  validate_port "$port" || { log_error "无效端口：$port"; return 1; }
-  candidate=$(state_candidate) || return 1
-  jq --argjson port "$((10#$port))" '.settings.xray_api_port=$port' "$SBM_STATE" >"$candidate" || { rm -f "$candidate"; return 1; }
-  if ! apply_candidate_state "$candidate" xray-api-port; then rm -f "$candidate"; return 1; fi
-  rm -f "$candidate"
-  log_ok "Xray 统计 API 仅监听 127.0.0.1:$port"
-}
-xray_set_api_port() { require_root; with_state_transaction xray-api-port _xray_set_api_port "$1"; }
+xray_install() { require_root; with_lock _xray_install "${1:-latest}"; }
+xray_update() { xray_install "${1:-latest}"; }
 
-xray_enable() { require_root; with_state_transaction xray-enable _xray_set_engine xray; }
-xray_disable() { require_root; with_state_transaction xray-disable _xray_set_engine disabled; }
+xray_latest_version() { xray_release_json latest | jq -r '.tag_name // empty | ltrimstr("v")'; }
 
 xray_status() {
-  printf 'VLESS 引擎：%s\n' "$(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE")"
   if [[ ! -x "$SBM_XRAY_BIN" ]]; then printf 'Xray：未安装\n'; return 0; fi
-  printf 'Xray：%s\n服务：%s\n配置：%s\n' "$(xray_current_version || printf '未知版本')" "$(status_service_state "$SBM_XRAY_SERVICE")" "$SBM_XRAY_CONFIG"
+  printf 'Xray：%s\n服务：%s\n配置：%s\n' "$(xray_current_version || printf '未知版本')" "$(status_service_state "$SBM_SERVICE")" "$SBM_CONFIG"
 }
 
+# Same policy semantics as sb-manager's core updates: manual / notify /
+# patch (same minor series) / stable (any newer release).
 xray_auto_update() {
   [[ -x "$SBM_XRAY_BIN" ]] || return 0
   local policy current latest
-  policy=$(jq -r '.settings.xray_update_policy // "notify"' "$SBM_STATE") || return 1
+  policy=$(jq -r '.settings.core_update_policy // "notify"' "$SBM_STATE") || return 1
   [[ "$policy" != manual ]] || return 0
   current=$(xray_current_version) || return 1
-  latest=$(xray_release_json latest | jq -r '.tag_name // empty | ltrimstr("v")') || return 1
-  [[ -n "$latest" && "$current" != "$latest" ]] || return 0
+  latest=$(xray_latest_version) || return 1
+  [[ -n "$latest" && "$current" != "$latest" ]] && version_ge "$latest" "$current" || return 0
   case "$policy" in
-    notify) log_warn "发现 Xray 更新：$current → $latest；运行 xm xray update。" ;;
-    patch|stable) _xray_install ;;
+    notify) log_warn "发现 Xray 更新：$current → $latest；运行 xm core update。" ;;
+    patch) [[ "${latest%.*}" == "${current%.*}" ]] || { log_warn "Xray $latest 不属于当前 ${current%.*} 系列，patch 策略不自动更新。"; return 0; }
+      with_lock _xray_install "$latest" ;;
+    stable) with_lock _xray_install "$latest" ;;
   esac
 }
