@@ -84,10 +84,11 @@ ui_open_submenu() {
 }
 
 ui_menu_choice() {
-  local __ui_max=${3:-} __ui_value
+  local __ui_max=${3:-} __ui_default=${4:-0} __ui_value
   while true; do
-    # Menu navigation never accepts an action merely because Enter was pressed.
-    prompt_value "$1" "$2" '0' || return 1
+    # Menu navigation never accepts an action merely because Enter was pressed;
+    # wizard steps pass their recommended choice as the 4th argument.
+    prompt_value "$1" "$2" "$__ui_default" || return 1
     __ui_value=${!1}
     if [[ ${SBM_UI_WORKER:-0} == 1 && "$__ui_value" == 0 ]]; then exit 200; fi
     if [[ -z "$__ui_max" ]] || { [[ "$__ui_value" =~ ^(0|[1-9][0-9]{0,2})$ ]] && (( __ui_value <= __ui_max )); }; then return 0; fi
@@ -504,7 +505,8 @@ ui_vless_collect() {
   case "$current_transport" in tcp) current_transport=raw;; websocket) current_transport=ws;; splithttp) current_transport=xhttp;; mkcp) current_transport=kcp;; esac
   printf '\n当前传输：%s\n' "$current_transport"
   printf '1. TCP / RAW\n2. WebSocket\n3. gRPC\n4. HTTPUpgrade\n5. XHTTP\n6. mKCP\n7. Hysteria 传输\n0. 返回\n'
-  ui_menu_choice choice '选择 VLESS 传输' 7 || return 1
+  local -A __tidx=([raw]=1 [ws]=2 [grpc]=3 [httpupgrade]=4 [xhttp]=5 [kcp]=6 [hysteria]=7)
+  ui_menu_choice choice '选择 VLESS 传输（回车=推荐）' 7 "${__tidx[$current_transport]:-1}" || return 1
   case "$choice" in 1) transport=raw;; 2) transport=ws;; 3) transport=grpc;; 4) transport=httpupgrade;; 5) transport=xhttp;; 6) transport=kcp;; 7) transport=hysteria;; *) return 1;; esac
   current_security=$(jq -r '.xray.inbound.streamSettings.security // .security // "reality"' <<<"$node") || return 1
   printf '当前安全层：%s\n' "$current_security"
@@ -513,11 +515,11 @@ ui_vless_collect() {
     printf 'Hysteria 传输使用 TLS。\n'
   elif [[ "$transport" == raw || "$transport" == xhttp || "$transport" == grpc ]]; then
     printf '1. TLS\n2. Reality\n3. 不使用 TLS / Reality\n0. 返回\n'
-    ui_menu_choice choice '选择安全层' 3 || return 1
+    ui_menu_choice choice '选择安全层（回车=推荐）' 3 "$(case "$current_security" in tls) echo 1;; none) echo 3;; *) echo 2;; esac)" || return 1
     case "$choice" in 1) security=tls;; 2) security=reality;; 3) security=none;; *) return 1;; esac
   else
     printf '1. TLS\n2. 不使用 TLS / Reality\n0. 返回\n'
-    ui_menu_choice choice '选择安全层' 2 || return 1
+    ui_menu_choice choice '选择安全层（回车=推荐）' 2 "$([[ "$current_security" == none ]] && echo 2 || echo 1)" || return 1
     case "$choice" in 1) security=tls;; 2) security=none;; *) return 1;; esac
   fi
   __vless_args+=(--transport "$transport" --security "$security")
@@ -598,7 +600,7 @@ ui_vless_collect() {
     fi
   fi
   printf '\n1. 保留 VLESS 加密设置\n2. 不启用 VLESS 加密\n3. 自动生成 X25519 加密参数\n4. 自动生成 ML-KEM-768 加密参数\n5. 手动输入配对加密参数\n0. 返回\n'
-  ui_menu_choice encryption_choice 'VLESS 加密' 5 || return 1
+  ui_menu_choice encryption_choice 'VLESS 加密（回车=保留）' 5 1 || return 1
   case "$encryption_choice" in
     1) ;;
     2) __vless_args+=(--vless-encryption none --vless-decryption none);;
@@ -649,8 +651,20 @@ ui_vless_collect() {
 }
 
 ui_vless_add() {
-  local name address port vless_domain vless_transport kind
+  local name address port vless_domain vless_transport kind choice
   local -a vless_args=()
+  printf '1. 推荐：VLESS + REALITY + Vision（只需选端口，其余自动）\n2. 自定义传输、安全层与加密\n0. 返回\n'
+  ui_menu_choice choice '添加方式（回车=推荐）' 2 1 || return 1
+  case "$choice" in
+    1)
+      # Public IP is detected automatically; ask only when detection fails.
+      address=$(node_auto_address '' 2>/dev/null) || ui_prompt_server_address address '' || return 1
+      ui_prompt_port port tcp '监听端口' 443 8443 9443 10443 || return 1
+      ui_add_node_and_deliver vless --name 'VLESS Reality' --address "$address" --port "$port" --transport raw --security reality
+      return;;
+    2) ;;
+    *) return 1;;
+  esac
   prompt_value name '节点名称' VLESS || return 1
   ui_vless_collect vless_args vless_domain vless_transport '{}' || return 1
   ui_prompt_server_address address "$(ui_client_address_default "$vless_domain")" || return 1
@@ -778,14 +792,14 @@ ui_stream_node_add() {
   case "$protocol" in vmess) name=VMess;; trojan) name=Trojan;; *) name=Shadowsocks;; esac
   prompt_value name '节点名称' "$name" || return 1
   printf '1. TCP / RAW\n2. WebSocket\n3. gRPC\n4. HTTPUpgrade\n5. XHTTP\n6. mKCP\n0. 返回\n'
-  ui_menu_choice choice '选择传输' 6 || return 1
+  ui_menu_choice choice '选择传输（回车=RAW）' 6 1 || return 1
   case "$choice" in 1) transport=raw;; 2) transport=ws;; 3) transport=grpc;; 4) transport=httpupgrade;; 5) transport=xhttp;; 6) transport=kcp;; *) return 1;; esac
   if [[ "$protocol" == trojan && "$transport" =~ ^(raw|grpc|xhttp)$ ]]; then
-    printf '1. TLS\n2. Reality\n0. 返回\n'; ui_menu_choice choice '选择安全层' 2 || return 1
+    printf '1. TLS\n2. Reality\n0. 返回\n'; ui_menu_choice choice '选择安全层（回车=Reality）' 2 2 || return 1
     case "$choice" in 1) security=tls;; 2) security=reality;; *) return 1;; esac
   elif [[ "$protocol" == trojan ]]; then security=tls
   else
-    printf '1. 不使用 TLS\n2. TLS\n0. 返回\n'; ui_menu_choice choice '选择安全层' 2 || return 1
+    printf '1. 不使用 TLS\n2. TLS\n0. 返回\n'; ui_menu_choice choice '选择安全层（回车=不使用）' 2 1 || return 1
     case "$choice" in 1) security=none;; 2) security=tls;; *) return 1;; esac
   fi
   args+=(--transport "$transport" --security "$security")

@@ -20,15 +20,10 @@ node_protocol_label() {
 }
 
 node_port_in_state() {
-  local kind=$1 port=$2 state=${3:-$SBM_STATE} node k
-  if [[ "$kind" == tcp ]] && jq -e --argjson port "$port" '
-    (.nginx_stream.enabled==true and .nginx_stream.port==$port)
-    or any(.nginx_stream.routes[]?; .backend_port==$port)
-  ' "$state" >/dev/null; then return 0; fi
-  while IFS= read -r node; do
-    while IFS= read -r k; do [[ "$k" == "$kind" && $(jq -r '.port' <<<"$node") == "$port" ]] && return 0; done < <(node_transport_kinds "$node")
-  done < <(jq -c '.nodes[]? | select(.enabled==true)' "$state")
-  return 1
+  local kind=$1 port=$2 state=${3:-$SBM_STATE}
+  jq -e --arg kind "$kind" --argjson port "$port" "$SBM_JQ_NODE_KINDS"'
+    ($kind=="tcp" and ((.nginx_stream.enabled==true and .nginx_stream.port==$port) or any(.nginx_stream.routes[]?; .backend_port==$port)))
+    or any(.nodes[]? | select(.enabled==true); .port==$port and (kinds | index($kind)) != null)' "$state" >/dev/null
 }
 
 node_auto_address() {
@@ -319,11 +314,11 @@ _node_add() {
       case "$flow" in ''|xtls-rprx-vision) ;; *) die 'VLESS flow 仅支持 xtls-rprx-vision 或空值。';; esac
       if [[ "$security" == reality ]]; then
         if [[ -z "$handshake_server" ]] && jq -e '.xray.inbound.streamSettings.realitySettings.target // .xray.inbound.streamSettings.realitySettings.dest' <<<"$vless_preview" >/dev/null; then handshake_server=$domain; fi
-        [[ -n "$handshake_server" ]] || die 'Reality 必须指定握手目标或原生 target。'
+        [[ -n "$handshake_server" ]] || handshake_server=$domain  # REALITY target defaults to the SNI site
         validate_domain "$handshake_server" || validate_ipv4 "$handshake_server" || validate_ipv6 "$handshake_server" || die 'Reality 握手目标必须是域名或 IP。'
         validate_port "$handshake_port" || die '无效 Reality 握手端口。'
       fi
-      if [[ $(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE") == xray && ! -x "$SBM_XRAY_BIN" ]]; then _xray_install >&2 || return 1; fi
+      [[ -x "$SBM_XRAY_BIN" ]] || _xray_install >&2 || return 1
       secret=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') || return 1
       [[ "$security" != reality ]] || reality_secret=$(protocol_vless_generate_reality_secret) || return 1
       ;;

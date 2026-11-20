@@ -242,17 +242,37 @@ xray_inbound_for_node() {
       else . end' <<<"$rendered"
 }
 
+# Rendered inbounds are cached by content. The key hashes the manager
+# version, certificate directory, the effective node JSON and the raw bytes
+# of its user and node secret files, so a cache hit needs no jq at all and
+# any change to inputs produces a new key.
 xray_render_config() {
-  local state=$1 output=$2 node id credentials secret inbound inbounds='[]'
-  while IFS= read -r node; do
-    [[ -n "$node" ]] || continue
-    if declare -F nginx_stream_effective_node >/dev/null 2>&1; then node=$(nginx_stream_effective_node "$state" "$node") || return 1; fi
-    id=$(jq -r '.id' <<<"$node") || return 1
-    credentials=$(node_enabled_credentials "$node") || return 1
-    secret='{}'; [[ ! -r "$(state_secret_path "$id")" ]] || secret=$(state_get_secret "$id") || return 1
-    inbound=$(xray_inbound_for_node "$node" "$credentials" "$secret") || return 1
-    inbounds=$(jq -c --argjson inbound "$inbound" '. + [$inbound]' <<<"$inbounds") || return 1
-  done < <(state_xray_nodes "$state")
+  local state=$1 output=$2 id node users dir key file credentials secret nsec inbound inbounds u
+  local -a rendered=() files=()
+  dir=$(vless_cache_dir 2>/dev/null) || dir=''
+  # One pass: effective node (443-mux route applied) and enabled user ids.
+  while IFS=$'\t' read -r id node users; do
+    files=(); for u in $users; do files+=("$(state_user_secret_path "$id" "$u")"); done
+    nsec=$(state_secret_path "$id"); file=''
+    if [[ -n "$dir" ]]; then
+      key=$({ printf '%s\0' render "$SBM_VERSION" "$SBM_CERTS" "$node"; cat -- "${files[@]}" 2>/dev/null; [[ ! -r "$nsec" ]] || cat -- "$nsec"; } | sha256sum | awk '{print $1}')
+      file="$dir/$key.inbound.json"
+    fi
+    if [[ -n "$file" && -s "$file" ]]; then
+      inbound=$(<"$file")
+    else
+      credentials=$(node_enabled_credentials "$node") || return 1
+      secret='{}'; [[ ! -r "$nsec" ]] || secret=$(state_get_secret "$id") || return 1
+      inbound=$(xray_inbound_for_node "$node" "$credentials" "$secret") || return 1
+      [[ -z "$file" ]] || { (umask 077; printf '%s\n' "$inbound" >"$file.$$" && mv -f "$file.$$" "$file") 2>/dev/null || rm -f "$file.$$"; }
+    fi
+    rendered+=("$inbound")
+  done < <(jq -r '(.nginx_stream.enabled // false) as $mux | (.nginx_stream.routes // []) as $routes |
+    .nodes[]? | select(.enabled==true and any(.users[]?; .enabled==true)) | . as $n |
+    ([$routes[] | select(.node_id==$n.id)] | first) as $r |
+    (if $mux and $r != null then .listen="127.0.0.1" | .port=$r.backend_port else . end) |
+    [.id, tojson, ([.users[] | select(.enabled==true) | .id] | join(" "))] | join("\t")' "$state")
+  if (( ${#rendered[@]} )); then inbounds=$(printf '%s\n' "${rendered[@]}" | jq -cs .) || return 1; else inbounds='[]'; fi
   local routing='{"outbounds":[{"tag":"direct","protocol":"freedom"}]}'
   if declare -F xray_routing_render >/dev/null 2>&1; then routing=$(xray_routing_render "$state") || return 1; fi
   # Loopback-only Stats API for per-user traffic and online-IP limits.
