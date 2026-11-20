@@ -739,9 +739,25 @@ ui_user_menu() {
   printf '\n1. 添加用户\n2. 启用用户\n3. 停用用户\n4. 删除用户\n5. 轮换用户凭据\n6. 设置到期时间\n'
   local limited=0; [[ "$protocol" =~ ^(socks|http|mixed|tunnel)$ ]] || limited=1
   if (( limited )); then printf '7. 设置流量配额\n8. 设置在线 IP 上限\n9. 清零本周期流量\n'; fi
-  printf '10. 清除全部限额\n11. 生成该用户的动态订阅（含用量与到期信息）\n0. 返回\n'
-  ui_menu_choice choice '用户操作' 11 || return 0
+  printf '10. 清除全部限额\n11. 生成该用户的动态订阅（含用量与到期信息）\n'
+  printf '12. 批量添加用户\n13. 在线用户与 IP\n14. 删除流量耗尽或已到期的用户\n15. 首次使用后才开始计时的有效期\n16. 按日/周/月重置流量\n0. 返回\n'
+  ui_menu_choice choice '用户操作' 16 || return 0
   [[ "$choice" != 0 ]] || return 0
+  case "$choice" in
+    12)
+      local count prefix quota days
+      prompt_value count '数量（1-1000）' 10 || return 1
+      prompt_value prefix '用户 ID 前缀' user || return 1
+      args=()
+      if (( limited )); then
+        ui_prompt_optional quota '每人流量配额（如 50G，留空不限）' '' || return 1; [[ -z "$quota" ]] || args+=(--quota "$quota")
+        ui_prompt_optional value '每人在线 IP 上限（留空不限）' '' || return 1; [[ -z "$value" ]] || args+=(--ip-limit "$value")
+      fi
+      ui_prompt_optional days '有效天数（留空永久）' '' || return 1; [[ -z "$days" ]] || args+=(--days "$days")
+      node_user_batch_add "$id" "$prefix" "$count" 1 "${args[@]}"; return;;
+    13) user_online "$id"; return;;
+    14) node_user_purge_depleted "$id"; return;;
+  esac
   if [[ "$choice" != 1 ]]; then
     prompt_value user_id '用户 ID' "$(state_get_node "$id" | jq -r '.users[0].id')" || return 1
   fi
@@ -750,6 +766,17 @@ ui_user_menu() {
       prompt_value user_id '新用户 ID（小写字母、数字、._-）' '' || return 1
       prompt_value name '显示名称' "$user_id" || return 1
       node_user_add "$id" "$user_id" "$name";;
+    15)
+      prompt_value value '首次产生流量后有效天数' 30 || return 1
+      user_limit_cli "$id" "$user_id" --expire-after-first-use "$value";;
+    16)
+      (( limited )) || { log_error '该协议没有用户级流量统计。'; return 1; }
+      printf '1. 每天（UTC 0 点）\n2. 每周\n3. 每月\n'; ui_menu_choice value '重置周期' 3 3 || return 0
+      case "$value" in
+        1) user_limit_cli "$id" "$user_id" --reset-period day;;
+        2) prompt_value value '每周几重置（1=周一 … 7=周日）' 1 || return 1; user_limit_cli "$id" "$user_id" --reset-period week --reset-day "$value";;
+        3) prompt_value value '每月几号重置（1-28）' 1 || return 1; user_limit_cli "$id" "$user_id" --reset-period month --reset-day "$value";;
+      esac;;
     2) node_user_enable "$id" "$user_id";;
     3) node_user_disable "$id" "$user_id";;
     4) confirm "确认删除用户 $id/$user_id？" N && node_user_delete "$id" "$user_id";;

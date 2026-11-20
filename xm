@@ -96,9 +96,13 @@ sb_help_full() {
                  [--xray-inbound-json JSON|@FILE] [--xray-outbound-json JSON|@FILE]
   xm user list <NODE_ID>
   xm user add <NODE_ID> <USER_ID> [NAME]
+  xm user add <NODE_ID> --count N [--prefix P] [--start K] [--quota 50G] [--days 30] [--ip-limit 2] [--reset-day 1]  批量添加
+  xm user online [NODE_ID]        在线用户与 IP
+  xm user purge-depleted [NODE_ID]  删除流量耗尽或已到期的用户
   xm user enable|disable|delete|rotate <NODE_ID> <USER_ID>
   xm user limit <NODE_ID> <USER_ID> [--quota SIZE|unlimited] [--reset-day 1-28|none]
-                 [--days N|--expire-at UTC|--no-expiry] [--ip-limit N|unlimited] [--clear]
+                 [--days N|--expire-at UTC|--expire-after-first-use N|--no-expiry]
+                 [--reset-period day|week|month] [--ip-limit N|unlimited] [--clear]
   xm user stats [NODE_ID] [--json] | reset-usage <NODE_ID> <USER_ID> | tick
   xm share <ID> [--user USER_ID] [--qr]
   xm share all
@@ -436,7 +440,18 @@ main() {
       local action=${2:-list}; shift 2 || true
       case "$action" in
         list) (($# >= 1)) || die '缺少节点 ID'; node_user_list "$1" "$([[ ${2:-} == --json ]] && echo 1 || echo 0)" ;;
-        add) (($# >= 2)) || die '用法：xm user add NODE_ID USER_ID [NAME]'; node_user_add "$1" "$2" "${3:-$2}" ;;
+        add)
+          if [[ "${2:-}" == --count ]]; then
+            # xm user add NODE --count N [--prefix P] [--start K] [--quota ..] [--days ..] [--ip-limit ..] [--reset-day ..]
+            local b_node=$1 b_count=${3:?缺少数量} b_prefix=user b_start=1; shift 3
+            local -a b_rest=()
+            while (($#)); do case "$1" in --prefix) b_prefix=${2:?}; shift 2;; --start) b_start=${2:?}; shift 2;; *) b_rest+=("$1"); shift;; esac; done
+            node_user_batch_add "$b_node" "$b_prefix" "$b_count" "$b_start" "${b_rest[@]}"
+          else
+            (($# >= 2)) || die '用法：xm user add NODE_ID USER_ID [NAME] | xm user add NODE_ID --count N [--prefix P]'; node_user_add "$1" "$2" "${3:-$2}"
+          fi ;;
+        purge-depleted) node_user_purge_depleted "${1:-}" ;;
+        online) user_online "${1:-}" ;;
         enable) (($# == 2)) || die '用法：xm user enable NODE_ID USER_ID'; node_user_enable "$1" "$2" ;;
         disable) (($# == 2)) || die '用法：xm user disable NODE_ID USER_ID'; node_user_disable "$1" "$2" ;;
         delete) (($# == 2)) || die '用法：xm user delete NODE_ID USER_ID'; node_user_delete "$1" "$2" ;;

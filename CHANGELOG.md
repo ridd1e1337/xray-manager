@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.5
+
+- 用户（3x-ui 对齐）：`xm user add NODE --count N` 在一个事务里批量添加并可同时设配额/天数/在线 IP；
+  `--expire-after-first-use N` 首次产生流量后才开始计时；`--reset-period day|week|month` 按日/周/月重置流量；
+  `xm user online` 查看在线用户与 IP；`xm user purge-depleted` 删除流量耗尽或已到期的用户。面板用户菜单 12–16。
+
 ## 0.1.0-alpha.4
 
 - 新增 `xm xray geo status|update|remove`（面板 9 → 10）：按需下载 Loyalsoldier geoip/geosite（约 28 MiB），

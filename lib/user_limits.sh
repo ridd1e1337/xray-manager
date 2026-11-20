@@ -21,7 +21,10 @@ user_limits_validate_state() {
     and all(.nodes[]?; . as $node | all(.users[]?; (.limits // null) as $l |
       $l==null or ($l|type=="object"
         and (.quota_bytes|int_or_null(1;9000000000000000))
-        and (.reset_day|int_or_null(1;28))
+        and ((.reset_period // "month")|IN("day","week","month"))
+        and (if (.reset_period // "month")=="week" then (.reset_day|int_or_null(1;7))
+             elif (.reset_period // "month")=="day" then true else (.reset_day|int_or_null(1;28)) end)
+        and ((.expire_after_days // null)|int_or_null(1;3650))
         and (.expires_at|int_or_null(1;253402300799))
         and (.ip_limit|int_or_null(1;1024))
         and ((.suspended // null)|IN(null,"quota","expired","ip"))
@@ -126,12 +129,26 @@ user_limits_online_map() {
 }
 
 # Start a new cycle for users whose monthly reset day has passed.
+# Billing cycle number for a user: UTC days, weeks starting on reset_day
+# (1=Monday … 7=Sunday) or months starting on reset_day. Epoch day 0 is a
+# Thursday, so ISO weekday(d) = ((d + 3) % 7) + 1.
+user_cycle_id() {
+  local period=$1 day=$2 now_day
+  now_day=$(( $(date -u +%s) / 86400 ))
+  case "$period" in
+    day) printf '%d\n' "$now_day";;
+    week) printf '%d\n' $(( (now_day + 3 - (day - 1)) / 7 ));;
+    *) traffic_cycle_id "$day";;
+  esac
+}
+
 user_usage_rollover_unlocked() {
-  local cycles='{}' row key day
-  while IFS=$'\t' read -r key day; do
+  local cycles='{}' row key period day
+  while IFS=$'\t' read -r key period day; do
     [[ -n "$key" ]] || continue
-    cycles=$(jq -c --arg key "$key" --argjson cycle "$(traffic_cycle_id "$day")" '.[$key]=$cycle' <<<"$cycles") || return 1
-  done < <(jq -r '.nodes[]? | .id as $n | .users[] | select(.limits.reset_day!=null) | ["\($n):\(.id)",.limits.reset_day] | @tsv' "$SBM_STATE")
+    cycles=$(jq -c --arg key "$key" --argjson cycle "$(user_cycle_id "$period" "$day")" '.[$key]=$cycle' <<<"$cycles") || return 1
+  done < <(jq -r '.nodes[]? | .id as $n | .users[] | select(.limits.reset_day!=null or .limits.reset_period=="day")
+    | ["\($n):\(.id)", (.limits.reset_period // "month"), (.limits.reset_day // 1)] | @tsv' "$SBM_STATE")
   [[ "$cycles" != '{}' ]] || return 0
   row=$(jq -c --argjson cycles "$cycles" '[.users as $u | $cycles|to_entries[] | select(($u[.key].cycle_id // 0)!=.value)] | length' "$SBM_USER_USAGE" 2>/dev/null || echo 1)
   [[ "$row" != 0 ]] || return 0
@@ -151,6 +168,11 @@ USER_LIMITS_EVAL_JQ='
         ($nid+":"+.id) as $key |
         ((($usage[$key].upload_bytes) // 0) + (($usage[$key].download_bytes) // 0)) as $used |
         (($online[$key]) // 0) as $ips |
+        # Delayed start (3x-ui): the clock starts at the first recorded traffic.
+        (if ($l.expire_after_days // null)!=null
+            and ((($usage[$key].total_upload_bytes // 0) + ($usage[$key].total_download_bytes // 0) + $used) > 0)
+          then .limits.expires_at=($now + $l.expire_after_days*86400) | .limits.expire_after_days=null else . end) |
+        (.limits) as $l |
         if ($l.suspended // null)==null then
           (if $l.expires_at!=null and $l.expires_at<=$now then "expired"
            elif $l.quota_bytes!=null and $used>=$l.quota_bytes then "quota"
@@ -233,10 +255,16 @@ _user_limit_set() {
     case "$1" in
       --quota)
         value=${2:?缺少配额}; set[quota_bytes]=$(traffic_nullable_size "$value") || die "无效配额：$value（示例：50G、unlimited）"; shift 2;;
+      --reset-period)
+        value=${2:?缺少重置周期}; [[ "$value" =~ ^(day|week|month)$ ]] || die '重置周期必须是 day、week 或 month。'
+        set[reset_period]="\"$value\""; shift 2;;
+      --expire-after-first-use)
+        value=${2:?缺少天数}; [[ "$value" =~ ^[1-9][0-9]{0,3}$ ]] && (( value <= 3650 )) || die '天数必须为 1-3650。'
+        set[expire_after_days]=$value; set[expires_at]=null; shift 2;;
       --reset-day)
         value=${2:?缺少重置日}
         if [[ "$value" == none ]]; then set[reset_day]=null
-        else [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value >= 1 && 10#$value <= 28 )) || die '每月重置日必须是 1-28 或 none。'; set[reset_day]=$((10#$value)); fi
+        else [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value >= 1 && 10#$value <= 28 )) || die '重置日必须是 1-28（按周时 1-7，周一=1）或 none。'; set[reset_day]=$((10#$value)); fi
         shift 2;;
       --days)
         value=${2:?缺少天数}; [[ "$value" =~ ^[1-9][0-9]{0,3}$ ]] && (( value <= 3650 )) || die '天数必须为 1-3650。'
@@ -269,23 +297,27 @@ _user_limit_set() {
     log_warn '该节点只监听本机，经反向代理接入时 Xray 看不到客户端 IP，在线 IP 限制不会生效；请让代理发送 PROXY protocol 并执行 --accept-proxy-protocol true，或配置 sockopt.trustedXForwardedFor。'
   fi
   local patch='{}' key
-  for key in quota_bytes reset_day expires_at ip_limit; do
+  [[ ! -v set[expires_at] || -v set[expire_after_days] || ${set[expires_at]} == null ]] || set[expire_after_days]=null
+  for key in quota_bytes reset_day reset_period expires_at expire_after_days ip_limit; do
     [[ -v set[$key] ]] || continue
     patch=$(jq -c --arg key "$key" --argjson value "${set[$key]}" '.[$key]=$value' <<<"$patch") || return 1
   done
-  [[ ! -v set[clear] ]] || patch='{"quota_bytes":null,"reset_day":null,"expires_at":null,"ip_limit":null}'
+  [[ ! -v set[clear] ]] || patch='{"quota_bytes":null,"reset_day":null,"reset_period":null,"expires_at":null,"expire_after_days":null,"ip_limit":null}'
   user_usage_collect_unlocked || true
   candidate=$(state_candidate) || return 1
   jq --arg n "$node_id" --arg u "$user_id" --argjson patch "$patch" '
     (.nodes[]|select(.id==$n)|.users[]|select(.id==$u)) |=
       (.limits=({quota_bytes:null,reset_day:null,expires_at:null,ip_limit:null,suspended:null,suspended_until:null,resume_enabled:false} + (.limits // {}) + $patch)
-       | if .limits.quota_bytes==null and .limits.expires_at==null and .limits.ip_limit==null then
+       | if .limits.quota_bytes==null and .limits.expires_at==null and .limits.ip_limit==null and (.limits.expire_after_days // null)==null then
            (if .limits.suspended!=null then .enabled=(.limits.resume_enabled // true) else . end) | del(.limits)
          else . end)
   ' "$SBM_STATE" >"$candidate.raw" || { rm -f "$candidate" "$candidate.raw"; return 1; }
-  if [[ -v set[reset_day] && ${set[reset_day]} != null ]]; then
+  if [[ -v set[reset_day] || -v set[reset_period] ]]; then
+    local period day
+    read -r period day < <(jq -r --arg n "$node_id" --arg u "$user_id" '.nodes[]|select(.id==$n)|.users[]|select(.id==$u)|[(.limits.reset_period // "month"),(.limits.reset_day // 1)]|@tsv' "$candidate.raw")
+    if [[ "$period" == week ]] && (( day > 7 )); then rm -f "$candidate" "$candidate.raw"; die '按周重置时 --reset-day 为 1-7（周一=1）。'; fi
     user_usage_update_unlocked '.users[$key]=((.users[$key] // {}) + {cycle_id:$cycle})' \
-      --arg key "$(user_limits_key "$node_id" "$user_id")" --argjson cycle "$(traffic_cycle_id "${set[reset_day]}")" || return 1
+      --arg key "$(user_limits_key "$node_id" "$user_id")" --argjson cycle "$(user_cycle_id "$period" "$day")" || return 1
   fi
   user_limits_eval_file "$candidate.raw" "$candidate" || { rm -f "$candidate" "$candidate.raw"; return 1; }
   rm -f "$candidate.raw"
@@ -380,3 +412,21 @@ _xray_traffic_reset() {
   log_ok '已清零 Xray 入站/出站累计流量。'
 }
 xray_traffic_reset() { require_root; with_lock _xray_traffic_reset; }
+
+# Online users and their source IPs from the Stats API (activity in the last
+# ~20 s), like 3x-ui's online list and client IP log.
+user_online() {
+  local filter=${1:-} key ips count=0
+  [[ -z "$filter" ]] || state_node_exists "$filter" || die "节点不存在：$filter"
+  require_root
+  user_limits_xray_ready || die 'Xray 未运行，无法读取在线信息。'
+  printf '%-28s %s\n' '节点:用户' '在线 IP'
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    ips=$(user_limits_online_ips "$key" | jq -r 'join(", ")')
+    [[ -n "$ips" ]] || continue
+    printf '%-28s %s\n' "$key" "$ips"; count=$((count + 1))
+  done < <(jq -r --arg f "$filter" '.nodes[]? | select(.enabled and (.protocol|IN("socks","http","mixed","tunnel")|not) and ($f=="" or .id==$f))
+    | .id as $n | .users[] | select(.enabled) | "\($n):\(.id)"' "$SBM_STATE")
+  (( count )) || printf '当前没有在线用户。\n'
+}

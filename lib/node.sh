@@ -692,6 +692,75 @@ _node_user_add() {
 }
 node_user_add() { with_state_transaction user-add _node_user_add "$@"; }
 
+# Batch add (3x-ui "add bulk"): PREFIX-1 … PREFIX-N in one transaction, with
+# optional limits applied to every new user.
+_node_user_batch_add() {
+  local node_id=$1 prefix=$2 count=$3 start=${4:-1} node protocol secret candidate users='[]' i user_id limits='null' now
+  shift 4
+  node=$(state_get_node "$node_id"); [[ -n "$node" ]] || die "节点不存在：$node_id"
+  [[ "$count" =~ ^[1-9][0-9]{0,3}$ ]] && (( count <= 1000 )) || die '数量必须为 1-1000。'
+  [[ "$start" =~ ^[0-9]{1,6}$ ]] || die '起始编号无效。'
+  validate_node_id "$prefix-$start" || die '前缀只能包含小写字母、数字、点、下划线和连字符。'
+  protocol=$(jq -r '.protocol' <<<"$node")
+  [[ "$protocol" != tunnel ]] || die '端口转发节点没有用户。'
+  now=$(date +%s)
+  local quota=null days=null ip=null reset=null value
+  while (($#)); do
+    case "$1" in
+      --quota) quota=$(traffic_nullable_size "${2:?}") || die "无效配额：$2"; shift 2;;
+      --days) [[ "${2:?}" =~ ^[1-9][0-9]{0,3}$ ]] || die '天数必须为 1-3650。'; days=$((now + $2 * 86400)); shift 2;;
+      --ip-limit) [[ "${2:?}" =~ ^[1-9][0-9]{0,3}$ ]] || die 'IP 数必须为 1-1024。'; ip=$2; shift 2;;
+      --reset-day) [[ "${2:?}" =~ ^[0-9]+$ ]] && (( 10#$2 >= 1 && 10#$2 <= 28 )) || die '每月重置日必须是 1-28。'; reset=$((10#$2)); shift 2;;
+      *) die "未知参数：$1";;
+    esac
+  done
+  if [[ "$quota" != null || "$days" != null || "$ip" != null ]]; then
+    [[ ! "$protocol" =~ ^(socks|http|mixed)$ || ( "$quota" == null && "$ip" == null ) ]] || die 'SOCKS/HTTP 账号不能设置流量配额或在线 IP。'
+    limits=$(jq -cn --argjson q "$quota" --argjson r "$reset" --argjson e "$days" --argjson i "$ip" \
+      '{quota_bytes:$q,reset_day:$r,expires_at:$e,ip_limit:$i,suspended:null,suspended_until:null,resume_enabled:false}')
+  fi
+  for ((i = start; i < start + count; i++)); do
+    user_id="$prefix-$i"
+    validate_node_id "$user_id" || die "用户 ID 过长：$user_id"
+    jq -e --arg u "$user_id" 'any(.users[]; .id==$u)' <<<"$node" >/dev/null && die "用户已存在：$node_id/$user_id"
+    secret=$(node_user_generate_secret "$node" "$user_id") || return 1
+    state_write_user_secret "$node_id" "$user_id" "$secret" || return 1
+    # Keep the in-memory node current so WireGuard addresses stay unique.
+    node=$(jq -c --arg u "$user_id" '.users += [{id:$u,name:$u,enabled:true}]' <<<"$node")
+    users=$(jq -c --arg u "$user_id" --arg now "$(now_iso)" --argjson l "$limits" \
+      '. + [{id:$u,name:$u,enabled:true,created_at:$now} + (if $l==null then {} else {limits:$l} end)]' <<<"$users")
+  done
+  candidate=$(state_candidate)
+  jq --arg nid "$node_id" --argjson users "$users" '(.nodes[] | select(.id==$nid) | .users) += $users' "$SBM_STATE" >"$candidate" || { rm -f "$candidate"; return 1; }
+  if [[ "$protocol" == shadowsocks && $(jq -r '.credential_mode // "legacy"' <<<"$node") == legacy && $(jq -r '.method' <<<"$node") == 2022-* ]]; then
+    state_write_secret "$node_id" "$(jq -n --arg p "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{server_password:$p}')" || return 1
+    jq --arg nid "$node_id" '(.nodes[] | select(.id==$nid) | .credential_mode)="multi"' "$candidate" >"$candidate.tmp" && mv "$candidate.tmp" "$candidate"
+    log_warn "Shadowsocks 节点已切换到 2022 多用户模式；原单用户分享链接需要重新导出。"
+  fi
+  if ! apply_candidate_state "$candidate" "user-batch-$node_id"; then rm -f "$candidate"; return 1; fi
+  rm -f "$candidate"
+  log_ok "已添加 $count 个用户：$node_id/$prefix-$start … $prefix-$((start + count - 1))"
+}
+node_user_batch_add() { with_state_transaction user-batch _node_user_batch_add "$@"; }
+
+# Remove users whose quota or expiry is exhausted (3x-ui "delete depleted").
+_node_user_purge_depleted() {
+  local filter=${1:-} candidate list
+  list=$(jq -r --arg f "$filter" '.nodes[]? | select($f=="" or .id==$f) | .id as $n | .users[] | select((.limits.suspended // "")|IN("quota","expired")) | "\($n)/\(.id)"' "$SBM_STATE")
+  [[ -n "$list" ]] || { log_info '没有已耗尽或已到期的用户。'; return 0; }
+  printf '将删除：\n%s\n' "$list"
+  confirm '确认删除这些用户及其凭据？' || return 1
+  candidate=$(state_candidate)
+  jq --arg f "$filter" '.nodes |= map(if $f=="" or .id==$f then
+      .users |= map(select((.limits.suspended // "")|IN("quota","expired")|not)) else . end)' "$SBM_STATE" >"$candidate" || { rm -f "$candidate"; return 1; }
+  jq -e 'all(.nodes[]?; (.users|length)>0)' "$candidate" >/dev/null || { rm -f "$candidate"; die '删除后会有节点没有用户；请先为该节点保留或添加一个用户。'; }
+  if ! apply_candidate_state "$candidate" user-purge; then rm -f "$candidate"; return 1; fi
+  rm -f "$candidate"
+  local entry; while IFS= read -r entry; do rm -f -- "$(state_user_secret_path "${entry%%/*}" "${entry#*/}")"; done <<<"$list"
+  log_ok "已删除 $(wc -l <<<"$list") 个用户。"
+}
+node_user_purge_depleted() { with_state_transaction user-purge _node_user_purge_depleted "$@"; }
+
 _node_user_set_enabled() {
   local node_id=$1 user_id=$2 value=$3 candidate
   state_user_exists "$node_id" "$user_id" || die "用户不存在：$node_id/$user_id"
