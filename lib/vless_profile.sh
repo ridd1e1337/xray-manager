@@ -331,7 +331,7 @@ vless_profile_validate() (
     credential=$(state_get_user_secret "$(jq -r '.id' <<<"$node")" "$id") || return 1
   fi
   outbound=$(vless_xray_client_outbound "$node" "$credential" "$secret") || return 1
-  if [[ -x "$SBM_XRAY_BIN" && $(jq -r '.settings.vless_engine // "xray"' "$state") == xray ]]; then
+  if [[ -x "$SBM_XRAY_BIN" ]]; then
     local cache marker=''
     if cache=$(vless_cache_dir); then
       marker="$cache/$(vless_cache_key client-test "$outbound").ok"

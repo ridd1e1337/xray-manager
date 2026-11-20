@@ -3,7 +3,7 @@
 
 # systemd grants CAP_NET_BIND_SERVICE through the service unit. OpenRC has no
 # equivalent ambient-capability facility, so only the OpenRC backend uses a
-# file capability on the sing-box executable. Keeping a stale file capability
+# file capability on the Xray executable. Keeping a stale file capability
 # on the systemd backend can make execve fail under NoNewPrivileges/LSM rules.
 
 singbox_resolved_binary() {
@@ -28,16 +28,16 @@ clear_singbox_file_capabilities() {
   command_exists getcap || return 0
   caps=$(getcap "$target" 2>/dev/null || true)
   [[ -n "$caps" ]] || return 0
-  command_exists setcap || die "检测到 sing-box 文件能力，但缺少 setcap，无法安全清理：$target"
-  setcap -r "$target" || die "无法清除 sing-box 文件能力：$target"
-  log_info "已清除 systemd 后端不需要的 sing-box 文件能力：$target"
+  command_exists setcap || die "检测到 Xray 文件能力，但缺少 setcap，无法安全清理：$target"
+  setcap -r "$target" || die "无法清除 Xray 文件能力：$target"
+  log_info "已清除 systemd 后端不需要的 Xray 文件能力：$target"
 }
 
 apply_singbox_bind_capability() {
   local target
   target=$(singbox_resolved_binary "${1:-$SBM_XRAY_BIN}")
   command_exists setcap || die 'OpenRC 低权限服务需要 setcap；请安装 Alpine 的 libcap 包。'
-  setcap 'cap_net_bind_service=+ep' "$target" || die "无法为 sing-box 设置低端口能力：$target"
+  setcap 'cap_net_bind_service=+ep' "$target" || die "无法为 Xray 设置低端口能力：$target"
 }
 
 prepare_singbox_binary_for_backend() {
@@ -60,7 +60,7 @@ prepare_singbox_binary_for_backend() {
     none|'')
       ;;
     *)
-      die "无法为未知服务后端准备 sing-box 核心：$backend"
+      die "无法为未知服务后端准备 Xray 核心：$backend"
       ;;
   esac
 }
@@ -105,7 +105,7 @@ systemd_exec_preflight() {
     rm -f "$log"
     return 0
   fi
-  log_error "sing-box 未通过 systemd 沙箱执行预检（退出码 $rc）。"
+  log_error "Xray 未通过 systemd 沙箱执行预检（退出码 $rc）。"
   [[ -s "$log" ]] && cat "$log" >&2
   return 1
 }
@@ -174,7 +174,7 @@ systemd_runtime_preflight() {
     rm -f "$log"
     return 0
   fi
-  log_error 'sing-box 未通过 systemd 实际启动预检。'
+  log_error 'Xray 未通过 systemd 实际启动预检。'
   [[ -s "$log" ]] && cat "$log" >&2
   return 1
 }
@@ -189,7 +189,7 @@ systemd_unit_allows_netlink() {
 runtime_exec_diagnostics() {
   local binary=${1:-$SBM_XRAY_BIN} target caps
   target=$(singbox_resolved_binary "$binary")
-  printf '%s\n' '---- sing-box 执行诊断 ----' >&2
+  printf '%s\n' '---- Xray 执行诊断 ----' >&2
   printf '命令路径：%s\n真实路径：%s\n' "$binary" "$target" >&2
   ls -ld "$binary" "$target" 2>/dev/null >&2 || true
   if command_exists namei; then

@@ -201,7 +201,6 @@ _node_add() {
   fi
   local protocol base transport secret node_secret='' node candidate user_secret_path default_address created_at reality_secret='' snell_obfs_mode snell_obfs_host
   if [[ "$type" == vless ]]; then
-    [[ "$inbound_json" == '{}' ]] || usage_die 'VLESS 服务端只由 Xray 运行，请改用 --xray-inbound-json；--sing-box-outbound-json 仍可定制 sing-box 客户端导出。'
     [[ -z "$path" ]] || vless_options+=(--path "$path")
     [[ "$proxy_listen_supplied" != 1 ]] || vless_options+=(--listen "$proxy_listen")
     vless_preview=$(jq -n --arg domain "$domain" --arg security "$security" --arg flow "$flow" \
@@ -215,6 +214,7 @@ _node_add() {
   elif (( ${#vless_options[@]} > 0 )); then
     usage_die 'VLESS 传输和加密参数不能用于其他协议。'
   fi
+  [[ "$inbound_json" == '{}' ]] || usage_die 'xray-manager 的服务端是 Xray，请改用 --xray-inbound-json；--sing-box-outbound-json 仍可定制 sing-box 客户端导出。'
   case "$type" in
     anytls|tuic|naive|shadowtls|snell) usage_die "xray-manager 只使用 Xray-core，Xray 不支持 $type；请使用 sb-manager。";;
   esac
@@ -246,26 +246,10 @@ _node_add() {
       validate_domain "$domain" || die "无效域名：$domain"
       [[ -n "$name" ]] || name='Hysteria2'
       [[ -n "$address" ]] || address=${default_address:-$domain}
-      if [[ -n "$obfs" && "$obfs" != salamander && "$obfs" != gecko ]]; then die "Hysteria2 混淆必须是 salamander 或 gecko。"; fi
-      if [[ "$obfs" == gecko ]]; then
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Gecko 混淆需要 sing-box 1.14+ 核心。'
-        [[ "$obfs_min_packet_size" =~ ^[0-9]+$ ]] && (( obfs_min_packet_size >= 64 && obfs_min_packet_size <= 1500 )) || die 'Gecko 最小包长必须是 64-1500 的整数。'
-        [[ "$obfs_max_packet_size" =~ ^[0-9]+$ ]] && (( obfs_max_packet_size >= 64 && obfs_max_packet_size <= 1500 )) || die 'Gecko 最大包长必须是 64-1500 的整数。'
-        (( obfs_min_packet_size <= obfs_max_packet_size )) || die 'Gecko 最小包长不能大于最大包长。'
-      fi
-      if [[ "$disable_chrome_parrot" == true ]]; then
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Chrome QUIC 指纹开关需要 sing-box 1.14+ 核心。'
-      fi
-      case "$bbr_profile" in ''|conservative|standard|aggressive) ;; *) die 'Hysteria2 BBR profile 必须是 conservative、standard 或 aggressive。';; esac
-      if [[ -n "$bbr_profile" || "$brutal_debug" == true ]]; then
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Hysteria2 BBR profile/debug 需要 sing-box 1.14+ 核心。'
-      fi
-      case "$realm_ip_version" in 0|4|6) ;; *) die 'Realm IP 版本必须是 0、4 或 6。';; esac
-      if [[ -n "$realm_id" ]]; then
-        [[ "$realm_id" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] || die "无效 Realm ID：$realm_id"
-        [[ $(jq -r '.realm.enabled // false' "$SBM_STATE") == true ]] || die '请先启用全局 Hysteria Realm，再为节点指定 --realm-id。'
-        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Hysteria Realm 需要 sing-box 1.14+ 核心。'
-      fi
+      # Xray's Hysteria inbound: TLS (h3), optional Salamander obfs and masquerade.
+      [[ -z "$obfs" || "$obfs" == salamander ]] || die 'Xray Hysteria2 混淆只支持 salamander（Gecko 为 sing-box 专属）。'
+      [[ "$disable_chrome_parrot" != true && -z "$bbr_profile" && "$brutal_debug" != true && -z "$realm_id" ]] \
+        || die 'Chrome QUIC 指纹、BBR profile/debug 与 Hysteria Realm 是 sing-box 专属选项，xray-manager 不支持。'
       secret=$(jq -n --arg password "$(random_password 24)" --arg obfs_password "$([[ -n "$obfs" ]] && random_password 18 || true)" '{password:$password,obfs_password:$obfs_password}')
       ;;
     trojan)
@@ -513,7 +497,7 @@ _node_set() {
       --realm-port-mapping|--no-realm-port-mapping) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.realm_port_mapping)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --clear-realm) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" '(.nodes[]|select(.id==$id)) |= (.realm_enabled=false | .realm_id="")' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --sing-box-inbound-json|--inbound-json)
-        [[ $(jq -r --arg id "$id" '.nodes[]|select(.id==$id)|.protocol' "$candidate") != vless ]] || { rm -f "$candidate"; die 'VLESS 服务端只由 Xray 运行，请改用 --xray-inbound-json。'; }
+        rm -f "$candidate"; die 'xray-manager 的服务端是 Xray，请改用 --xray-inbound-json。';
         tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.singbox.inbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --sing-box-outbound-json|--outbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.singbox.outbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --xray-inbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.xray.inbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;

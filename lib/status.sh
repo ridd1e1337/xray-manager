@@ -88,7 +88,6 @@ status_collect_json_unlocked() {
   if command_exists fail2ban-client; then
     if fail2ban-client status sshd >/dev/null 2>&1; then fail2ban_state=active; else fail2ban_state=inactive; fi
   else fail2ban_state=not_installed; fi
-  if [[ -s "$SBM_VAR/updates/sing-box.json" ]]; then pending=$(jq -r '.latest // ""' "$SBM_VAR/updates/sing-box.json" 2>/dev/null || true); fi
   jq -n --arg now "$(now_iso)" --arg version "$SBM_VERSION" --arg init "$(init_system_label)" \
     --arg sb_ver "$sb_ver" --arg xray_ver "$xray_ver" --arg service_state "$service_state" --arg xray_state "$xray_state" --arg cf_ver "$cf_ver" \
     --arg openlist_ver "$openlist_ver" --arg openlist_state "$openlist_state" \
@@ -104,8 +103,7 @@ status_collect_json_unlocked() {
      summary:{nodes:($nodes|length),enabled_nodes:$enabled_count,certificates:($certs|length),issues:($issues|length),
        errors:([$issues[]|select(.severity=="error")]|length),warnings:([$issues[]|select(.severity=="warning")]|length)},
      components:{
-       sing_box:{version:(if $sb_ver=="" then null else $sb_ver end),state:$service_state,pending_version:(if $pending=="" then null else $pending end)},
-       xray:{version:(if $xray_ver=="" then null else $xray_ver end),state:$xray_state},
+       xray:{version:(if $sb_ver=="" then null else $sb_ver end),state:$service_state},
        openlist:{version:(if $openlist_ver=="" then null else $openlist_ver end),state:$openlist_state},
        cloudflared:{version:(if $cf_ver=="" then null else $cf_ver end),mode:$tunnel_mode,state:$tunnel_state},
        nginx_stream:{state:$nginx_state,port:$nginx_port,backend:$mux_backend},traffic:{state:$traffic_state,configured_nodes:$traffic_count,shared_groups:$groups,shaping:$shaping},substore:$substore,
@@ -126,7 +124,6 @@ status_show() {
   data=$(status_json)
   printf '%sXray Manager %s%s\n' "$C_BOLD" "$(jq -r '.manager.version' <<<"$data")" "$C_RESET"
   printf '服务管理      : %s\n' "$(jq -r '.manager.init_system' <<<"$data")"
-  printf 'sing-box     : %s (%s)\n' "$(jq -r '.components.sing_box.version // "未安装"' <<<"$data")" "$(jq -r '.components.sing_box.state' <<<"$data")"
   printf 'Xray-core    : %s (%s)\n' "$(jq -r '.components.xray.version // "未安装"' <<<"$data")" "$(jq -r '.components.xray.state' <<<"$data")"
   printf 'OpenList     : %s (%s)\n' "$(jq -r '.components.openlist.version // "未安装"' <<<"$data")" "$(jq -r '.components.openlist.state' <<<"$data")"
   printf 'cloudflared  : %s (Tunnel: %s/%s)\n' "$(jq -r '.components.cloudflared.version // "未安装"' <<<"$data")" "$(jq -r '.components.cloudflared.mode' <<<"$data")" "$(jq -r '.components.cloudflared.state' <<<"$data")"

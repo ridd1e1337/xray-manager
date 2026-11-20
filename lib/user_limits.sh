@@ -27,8 +27,8 @@ user_limits_validate_state() {
         and ((.suspended // null)|IN(null,"quota","expired","ip"))
         and ((.suspended_until // null)|int_or_null(1;253402300799))
         and ((.resume_enabled // false)|type=="boolean")
-        and (((.quota_bytes==null and .ip_limit==null)) or $node.protocol=="vless"))))
-  ' "$1" >/dev/null || { log_error '用户限额状态无效：流量配额与在线 IP 限制仅支持 VLESS（Xray），且节点端口不能与 Xray 统计 API 端口相同（xm xray api-port）。'; return 1; }
+        and (((.quota_bytes==null and .ip_limit==null)) or ($node.protocol|IN("socks","http","mixed")|not)))))
+  ' "$1" >/dev/null || { log_error '用户限额状态无效：流量配额与在线 IP 限制不适用于 SOCKS/HTTP，且节点端口不能与 Xray 统计 API 端口相同（xm xray api-port）。'; return 1; }
 }
 
 user_usage_validate() {
@@ -64,7 +64,6 @@ user_usage_update_unlocked() {
 
 user_limits_xray_ready() {
   [[ "$SBM_SKIP_INIT" != 1 && -x "$SBM_XRAY_BIN" ]] || return 1
-  [[ $(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE") == xray ]] || return 1
   service_active "$SBM_XRAY_SERVICE" 2>/dev/null
 }
 
@@ -120,7 +119,7 @@ user_limits_online_map() {
     [[ -n "$key" ]] || continue
     ips=$(user_limits_online_ips "$key")
     map=$(jq -c --arg key "$key" --argjson ips "$ips" '.[$key]=($ips|length)' <<<"$map") || return 1
-  done < <(jq -r '.nodes[]? | select(.protocol=="vless") | .id as $n | .users[] | select(.limits.ip_limit!=null and .enabled==true) | "\($n):\(.id)"' "$SBM_STATE")
+  done < <(jq -r '.nodes[]? | select(.protocol|IN("socks","http","mixed")|not) | .id as $n | .users[] | select(.limits.ip_limit!=null and .enabled==true) | "\($n):\(.id)"' "$SBM_STATE")
   printf '%s\n' "$map"
 }
 
@@ -256,12 +255,9 @@ _user_limit_set() {
       *) die "未知用户限额参数：$1";;
     esac
   done
-  if [[ "$protocol" != vless ]] && { [[ ${set[quota_bytes]:-null} != null ]] || [[ ${set[ip_limit]:-null} != null ]]; }; then
-    die '流量配额与在线 IP 限制需要 Xray 统计，仅支持 VLESS；其他协议可使用到期时间或节点级流量控制（xm traffic set）。'
-  fi
-  if [[ "$protocol" == vless && $(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE") != xray ]] \
-    && { [[ ${set[quota_bytes]:-null} != null ]] || [[ ${set[ip_limit]:-null} != null ]]; }; then
-    die '请先运行 xm xray enable，用户流量统计由 Xray 提供。'
+  # SOCKS/HTTP accounts have no Xray user email, so no per-user counters.
+  if [[ "$protocol" =~ ^(socks|http|mixed)$ ]] && { [[ ${set[quota_bytes]:-null} != null ]] || [[ ${set[ip_limit]:-null} != null ]]; }; then
+    die 'SOCKS/HTTP 账号在 Xray 中没有用户统计，不能设置流量配额或在线 IP；可使用到期时间或节点级流量控制（xm traffic set）。'
   fi
   if [[ ${set[ip_limit]:-null} != null ]] && jq -e '
       ((.listen // "::")|IN("127.0.0.1","::1","localhost"))
@@ -276,7 +272,7 @@ _user_limit_set() {
     patch=$(jq -c --arg key "$key" --argjson value "${set[$key]}" '.[$key]=$value' <<<"$patch") || return 1
   done
   [[ ! -v set[clear] ]] || patch='{"quota_bytes":null,"reset_day":null,"expires_at":null,"ip_limit":null}'
-  [[ $(jq -r '.settings.vless_engine // ""' "$SBM_STATE") != xray ]] || user_usage_collect_unlocked || true
+  user_usage_collect_unlocked || true
   candidate=$(state_candidate) || return 1
   jq --arg n "$node_id" --arg u "$user_id" --argjson patch "$patch" '
     (.nodes[]|select(.id==$n)|.users[]|select(.id==$u)) |=
@@ -325,7 +321,7 @@ user_stats_json() {
     while IFS= read -r key; do
       [[ -n "$key" ]] || continue
       online=$(jq -c --arg key "$key" --argjson ips "$(user_limits_online_ips "$key")" '.[$key]=$ips' <<<"$online")
-    done < <(jq -r --arg f "$filter" '.nodes[]? | select(.protocol=="vless" and ($f=="" or .id==$f)) | .id as $n | .users[] | select(.enabled) | "\($n):\(.id)"' "$SBM_STATE")
+    done < <(jq -r --arg f "$filter" '.nodes[]? | select((.protocol|IN("socks","http","mixed")|not) and ($f=="" or .id==$f)) | .id as $n | .users[] | select(.enabled) | "\($n):\(.id)"' "$SBM_STATE")
   fi
   jq --arg f "$filter" --argjson usage "$usage" --argjson online "$online" '[
     .nodes[]? | select($f=="" or .id==$f) | .id as $n | .protocol as $p | .users[] |
@@ -334,7 +330,7 @@ user_stats_json() {
      upload_bytes:($u.upload_bytes // 0),download_bytes:($u.download_bytes // 0),
      total_upload_bytes:($u.total_upload_bytes // 0),total_download_bytes:($u.total_download_bytes // 0),
      online_ips:($online[$key] // null),limits:(.limits // null),
-     stats:(if $p=="vless" then "xray" else "unavailable" end)}]' "$SBM_STATE"
+     stats:(if ($p|IN("socks","http","mixed")) then "unavailable" else "xray" end)}]' "$SBM_STATE"
 }
 
 user_stats() {

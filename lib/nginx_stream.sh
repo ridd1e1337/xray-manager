@@ -73,7 +73,7 @@ nginx_stream_validate_state() {
   port=$(jq -r '.port // 0' <<<"$cfg")
   routes=$(jq -c '.routes // []' <<<"$cfg")
   engine=$(mux_backend "$state") || return 1
-  case "$engine" in sing-box|nginx|caddy|nginx-site) ;; *) log_error '无效的 TCP/SNI 复用方式。'; return 1;; esac
+  case "$engine" in nginx|caddy|nginx-site) ;; sing-box) log_error 'xray-manager 没有 sing-box，TCP/SNI 复用请使用 nginx 或 caddy 后端。'; return 1;; *) log_error '无效的 TCP/SNI 复用方式。'; return 1;; esac
   if [[ "$enabled" == true && "$engine" == sing-box ]]; then
     version_ge "$(core_current_version)" 1.11.0 || { log_error '内置 TCP/SNI 分流需要 sing-box 1.11 或更高版本。'; return 1; }
   fi

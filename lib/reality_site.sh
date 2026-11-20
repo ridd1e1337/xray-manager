@@ -11,7 +11,7 @@ reality_site_validate_state() {
       ($r.enabled==true and ($r.server|IN("nginx","caddy")) and
        ($r.domain|type=="string" and length>0) and $r.journal==$journal and
        ($r.backend_port|type=="number" and floor==. and .>=1024 and .<=65535) and
-       .settings.vless_engine=="xray" and (.nginx_stream.enabled!=true) and
+       (.nginx_stream.enabled!=true) and
        ([.nodes[] | select(.id==$r.node_id and .enabled==true and .protocol=="vless" and
          .security=="reality" and .flow=="xtls-rprx-vision" and .port==443 and
          .domain==$r.domain and .handshake_server=="127.0.0.1" and .handshake_port==$r.backend_port and
@@ -164,7 +164,7 @@ reality_site_candidate() {
   ' <<<"$node") || return 1
   jq --argjson node "$node" --arg domain "$domain" --arg server "$server" --arg binary "$binary" --arg config "$config" \
     --argjson port "$backend_port" --argjson openlist_port "$(openlist_port)" --arg journal "$SBM_REALITY_SITE_DIR/current" '
-    .settings.vless_engine="xray" | .settings.log_level="warn" | .nodes=(.nodes|map(select(.id!=$node.id)))+[$node]
+    .settings.log_level="warn" | .nodes=(.nodes|map(select(.id!=$node.id)))+[$node]
     | .reality_site={enabled:true,node_id:$node.id,domain:$domain,server:$server,binary:$binary,config:$config,backend_port:$port,journal:$journal}
     | .openlist.sites=((.openlist.sites // []|map(select(.domain!=$domain)))+[{domain:$domain,server:$server,binary:$binary,config:$config,port:$openlist_port}])
   ' "$SBM_STATE" >"$candidate" || return 1

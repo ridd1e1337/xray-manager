@@ -28,7 +28,7 @@ status_summary() {
   elif service_active "$SBM_SERVICE"; then service_state='运行中'; else service_state='未运行'; fi
   printf '%sXray Manager %s%s\n' "$C_BOLD" "$SBM_VERSION" "$C_RESET"
   printf '服务管理      : %s\n' "$backend"
-  printf 'sing-box     : %s (%s)\n' "${sb_ver:-未安装}" "$service_state"
+  printf 'Xray     : %s (%s)\n' "${sb_ver:-未安装}" "$service_state"
   printf 'cloudflared  : %s (Tunnel: %s)\n' "${cf_ver:-未安装}" "$mode"
   printf '节点          : %s 个，启用 %s 个\n' "$nodes" "$enabled"
   printf '证书          : %s 个\n' "$certs"
@@ -41,9 +41,9 @@ doctor_repair_runtime() {
   local candidate preflight_rc=0
   log_info "修复核心链接、路径权限、配置权限与 $(init_system_label) 运行状态…"
   if [[ ! -x "$SBM_XRAY_BIN" ]]; then
-    candidate=$(find "$SBM_CORE_DIR/sing-box" -mindepth 2 -maxdepth 2 -type f -name sing-box -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')
-    [[ -n "$candidate" ]] || die '未找到可用于修复的 sing-box 核心，请重新执行安装命令。'
-    ln -sfn "$candidate" "$SBM_XRAY_BIN"
+    candidate=$(find "$SBM_CORE_DIR/xray" -mindepth 2 -maxdepth 2 -type f -name xray -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')
+    [[ -n "$candidate" ]] || die '未找到可用于修复的 Xray 核心，请重新执行安装命令。'
+    mkdir -p "$(dirname "$SBM_XRAY_BIN")" && ln -sfn "$candidate" "$SBM_XRAY_BIN"
   fi
   if [[ ! -x "$SBM_CLOUDFLARED_BIN" ]]; then
     candidate=$(find "$SBM_CORE_DIR/cloudflared" -mindepth 2 -maxdepth 2 -type f -name cloudflared -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')
@@ -72,7 +72,7 @@ doctor_repair_runtime() {
     fi
   fi
   render_current_config
-  service_user_can_execute_core || die "$SBM_SERVICE_USER 仍无法执行 sing-box 核心。"
+  service_user_can_execute_core || die "$SBM_SERVICE_USER 仍无法执行 Xray 核心。"
   service_user_can_read_config || die "$SBM_SERVICE_USER 仍无法读取生成配置。"
   if [[ "$SBM_SKIP_INIT" != 1 ]]; then
     service_exists "$SBM_SERVICE" || die "缺少 $(service_file_path "$SBM_SERVICE")，请重新执行安装命令。"
@@ -84,14 +84,14 @@ doctor_repair_runtime() {
       case "$preflight_rc" in
         0) ;;
         2) log_warn 'systemd-run 不可用，跳过沙箱执行预检。' ;;
-        *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; die 'systemd 沙箱仍无法执行 sing-box。' ;;
+        *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; die 'systemd 沙箱仍无法执行 Xray。' ;;
       esac
       preflight_rc=0
       systemd_runtime_preflight "$SBM_XRAY_BIN" "$SBM_CONFIG" || preflight_rc=$?
       case "$preflight_rc" in
         0) ;;
         2) log_warn 'systemd-run 不可用，跳过实际启动预检。' ;;
-        *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; die 'sing-box 仍无法在 systemd 沙箱中完成实际启动。' ;;
+        *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; die 'Xray 仍无法在 systemd 沙箱中完成实际启动。' ;;
       esac
     fi
     runtime_services_reconcile
@@ -108,7 +108,7 @@ doctor_repair_safe() {
   log_info '执行低风险自动修复：权限、配置渲染、流量规则和已确认失败的服务。不会修改 SSH、防火墙默认策略、内核参数或路由。'
   ensure_program_permissions || rc=1
   if ! render_current_config; then
-    log_error '重新渲染 sing-box 配置失败。'
+    log_error '重新渲染 Xray 配置失败。'
     rc=1
   fi
   if declare -F traffic_reconcile >/dev/null 2>&1; then
@@ -118,13 +118,13 @@ doctor_repair_safe() {
     nginx_stream_reconcile || { log_error '协调 TCP/SNI 复用服务失败。'; rc=1; }
   fi
   if [[ "$SBM_SKIP_INIT" != 1 ]] && service_exists "$SBM_SERVICE" && state_runtime_required && ! service_active "$SBM_SERVICE"; then
-    log_warn '检测到 sing-box 应运行但当前未运行，尝试一次受控重启。'
+    log_warn '检测到 Xray 应运行但当前未运行，尝试一次受控重启。'
     service_reset_failed "$SBM_SERVICE" || true
     if ! service_restart "$SBM_SERVICE"; then
-      log_error '受控重启 sing-box 失败。'
+      log_error '受控重启 Xray 失败。'
       rc=1
     elif ! service_wait_active "$SBM_SERVICE" 20; then
-      log_error 'sing-box 重启后仍未进入运行状态。'
+      log_error 'Xray 重启后仍未进入运行状态。'
       rc=1
     fi
   fi
@@ -295,7 +295,7 @@ doctor_probe() {
       check_line WARN "请另外确认云厂商安全组已放行 $(jq -r '.port' <<<"$node")/TCP；本机握手无法验证公网入站"
       warnings=$((warnings + 1))
     else
-      check_line FAIL "$id Snell 本机端到端握手失败；请检查核心版本、mode、PSK 与 sing-box 日志"
+      check_line FAIL "$id Snell 本机端到端握手失败；请检查核心版本、mode、PSK 与 Xray 日志"
       failures=$((failures + 1))
     fi
   fi
@@ -356,10 +356,10 @@ doctor_run() {
   local sb_version cf_version core_usable=0
   if [[ -x "$SBM_XRAY_BIN" ]]; then
     sb_version=$(core_current_version || true)
-    if [[ -n "$sb_version" ]]; then check_line PASS "sing-box $sb_version"; core_usable=1
-    else check_line FAIL 'sing-box 文件可执行，但无法读取版本信息'; failures=$((failures + 1)); fi
+    if [[ -n "$sb_version" ]]; then check_line PASS "Xray $sb_version"; core_usable=1
+    else check_line FAIL 'Xray 文件可执行，但无法读取版本信息'; failures=$((failures + 1)); fi
   else
-    check_line FAIL 'sing-box 核心链接缺失、损坏或不可执行'
+    check_line FAIL 'Xray 核心链接缺失、损坏或不可执行'
     failures=$((failures + 1))
   fi
 
@@ -387,7 +387,7 @@ doctor_run() {
     if systemd_unit_allows_netlink "$SBM_SERVICE"; then
       check_line PASS 'systemd 地址族策略允许 AF_NETLINK 路由监听'
     else
-      check_line FAIL 'systemd 地址族策略缺少 AF_NETLINK；sing-box 会在订阅路由更新时退出'
+      check_line FAIL 'systemd 地址族策略缺少 AF_NETLINK；Xray 会在订阅路由更新时退出'
       failures=$((failures + 1))
       check_line WARN '重新运行最新版安装器，或执行临时修复命令更新 RestrictAddressFamilies'
       warnings=$((warnings + 1))
@@ -402,8 +402,8 @@ doctor_run() {
   fi
 
   if id "$SBM_SERVICE_USER" >/dev/null 2>&1; then
-    if service_user_can_execute_core; then check_line PASS "$SBM_SERVICE_USER 可执行 sing-box 核心"
-    else check_line FAIL "$SBM_SERVICE_USER 无法执行 sing-box；通常是核心目录缺少遍历权限"; failures=$((failures + 1)); fi
+    if service_user_can_execute_core; then check_line PASS "$SBM_SERVICE_USER 可执行 Xray 核心"
+    else check_line FAIL "$SBM_SERVICE_USER 无法执行 Xray；通常是核心目录缺少遍历权限"; failures=$((failures + 1)); fi
     if service_user_can_read_config; then check_line PASS "$SBM_SERVICE_USER 可读取生成配置"
     else check_line FAIL "$SBM_SERVICE_USER 无法读取 $SBM_CONFIG"; failures=$((failures + 1)); fi
   else
@@ -415,10 +415,10 @@ doctor_run() {
     preflight_rc=0
     systemd_exec_preflight "$SBM_XRAY_BIN" || preflight_rc=$?
     case "$preflight_rc" in
-      0) check_line PASS 'sing-box 通过 systemd 沙箱执行预检' ;;
+      0) check_line PASS 'Xray 通过 systemd 沙箱执行预检' ;;
       2) check_line WARN 'systemd-run 不可用，未执行沙箱预检'; warnings=$((warnings + 1)) ;;
       *)
-        check_line FAIL 'sing-box 无法在与正式服务相同的 systemd 沙箱中执行'
+        check_line FAIL 'Xray 无法在与正式服务相同的 systemd 沙箱中执行'
         failures=$((failures + 1))
         runtime_exec_diagnostics "$SBM_XRAY_BIN"
         ;;
@@ -440,7 +440,7 @@ doctor_run() {
 
   tmp=$(mktemp "$SBM_RUN/doctor-config.XXXXXX")
   if (( core_usable == 1 )) && (render_config_from_state "$SBM_STATE" "$tmp" >/dev/null 2>&1 && core_validate_config_with "$SBM_XRAY_BIN" "$tmp" "$SBM_RUN/doctor-check.log"); then
-    check_line PASS 'sing-box 配置渲染与语法检查通过'
+    check_line PASS 'Xray 配置渲染与语法检查通过'
   else
     check_line FAIL "配置检查失败，详见 $SBM_RUN/doctor-check.log"
     failures=$((failures + 1))
@@ -485,7 +485,7 @@ doctor_run() {
       warnings=$((warnings + 1))
       continue
     fi
-    if (( port < 1024 )) && [[ $(state_node_engine "$node") == sing-box ]]; then low_port_required=1; fi
+    if (( port < 1024 )) && [[ $(state_node_engine "$node") == Xray ]]; then low_port_required=1; fi
     while IFS= read -r kind; do
       if node_runtime_port_in_use "$node" "$kind"; then check_line PASS "$id 由 $(state_node_engine "$node") 监听 ${port}/${kind^^}"
       elif host_port_in_use "$kind" "$port"; then check_line FAIL "$id 的 ${port}/${kind^^} 被其他进程占用"; failures=$((failures + 1))
@@ -528,8 +528,8 @@ doctor_run() {
   fi
 
   if [[ "$backend" == openrc && "$low_port_required" == 1 ]]; then
-    if singbox_has_bind_capability "${core_target:-$SBM_XRAY_BIN}"; then check_line PASS 'OpenRC sing-box 核心具备低端口绑定能力'
-    else check_line FAIL 'OpenRC sing-box 核心缺少 cap_net_bind_service；运行 xm repair'; failures=$((failures + 1)); fi
+    if singbox_has_bind_capability "${core_target:-$SBM_XRAY_BIN}"; then check_line PASS 'OpenRC Xray 核心具备低端口绑定能力'
+    else check_line FAIL 'OpenRC Xray 核心缺少 cap_net_bind_service；运行 xm repair'; failures=$((failures + 1)); fi
   fi
   if [[ "$backend" == openrc ]] && mux_uses_nginx && (( $(jq -r '.nginx_stream.port' "$SBM_STATE") < 1024 )); then
     if nginx_stream_file_capabilities "$SBM_NGINX_STREAM_OPENRC_BIN" | grep -q cap_net_bind_service; then
@@ -581,13 +581,13 @@ doctor_run() {
       check_line FAIL '存在订阅但订阅服务未运行'; failures=$((failures + 1))
     fi
   fi
-  if [[ $(jq -r '.api.enabled // false' "$SBM_STATE") == true ]]; then
+  if xray_runtime_required; then
     local api_port
-    api_port=$(jq -r '.api.port' "$SBM_STATE")
+    api_port=$(jq -r '.settings.xray_api_port // 10085' "$SBM_STATE")
     if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Fxq "127.0.0.1:$api_port"; then
-      check_line PASS 'sing-box API 仅监听 loopback'
+      check_line PASS "Xray 统计 API 仅监听 127.0.0.1:$api_port"
     else
-      check_line FAIL 'sing-box API 未按预期监听 loopback'; failures=$((failures + 1))
+      check_line FAIL "Xray 统计 API 未监听 127.0.0.1:$api_port"; failures=$((failures + 1))
     fi
   fi
   if declare -F health_collect_json >/dev/null 2>&1; then
@@ -613,7 +613,7 @@ show_logs() {
     mux) service_logs "$(mux_service)" "$lines" 0 ;;
     nginx|nginx-stream) service_logs "$SBM_NGINX_STREAM_SERVICE" "$lines" 0 ;;
     all)
-      printf '%s\n' '---- sing-box ----'
+      printf '%s\n' '---- Xray ----'
       service_logs "$SBM_SERVICE" "$lines" 0 || true
       printf '%s\n' '---- cloudflared ----'
       service_logs "$SBM_TUNNEL_SERVICE" "$lines" 0 || true

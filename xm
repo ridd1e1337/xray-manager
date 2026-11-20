@@ -53,8 +53,6 @@ source "$SBM_LIB/lib/tunnel.sh"
 source "$SBM_LIB/lib/tunnel_routes.sh"
 source "$SBM_LIB/lib/subscription.sh"
 source "$SBM_LIB/lib/substore.sh"
-source "$SBM_LIB/lib/api.sh"
-source "$SBM_LIB/lib/realm.sh"
 source "$SBM_LIB/lib/bbr.sh"
 source "$SBM_LIB/lib/hysteria2_tuning.sh"
 source "$SBM_LIB/lib/tcp_tuning.sh"
@@ -103,7 +101,6 @@ sb_help_full() {
                  [--sniffing on|route-only|off] [--sniff-dest http,tls,quic,fakedns]
                  [--tcp-fast-open true|false] [--accept-proxy-protocol true|false] [--sockopt-json JSON|@FILE]
                  [--transport-json JSON|@FILE] [--tls-json JSON|@FILE]
-                 [--realm-id ID] [--realm-ip-version 0|4|6] [--realm-port-mapping|--no-realm-port-mapping]
   xm user list <NODE_ID>
   xm user add <NODE_ID> <USER_ID> [NAME]
   xm user enable|disable|delete|rotate <NODE_ID> <USER_ID>
@@ -116,9 +113,6 @@ sb_help_full() {
   xm export config [文件] [--mode mixed|tun] [--tun-dns-mode disabled|native|hijack] [--tun-dns-address IP]
   xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL]
   xm subscription list|status|revoke <ID_OR_TOKEN>
-  xm api enable [PORT] [--dashboard]|disable|status [--json]|show-token|cli <COMMAND> [ARGS]
-  xm realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N]
-  xm realm disable|status [--json]|show-token
   xm bbr enable|disable|status [--json]
   xm tcp plan|enable --bandwidth Mbps --rtt MS [--dry-run] [--json]
   xm tcp status [--json]|disable   TCP 自适应缓冲区、MTU 黑洞探测与恢复
@@ -126,7 +120,7 @@ sb_help_full() {
   xm network speed HOST [--port N] [--seconds 1-30] [--streams 1-16] [--direction up|down] [--json]
   xm network history [--json]|compare BEFORE AFTER [--json]
   xm hy2 buffer enable|disable|status [--json]
-  xm mux status [--json]|enable [PORT] [--backend sing-box|nginx|caddy]|disable|backend sing-box|nginx|caddy|auto [NODE_IDS]
+  xm mux status [--json]|enable [PORT] [--backend nginx|caddy]|disable|backend nginx|caddy|auto [NODE_IDS]
   xm mux route list|add NODE_ID SNI [BACKEND_PORT]|remove NODE_ID
   xm mux caddy                   导出现有 Caddy L4 的 HTTPS listener_wrappers 配置
   xm mux setup [--server auto|nginx|caddy] [--config FILE] [--binary FILE] [--build-caddy]
@@ -163,14 +157,14 @@ sb_help_full() {
   xm tunnel quick <NODE_ID>
   xm tunnel refresh|set-token|status [--json]|stop
 
-  xm settings show|detect-ip|address <auto|HOST>|dns <optimistic|timeout> VALUE
+  xm settings show|detect-ip|address <auto|HOST>
   xm settings outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>
   xm firewall status|ports|clear-iptables|ufw-allow [--yes]
   xm firewall fail2ban|ufw [--yes] [--dry-run]
   xm probe NODE_ID                探测节点 DNS、监听和 TLS/UDP 可达性
 
-  xm core check|update [VERSION]|rollback|schema [文件]|capabilities [--json]|policy <manual|notify|patch|stable>|channel <stable|preview>|auto
-  xm xray status|install|update|config|enable|disable|policy <manual|notify|patch|stable>|api-port PORT
+  xm core check|update [VERSION]|rollback|capabilities|policy <manual|notify|patch|stable>|auto   Xray-core 管理
+  xm xray status|config [文件]|api-port PORT
   xm xray traffic [--json|reset]  Xray 入站/出站累计流量
   xm xray routing [--json]         查看 Xray 出站、负载均衡与路由
   xm xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG
@@ -204,7 +198,6 @@ sb_help_full() {
          --disable-chrome-parrot --masquerade URL (Gecko/Chrome 选项需要 sing-box 1.14+)
   Snell: --snell-version 5|6 --snell-mode default|unshaped|unsafe-raw
          v5 可用 --obfs none|http [--obfs-host DOMAIN]；v6 需要 sing-box 1.14 rc.2+
-  Hysteria2 Realm: --realm-id ID [--realm-ip-version 0|4|6] [--realm-port-mapping]
   SOCKS5/HTTP/mixed: --listen 127.0.0.1|::1|0.0.0.0|::（默认本机，自动生成认证）
   sing-box 扩展：--sing-box-inbound-json JSON|@FILE --sing-box-outbound-json JSON|@FILE
                  可传入当前核心支持的任意扩展字段；type、tag、地址、端口、用户和凭据由管理器保护。
@@ -213,7 +206,7 @@ sb_help_full() {
 EOF_HELP
 }
 
-SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network probe vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme api realm config doctor repair logs backup restore restart uninstall'
+SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network probe vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config doctor repair logs backup restore restart uninstall'
 
 sb_help_overview() {
   cat <<EOF_OVERVIEW
@@ -236,7 +229,7 @@ xray-manager ${SBM_VERSION}：状态驱动的 sing-box 多协议管理器
 流量与监控：  traffic  notify  health  probe
 网络调优：    tcp  bbr  hy2  network
 服务器与网站：vps  firewall  mux  caddy  openlist  reality  maintenance  settings
-核心与维护：  core  xray  cloudflared  deps  acme  api  realm  config
+核心与维护：  core  xray  cloudflared  deps  acme  config
 备份与卸载：  backup  restore  restart  uninstall
 
 通用选项：--json  --yes|-y  --dry-run  --quiet|-q  --no-color  --version
@@ -524,39 +517,8 @@ main() {
         *) usage_die '用法：xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL] | list | status | revoke ID_OR_TOKEN' ;;
       esac
       ;;
-    api)
-      local action=${2:-status}
-      case "$action" in
-        enable) api_enable "${3:-9090}" "$([[ ${4:-} == --dashboard ]] && echo true || echo false)" ;;
-        disable) api_disable ;;
-        status) api_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
-        show-token) api_show_token ;;
-        cli) shift 2; api_cli "$@" ;;
-        *) usage_die '用法：xm api enable [PORT] [--dashboard] | disable | status | show-token | cli COMMAND [ARGS]' ;;
-      esac
-      ;;
-    realm)
-      local action=${2:-status}
-      case "$action" in
-        enable)
-          local realm_port=${3:?缺少 Realm 端口} realm_url=${4:?缺少 Realm 公网 URL} realm_listen='::' realm_domain='' realm_max=0 realm_arg
-          shift 4
-          while (($#)); do
-            case "$1" in
-              --listen) realm_listen=${2:?缺少 listen 地址}; shift 2;;
-              --tls-domain) realm_domain=${2:?缺少 TLS 域名}; shift 2;;
-              --max-realms) realm_max=${2:?缺少 max_realms}; shift 2;;
-              *) usage_die '用法：xm realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N]';;
-            esac
-          done
-          realm_enable "$realm_port" "$realm_url" "$realm_listen" "$realm_domain" "$realm_max"
-          ;;
-        disable) (($# == 2)) || usage_die '用法：xm realm disable'; realm_disable;;
-        status) (($# <= 3)) || usage_die '用法：xm realm status [--json]'; realm_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
-        show-token) (($# == 2)) || usage_die '用法：xm realm show-token'; realm_show_token;;
-        *) usage_die '用法：xm realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N] | disable | status [--json] | show-token';;
-      esac
-      ;;
+    api|realm)
+      usage_die "xm $cmd 是 sing-box 专属功能（Clash API / Hysteria Realm），xray-manager 不提供；Xray 统计见 xm xray traffic 与 xm user stats。" ;;
     bbr)
       local action=${2:-status}
       case "$action" in
@@ -656,10 +618,8 @@ main() {
         check) local rc=0; core_check_update || rc=$?; [[ "$rc" == 0 || "$rc" == 10 ]] || return "$rc" ;;
         update) core_update "${3:-latest}" ;;
         rollback) core_rollback ;;
-        schema) (($# <= 3)) || usage_die '用法：xm core schema [文件]'; core_schema "${3:-}" ;;
-        capabilities) (($# <= 3)) || usage_die '用法：xm core capabilities [--json]'; core_capabilities "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
+        capabilities) (($# <= 3)) || usage_die '用法：xm core capabilities'; core_capabilities ;;
         policy) core_set_policy "${3:?缺少策略}" ;;
-        channel) core_set_channel "${3:?缺少渠道}" ;;
         auto) core_auto_update ;;
         *) usage_die "未知 core 操作：$action" ;;
       esac
@@ -667,19 +627,15 @@ main() {
     xray)
       local action=${2:-status}
       case "$action" in
-        status) (($# <= 3)) || usage_die '用法：xm xray status'; xray_status ;;
-        install) (($# == 2)) || usage_die '用法：xm xray install'; xray_install ;;
-        update) (($# == 2)) || usage_die '用法：xm xray update'; xray_update ;;
+        status) xray_status ;;
+        install|update) core_update "${3:-latest}" ;;
         config)
           (($# <= 3)) || usage_die '用法：xm xray config [文件]'
-          [[ -x "$SBM_XRAY_BIN" ]] || die 'Xray 尚未安装，请先运行 xm xray install。'
-          local xray_output=${3:-$SBM_XRAY_CONFIG}
-          with_lock xray_render_validate "$xray_output"
-          log_ok "Xray 配置已生成：$xray_output"
+          [[ -x "$SBM_XRAY_BIN" ]] || die 'Xray 尚未安装，请先运行 xm core update。'
+          with_lock xray_render_validate "${3:-$SBM_CONFIG}"
+          log_ok "Xray 配置已生成：${3:-$SBM_CONFIG}"
           ;;
-        enable) (($# == 2)) || usage_die '用法：xm xray enable'; xray_enable ;;
-        disable) (($# == 2)) || usage_die '用法：xm xray disable'; xray_disable ;;
-        policy) (($# == 3)) || usage_die '用法：xm xray policy <manual|notify|patch|stable>'; xray_set_policy "$3" ;;
+        policy) core_set_policy "${3:?缺少策略}" ;;
         api-port) (($# == 3)) || usage_die '用法：xm xray api-port PORT'; xray_set_api_port "$3" ;;
         routing) xray_routing_cli show "${3:-}" ;;
         outbound|balancer|route) shift 1; xray_routing_cli "$@" ;;
@@ -690,7 +646,7 @@ main() {
             reset) xray_traffic_reset ;;
             *) usage_die '用法：xm xray traffic [--json|reset]' ;;
           esac ;;
-        *) usage_die '用法：xm xray status|install|update|config|enable|disable|policy <manual|notify|patch|stable>|api-port PORT|traffic [--json|reset]' ;;
+        *) usage_die '用法：xm xray status|update|config|policy <manual|notify|patch|stable>|api-port PORT|traffic|routing|outbound|warp|balancer|route' ;;
       esac
       ;;
     openlist)
@@ -814,16 +770,8 @@ main() {
         detect-ip) settings_detect_public_ip ;;
         address) settings_set_default_address "${3:?缺少地址}" ;;
         outbound-ip) settings_set_outbound_ip_strategy "${3:?缺少出站 IP 策略}" ;;
-        dns)
-          case ${3:-show} in
-            show) settings_show_addresses 1 | jq '{dns_optimistic,dns_optimistic_timeout,dns_timeout}' ;;
-            optimistic) settings_set_dns optimistic "${4:?缺少 true/false}" ;;
-            optimistic-timeout) settings_set_dns optimistic-timeout "${4:?缺少超时时间}" ;;
-            timeout) settings_set_dns timeout "${4:?缺少超时时间}" ;;
-            *) usage_die '用法：xm settings dns show|optimistic <true|false>|optimistic-timeout DURATION|timeout DURATION' ;;
-          esac
-          ;;
-        *) usage_die '用法：xm settings show|detect-ip|address <auto|HOST>|outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>|dns ...' ;;
+        dns) usage_die 'DNS 乐观缓存与查询超时是 sing-box DNS 模块设置，xray-manager 不提供。' ;;
+        *) usage_die '用法：xm settings show|detect-ip|address <auto|HOST>|outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>' ;;
       esac
       ;;
     *) usage_die "未知命令：$cmd；运行 xm help 查看帮助。" ;;

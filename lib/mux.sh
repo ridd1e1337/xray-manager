@@ -4,7 +4,7 @@
 # Keep the existing nginx_stream state key and topology helpers so saved
 # routes, exports, backups and per-node accounting work with either backend.
 mux_backend() {
-  jq -r '.nginx_stream.backend // (if .nginx_stream.enabled==true or ((.nginx_stream.routes // [])|length)>0 then "nginx" else "sing-box" end)' "${1:-$SBM_STATE}"
+  jq -r '.nginx_stream.backend // (if .nginx_stream.enabled==true or ((.nginx_stream.routes // [])|length)>0 then "nginx" else "nginx" end)' "${1:-$SBM_STATE}"
 }
 
 mux_backend_label() {

@@ -243,7 +243,6 @@ service_log_files() {
   case "$native" in
     xm-openlist) printf '%s\n%s\n' "$SBM_OPENLIST_LOG" "$SBM_OPENLIST_ERROR_LOG" ;;
     xm-xray) printf '%s\n%s\n' "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" ;;
-    xm-sing-box) printf '%s\n%s\n' "$SBM_SINGBOX_LOG" "$SBM_SINGBOX_ERROR_LOG" ;;
     xm-cloudflared) printf '%s\n%s\n' "$SBM_TUNNEL_LOG" "$SBM_TUNNEL_ERROR_LOG" ;;
     xm-nginx-stream) printf '%s\n%s\n' "$SBM_NGINX_STREAM_LOG" "$SBM_NGINX_STREAM_ERROR_LOG" ;;
   esac
@@ -287,7 +286,7 @@ ensure_singbox_bind_capability() {
   local binary=${1:-$SBM_XRAY_BIN}
   [[ $(init_system 2>/dev/null || true) == openrc ]] || return 0
   command_exists setcap || die 'OpenRC 低权限服务需要 setcap；请安装 Alpine 的 libcap 包。'
-  setcap 'cap_net_bind_service=+ep' "$binary" || die "无法为 sing-box 设置低端口能力：$binary"
+  setcap 'cap_net_bind_service=+ep' "$binary" || die "无法为 Xray 设置低端口能力：$binary"
 }
 
 singbox_has_bind_capability() {

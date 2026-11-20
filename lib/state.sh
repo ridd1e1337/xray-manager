@@ -26,9 +26,7 @@ state_default_json() {
         core_update_policy: "notify",
         manager_auto_update: true,
         manager_update_minute: $manager_update_minute,
-        cloudflared_update_policy: "notify",
-        xray_update_policy: "notify",
-        vless_engine: "xray"
+        cloudflared_update_policy: "notify"
       },
       tunnel: {
         mode: "none",
@@ -54,7 +52,7 @@ state_default_json() {
       },
       nginx_stream: {
         enabled: false,
-        backend: "sing-box",
+        backend: "nginx",
         listen: "::",
         port: 443,
         routes: []
@@ -185,8 +183,6 @@ state_migrate() {
 state_normalize_v2_file() {
   local file=$1 tmp
   tmp=$(mktemp "$(dirname "$file")/.state-normalize.XXXXXX")
-  # sing-box never runs VLESS. Legacy "sing-box" or missing engines migrate to
-  # Xray; the next render installs official Xray and keeps node credentials.
   jq --argjson manager_update_minute "$((RANDOM % 180))" '
     .settings.default_server_address_source //= (if .settings.default_server_address=="" then "auto" else "manual" end)
     | if .settings.manager_auto_update==null then .settings.manager_auto_update=true else . end
@@ -198,8 +194,8 @@ state_normalize_v2_file() {
     | .settings.dns_optimistic //= false
     | .settings.dns_optimistic_timeout //= "3d"
     | .settings.dns_timeout //= "10s"
-    | .settings.xray_update_policy //= "notify"
-    | .settings.vless_engine=(if .settings.vless_engine=="disabled" then "disabled" else "xray" end)
+    | .settings |= del(.xray_update_policy, .vless_engine)
+    | if (.nginx_stream.backend // "")=="sing-box" then .nginx_stream.backend="nginx" else . end
     | .api //= {enabled:false,listen:"127.0.0.1",port:9090,dashboard:false}
     | .realm //= {enabled:false,listen:"::",port:9443,public_url:"",tls_domain:"",user_name:"default",max_realms:0}
     | .realm.enabled //= false
@@ -211,7 +207,7 @@ state_normalize_v2_file() {
     | .realm.max_realms //= 0
     | .nginx_stream //= {enabled:false,listen:"::",port:443,routes:[]}
     | if .nginx_stream.backend==null then
-        .nginx_stream.backend=(if .nginx_stream.enabled==true or ((.nginx_stream.routes // [])|length)>0 then "nginx" else "sing-box" end)
+        .nginx_stream.backend=(if .nginx_stream.enabled==true or ((.nginx_stream.routes // [])|length)>0 then "nginx" else "nginx" end)
       else . end
     | .notifications //= {enabled:false,provider:"none",traffic_thresholds:[80,90,100]}
     | .notifications.enabled //= false
@@ -475,8 +471,7 @@ state_validate() {
       and (.manager_auto_update | type == "boolean")
       and (.manager_update_minute | type == "number" and floor==. and .>=0 and .<180)
       and (.cloudflared_update_policy | IN("manual", "notify", "patch", "stable"))
-      and (.xray_update_policy | IN("manual", "notify", "patch", "stable"))
-      and (.vless_engine | IN("xray", "disabled")))
+      and true)
     and (.tunnel | type == "object"
       and (.mode | IN("none", "fixed", "quick", "managed"))
       and ((.node_id | type) == "string" or (.node_id | type) == "null")

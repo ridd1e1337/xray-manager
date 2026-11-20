@@ -68,7 +68,7 @@ health_resource_issues() {
   awk -v value="$load" -v max="$load_max" -v cores="$cores" 'BEGIN {exit !(value > max*cores)}' && health_issue warning resource_load_high resource "系统 1 分钟负载超过每核 ${load_max}。"
   (( $(jq -r '.file_descriptors.used_percent' <<<"$metrics") > fd_max )) && health_issue warning resource_fd_high resource "系统文件描述符使用率超过 ${fd_max}%。"
   (( $(jq -r '.fail2ban_banned' <<<"$metrics") >= banned_max )) && health_issue warning security_banned_high fail2ban "Fail2ban 当前封禁 IP 数达到 $(jq -r '.fail2ban_banned' <<<"$metrics")。"
-  (( $(jq -r '.service_restarts' <<<"$metrics") >= restart_max )) && health_issue warning service_restart_high sing-box "sing-box 累计自动重启次数达到 $(jq -r '.service_restarts' <<<"$metrics")。"
+  (( $(jq -r '.service_restarts' <<<"$metrics") >= restart_max )) && health_issue warning service_restart_high Xray "Xray 累计自动重启次数达到 $(jq -r '.service_restarts' <<<"$metrics")。"
   return 0
 }
 
@@ -89,7 +89,7 @@ health_collect_json() {
     if [[ "$SBM_SKIP_INIT" != 1 ]]; then
       enabled=$(state_enabled_count)
       if state_runtime_required && ! service_active "$SBM_SERVICE"; then
-        health_issue error singbox_inactive sing-box '存在启用节点或 API，但 sing-box 服务未运行。'
+        health_issue error singbox_inactive Xray '存在启用节点或 API，但 Xray 服务未运行。'
       fi
       if xray_runtime_required && ! service_active "$SBM_XRAY_SERVICE"; then
         health_issue error xray_inactive xray '存在启用的 VLESS 节点，但 Xray 服务未运行。'
