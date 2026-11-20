@@ -4,6 +4,10 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.19
+
+- `xm update` 的前置检查同样接受“链接丢失但核心已下载”的情况，让 alpha.17 及更早版本更新后丢失 `bin/xray` 的机器可以直接修复。
+
 ## 0.1.0-alpha.18
 
 - 修复 `xm update` 失败（`--keep-core 需要已有 Xray 核心`）：更新脚本时连同 `bin/xray` 链接一起删除。现在保留 `bin/`，
