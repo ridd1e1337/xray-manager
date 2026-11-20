@@ -10,7 +10,7 @@ node_protocol_label() {
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
     shadowsocks) printf 'Shadowsocks' ;;
     hysteria2) printf 'Hysteria2' ;;
-    trojan) printf 'Trojan TLS' ;;
+    trojan) printf 'Trojan' ;;
     vless) printf 'VLESS' ;;
     socks) printf 'SOCKS5' ;;
     http) printf 'HTTP Proxy' ;;
@@ -269,7 +269,7 @@ _node_add() {
       secret=$(jq -n --arg password "$(random_password 24)" --arg obfs_password "$([[ -n "$obfs" ]] && random_password 18 || true)" '{password:$password,obfs_password:$obfs_password}')
       ;;
     trojan)
-      protocol=trojan; base=trojan; transport=tcp; port=${port:-443}; domain=${domain:?Trojan 必须指定 --domain。}; validate_domain "$domain" || die "无效域名：$domain"; name=${name:-Trojan}; address=${address:-${default_address:-$domain}}; secret=$(jq -n --arg password "$(random_password 24)" '{password:$password}')
+      protocol=trojan; base=trojan; transport=tcp; port=${port:-443}; [[ -n "$domain" || "$security" != reality ]] || domain=$SBM_RECOMMENDED_REALITY_SNI; [[ -n "$domain" ]] || die 'Trojan TLS 必须指定 --domain。'; validate_domain "$domain" || die "无效域名：$domain"; name=${name:-Trojan}; address=${address:-${default_address:-$domain}}; secret=$(jq -n --arg password "$(random_password 24)" '{password:$password}')
       ;;
     vless)
       protocol=vless; base=vless
@@ -332,8 +332,8 @@ _node_add() {
   esac
   if [[ "$address_supplied" == 0 ]]; then
     case "$protocol" in
-      vless)
-        if [[ "$security" != tls ]]; then address=$(node_auto_address ''); else address=$(node_auto_address "$domain"); fi
+      vless|trojan)
+        if [[ "$security" == reality || ( "$protocol" == vless && "$security" != tls ) ]]; then address=$(node_auto_address ''); else address=$(node_auto_address "$domain"); fi
         ;;
       *) address=$(node_auto_address "$domain");;
     esac
@@ -344,7 +344,7 @@ _node_add() {
     secret=$(jq '{password}' <<<"$secret")
   fi
   if [[ "$protocol" == trojan && "$security_supplied" == 1 && "$security" == reality ]]; then
-    [[ -n "$handshake_server" ]] || die 'Trojan Reality 必须指定 --handshake-server。'
+    [[ -n "$handshake_server" ]] || handshake_server=$domain
     reality_secret=$(protocol_vless_generate_reality_secret) || return 1
   fi
   if [[ ( "$protocol" == vless || "$protocol" == trojan ) && "$security" == reality && -n "$reality_secret" ]]; then

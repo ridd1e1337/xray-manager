@@ -4,22 +4,22 @@
 xray-manager 只使用 Xray-core，因此 3x-ui 中**不由 Xray 运行**的 MTProto（mtg sidecar）、
 AmneziaWG（amneziawg-go）、TUIC（内置 Go 服务）不在范围内；TUIC 等可使用 sb-manager。
 
-状态：✅ 已支持并实测　🟡 可通过原生 JSON 设置（`--xray-inbound-json` / `--transport-json` / `--tls-json` / `--sockopt-json`）　⬜ 待做
+状态：✅ 已支持并用真实流量实测　🟡 可通过原生 JSON 设置（`--xray-inbound-json` / `--transport-json` / `--tls-json` / `--sockopt-json`）　⬜ 待做
 
 ## 协议
 
 | 协议 | Xray protocol | 状态 | 说明 |
 |---|---|---|---|
 | VLESS | vless | ✅ | decryption（X25519/ML-KEM，含 xorpub/random 变体）、flow、fallbacks、reverse |
-| VMess | vmess | ⬜ | 3x-ui 允许任意传输与 TLS；xm 当前只有 WS + CF Tunnel |
-| Trojan | trojan | ⬜ | 3x-ui 允许任意传输、TLS/Reality、fallbacks；xm 当前为 RAW + TLS |
-| Shadowsocks | shadowsocks | 🟡 | method（2022 与 AEAD）、network、ivCheck；传输与 TLS 待做 |
-| Hysteria2 | hysteria | ✅ | Salamander、masquerade；udpIdleTimeout、quicParams 待结构化 |
-| WireGuard | wireguard | ⬜ | secretKey、mtu、noKernelTun、peers（客户端即 peer） |
-| HTTP | http | ✅ | accounts、allowTransparent 待结构化 |
+| VMess | vmess | ✅ | 任意传输，none/TLS；另有 WS + CF Tunnel 模板 |
+| Trojan | trojan | ✅ | 任意传输，TLS/REALITY，fallbacks |
+| Shadowsocks | shadowsocks | ✅ | 2022 多用户与 AEAD、network、传输与 TLS；ivCheck 🟡（JSON） |
+| Hysteria2 | hysteria | ✅ | Salamander、masquerade；udpIdleTimeout、quicParams 🟡（JSON） |
+| WireGuard | wireguard | ✅ | secretKey、mtu、noKernelTun、每用户一个 peer |
+| HTTP | http | ✅ | accounts；allowTransparent 🟡（JSON） |
 | Mixed/SOCKS | socks | ✅ | auth、accounts、udp、ip |
-| Tunnel（dokodemo-door） | tunnel | ⬜ | rewriteAddress/Port、portMap、allowedNetwork、followRedirect |
-| MASQUE | masque | ⬜ | address、mtu、clients(pass)、masqueSettings.path，TLS h3 |
+| Tunnel（dokodemo-door） | tunnel | ✅ | 目标地址/端口、network、followRedirect；portMap 🟡（JSON） |
+| MASQUE | masque | ✅ | address、mtu、users(pass)、masqueSettings.path，TLS h3 |
 | TUN | tun | ⬜ | 主机网络入口，默认不提供（会改动主机路由） |
 
 ## 传输（vmess/vless/trojan/shadowsocks 可选）

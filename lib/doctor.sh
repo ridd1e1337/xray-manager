@@ -607,7 +607,7 @@ show_logs() {
   local target=${1:-all} lines=${2:-100}
   [[ "$SBM_SKIP_INIT" != 1 ]] || { log_warn '未接管服务管理器，无法读取服务日志。'; return; }
   case "$target" in
-    singbox|core) service_logs "$SBM_SERVICE" "$lines" 0 ;;
+    xray|core|singbox) service_logs "$SBM_SERVICE" "$lines" 0 ;;
     tunnel|cloudflared) service_logs "$SBM_TUNNEL_SERVICE" "$lines" 0 ;;
     mux) service_logs "$(mux_service)" "$lines" 0 ;;
     nginx|nginx-stream) service_logs "$SBM_NGINX_STREAM_SERVICE" "$lines" 0 ;;

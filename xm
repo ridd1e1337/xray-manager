@@ -74,31 +74,25 @@ sb_help_full() {
   xm vps systems                 查看各功能支持的 Linux 系统与当前环境
   xm node list [--json] [--tag TAG] [--region REGION] 列出节点
   xm quick                       添加节点向导
-  xm node add <vmess|ss|hy2|trojan|vless|socks|http|mixed> [参数]
+  xm node add <vless|vmess|vmess-ws-cf|trojan|ss|hy2|wireguard|masque|tunnel|socks|http|mixed> [参数]
   xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
   xm node show <ID>
   xm node enable|disable|delete|rotate <ID>
   xm node enable-all|disable-all --tag TAG|--region REGION
   xm node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]
-  xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH
+  xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH|--listen IP
                  [--remark TEXT] [--region REGION] [--purpose PURPOSE] [--line LINE] [--tags a,b]
-                 [--method METHOD] [--network tcp|udp] [--obfs TYPE] [--obfs-host DOMAIN]
-                 [--obfs-min-packet-size N] [--obfs-max-packet-size N]
-                 [--disable-chrome-parrot|--enable-chrome-parrot] [--bbr-profile PROFILE]
-                 [--brutal-debug|--no-brutal-debug] [--masquerade URL]
-                 [--security tls|reality] [--flow FLOW] [--handshake-server DOMAIN] [--handshake-port N]
-                 [--congestion-control cubic|new_reno|bbr] [--strict-mode true|false]
-                 [--wildcard-sni off|authed|all] [--snell-version 5|6] [--snell-mode MODE]
-                 [--sing-box-inbound-json JSON|@FILE] [--sing-box-outbound-json JSON|@FILE]
-                 [--xray-inbound-json JSON|@FILE] [--xray-outbound-json JSON|@FILE]
-                 VLESS: [--transport raw|ws|grpc|httpupgrade|xhttp|kcp|hysteria] [--security none|tls|reality]
-                 [--host H] [--service-name N] [--xhttp-mode MODE] [--tls-server-name SNI] [--fingerprint FP]
-                 [--alpn a,b] [--pinned-cert-sha256 HEX[,HEX]] [--verify-name NAME[,NAME]]
-                 [--vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
-                 [--fallback-dest PORT|HOST:PORT|none] [--fallbacks JSON|@FILE|none]
+                 [--method METHOD] [--network tcp|udp] [--obfs salamander|none] [--masquerade URL]
+                 传输（VLESS/VMess/Trojan/SS）：[--transport raw|ws|grpc|httpupgrade|xhttp|kcp|hysteria]
+                 [--security none|tls|reality] [--host H] [--service-name N] [--xhttp-mode MODE]
+                 [--tls-server-name SNI] [--fingerprint FP] [--alpn a,b] [--pinned-cert-sha256 HEX[,HEX]]
+                 [--verify-name NAME[,NAME]] [--handshake-server DOMAIN] [--handshake-port N]
+                 VLESS：[--flow FLOW] [--vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
+                 回落（VLESS/Trojan）：[--fallback-dest PORT|HOST:PORT|none] [--fallbacks JSON|@FILE|none]
                  [--sniffing on|route-only|off] [--sniff-dest http,tls,quic,fakedns]
                  [--tcp-fast-open true|false] [--accept-proxy-protocol true|false] [--sockopt-json JSON|@FILE]
                  [--transport-json JSON|@FILE] [--tls-json JSON|@FILE]
+                 [--xray-inbound-json JSON|@FILE] [--xray-outbound-json JSON|@FILE]
   xm user list <NODE_ID>
   xm user add <NODE_ID> <USER_ID> [NAME]
   xm user enable|disable|delete|rotate <NODE_ID> <USER_ID>
@@ -180,7 +174,7 @@ sb_help_full() {
   xm acme update
   xm doctor [--repair|--network]
   xm repair                      修复权限、配置与服务状态
-  xm logs [all|singbox|tunnel|mux|nginx|follow] [行数]
+  xm logs [all|xray|tunnel|mux|nginx|follow] [行数]
   xm backup [文件] [--recipient AGE_RECIPIENT]
   xm restore <文件> [--identity AGE_PRIVATE_KEY] [--yes]
   xm restart
@@ -190,16 +184,17 @@ sb_help_full() {
   --id ID --name NAME --port PORT --domain DOMAIN --address HOST
   TLS:   没有可用证书时自动创建 Cloudflare DNS only 记录并签发证书。
          CLI 请先执行 xm cert setup-cloudflare；已有冲突 DNS 会被拒绝，--disabled 不申请证书。
-  VMess: --path PATH
-  SS:    --method 2022-blake3-aes-128-gcm|... --network tcp
-  HY2:   --obfs salamander|gecko --obfs-min-packet-size N --obfs-max-packet-size N
-         --disable-chrome-parrot --masquerade URL (Gecko/Chrome 选项需要 sing-box 1.14+)
-  Snell: --snell-version 5|6 --snell-mode default|unshaped|unsafe-raw
-         v5 可用 --obfs none|http [--obfs-host DOMAIN]；v6 需要 sing-box 1.14 rc.2+
+  VLESS/VMess/Trojan/SS：--transport … --security … 见 xm node set；Trojan/VLESS 可用 Reality。
+  VMess-WS-CF：--path PATH（配合 Cloudflare Tunnel）
+  SS:    --method 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305
+         |aes-128-gcm|aes-256-gcm|chacha20-ietf-poly1305|xchacha20-ietf-poly1305 --network tcp|udp
+  HY2:   --obfs salamander --masquerade URL
+  WireGuard：--subnet 10.x.y.0/24 --mtu 1420（每个用户一个 peer）
+  MASQUE：--domain DOMAIN --subnet 10.x.y.0/24 --mtu 1280（HTTP/3 connect-ip）
+  Tunnel：--target HOST:PORT --network tcp|udp|tcp,udp [--follow-redirect]
   SOCKS5/HTTP/mixed: --listen 127.0.0.1|::1|0.0.0.0|::（默认本机，自动生成认证）
-  sing-box 扩展：--sing-box-inbound-json JSON|@FILE --sing-box-outbound-json JSON|@FILE
-                 可传入当前核心支持的任意扩展字段；type、tag、地址、端口、用户和凭据由管理器保护。
-  Xray VLESS：--xray-inbound-json JSON|@FILE 可自定义 streamSettings、TLS、Reality、WS、gRPC、HTTPUpgrade、XHTTP 等字段。
+  Xray 扩展：--xray-inbound-json JSON|@FILE 可写入任意 Xray 入站字段（sniffing、streamSettings、
+             sockopt、finalmask 等）；protocol、tag、端口、用户和凭据由管理器保护。
   通用:  --disabled --remark TEXT --region REGION --purpose PURPOSE --line LINE --tags a,b
 EOF_HELP
 }
@@ -208,7 +203,7 @@ SBM_HELP_TOPICS='status node quick user share export subscription substore tunne
 
 sb_help_overview() {
   cat <<EOF_OVERVIEW
-xray-manager ${SBM_VERSION}：状态驱动的 sing-box 多协议管理器
+xray-manager ${SBM_VERSION}：状态驱动的 Xray-core 多协议管理器
 
 用法：xm [通用选项] <命令> [参数]
 直接运行 xm 打开交互面板，新手推荐从面板开始。
@@ -295,7 +290,7 @@ sb_help() {
   local topic=${1:-}
   case "$topic" in
     '') sb_help_overview ;;
-    all) printf 'xray-manager %s：状态驱动的 sing-box 多协议管理器\n\n' "$SBM_VERSION"; sb_help_full ;;
+    all) printf 'xray-manager %s：状态驱动的 Xray-core 多协议管理器\n\n' "$SBM_VERSION"; sb_help_full ;;
     *)
       if sb_help_is_topic "$topic"; then sb_help_topic "$topic"; return 0; fi
       local guess; guess=$(sb_suggest_command "$topic")
