@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.15
+
+- 性能：状态内容与版本都未变化时跳过启动时的迁移、校验与凭据检查（`/run/xray-manager/.state-ready`），只读命令与面板每页更快；
+  状态页并行探测 UFW/Fail2ban，资源指标每页只算一次。改坏的状态仍会被完整检查。
+
 ## 0.1.0-alpha.14
 
 - 不留垃圾：状态迁移失败时不再在 `/etc/xray-manager` 留下空的 `.state-normalize.*`；拿到管理锁时清理配置与密钥目录中过期的点开头临时文件。
