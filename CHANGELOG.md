@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.17
+
+- 修复 Xray 服务启动失败（`203/EXEC Permission denied`）：`/usr/local/lib/xray-manager/bin` 在 `umask 027` 下被创建为 0750，
+  非 root 的服务用户无法进入。现以 0755 创建，权限修复也覆盖该目录，已安装的机器下次操作时自动修正。
+- 添加/修改 VLESS 节点时，监听地址改为带说明的选项（公网 IPv4+IPv6、仅 IPv4、仅本机、指定网卡 IP）。
+- 客户端 TLS 指纹改为选项：chrome、firefox、safari、ios、android、edge、360、qq、random、randomized、randomizednoalpn，或手动输入。
+
 ## 0.1.0-alpha.16
 
 - xray-manager 只使用 Xray：移除 sing-box 内置 TCP/SNI 复用后端（只保留 nginx/caddy/nginx-site，旧状态自动改为 nginx）、

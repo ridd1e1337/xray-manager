@@ -43,7 +43,7 @@ doctor_repair_runtime() {
   if [[ ! -x "$SBM_XRAY_BIN" ]]; then
     candidate=$(find "$SBM_CORE_DIR/xray" -mindepth 2 -maxdepth 2 -type f -name xray -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')
     [[ -n "$candidate" ]] || die '未找到可用于修复的 Xray 核心，请重新执行安装命令。'
-    mkdir -p "$(dirname "$SBM_XRAY_BIN")" && ln -sfn "$candidate" "$SBM_XRAY_BIN"
+    mkdir -p -m 0755 "$(dirname "$SBM_XRAY_BIN")" && ln -sfn "$candidate" "$SBM_XRAY_BIN"
   fi
   if [[ ! -x "$SBM_CLOUDFLARED_BIN" ]]; then
     candidate=$(find "$SBM_CORE_DIR/cloudflared" -mindepth 2 -maxdepth 2 -type f -name cloudflared -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')

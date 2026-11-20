@@ -488,6 +488,53 @@ ui_use_recommended() {
   [[ ! "$__ui_answer" =~ ^[Nn]$ ]]
 }
 
+# Listen address as a plain-language choice; the current value is the default.
+ui_choose_listen() {
+  local -n __listen=$1
+  local current=${2:-::} choice value def
+  case "$current" in '::') def=1;; 0.0.0.0) def=2;; 127.0.0.1) def=3;; ::1) def=4;; *) def=5;; esac
+  printf '\n监听地址（决定谁能连到这个端口）：\n'
+  printf '1. 公网 IPv4 + IPv6（::，推荐，客户端直接连接本机）\n'
+  printf '2. 仅公网 IPv4（0.0.0.0，本机 IPv6 不可用或不想开放 IPv6 时）\n'
+  printf '3. 仅本机 IPv4（127.0.0.1，外部连不上；前面另有 Nginx/Caddy/CF Tunnel 转发时用）\n'
+  printf '4. 仅本机 IPv6（::1，同上，用于 IPv6 回环）\n'
+  printf '5. 指定某个网卡 IP（多 IP 机器只在其中一个 IP 上监听）%s\n' "$([[ $def == 5 ]] && printf '，当前 %s' "$current")"
+  printf '0. 返回\n'
+  ui_menu_choice choice '选择监听地址（回车=推荐/当前）' 5 "$def" || return 1
+  case "$choice" in
+    1) __listen='::';; 2) __listen=0.0.0.0;; 3) __listen=127.0.0.1;; 4) __listen=::1;;
+    5) value=$([[ $def == 5 ]] && printf '%s' "$current")
+       prompt_value value '本机 IP 地址' "$value" || return 1
+       [[ "$value" =~ ^[0-9a-fA-F:.]+$ ]] || { log_error '请输入 IP 地址。'; return 1; }
+       __listen=$value;;
+    *) return 1;;
+  esac
+}
+
+# uTLS client fingerprints supported by Xray clients.
+ui_choose_fingerprint() {
+  local -n __fp=$1
+  local current=${2:-chrome} choice i def=1 custom
+  local -a fps=(chrome firefox safari ios android edge 360 qq random randomized randomizednoalpn)
+  local -a desc=('Chrome（推荐，最常见）' 'Firefox' 'Safari（macOS）' 'iOS（iPhone/iPad）' 'Android（OkHttp）' 'Edge' '360 浏览器' 'QQ 浏览器'
+    'random：每次随机选一种常见浏览器' 'randomized：随机生成指纹' 'randomizednoalpn：随机生成且不带 ALPN')
+  printf '\n客户端 TLS 指纹（伪装成哪种浏览器的握手；只写入分享链接/客户端配置）：\n'
+  for i in "${!fps[@]}"; do
+    printf '%d. %s\n' "$((i + 1))" "${desc[$i]}"
+    [[ "${fps[$i]}" != "$current" ]] || def=$((i + 1))
+  done
+  printf '%d. 手动输入%s\n' "$(( ${#fps[@]} + 1 ))" "$([[ " ${fps[*]} " == *" $current "* ]] || printf '（当前 %s）' "$current")"
+  [[ " ${fps[*]} " == *" $current "* ]] || def=$(( ${#fps[@]} + 1 ))
+  printf '0. 返回\n'
+  ui_menu_choice choice '选择指纹（回车=推荐/当前）' "$(( ${#fps[@]} + 1 ))" "$def" || return 1
+  if (( choice >= 1 && choice <= ${#fps[@]} )); then __fp=${fps[$((choice - 1))]}
+  elif (( choice == ${#fps[@]} + 1 )); then
+    custom=$current; prompt_value custom '指纹名称' "$custom" || return 1
+    [[ "$custom" =~ ^[a-z0-9_]+$ ]] || { log_error '指纹名称只能包含小写字母、数字和下划线。'; return 1; }
+    __fp=$custom
+  else return 1; fi
+}
+
 # Collect related transport/security fields before changing a node. Editing
 # submits one candidate so switching families never applies a half profile.
 ui_vless_collect() {
@@ -497,7 +544,7 @@ ui_vless_collect() {
   local current_transport current_security auth current_auth
   __vless_args=()
   listen=$(jq -r '.listen // "::"' <<<"$node") || return 1
-  prompt_value listen '监听地址 :: / 0.0.0.0 / 127.0.0.1 / ::1' "$listen" || return 1
+  ui_choose_listen listen "$listen" || return 1
   __vless_args+=(--listen "$listen")
   current_transport=$(jq -r '.xray.inbound.streamSettings.network // "raw"' <<<"$node") || return 1
   case "$current_transport" in tcp) current_transport=raw;; websocket) current_transport=ws;; splithttp) current_transport=xhttp;; mkcp) current_transport=kcp;; esac
@@ -586,7 +633,7 @@ ui_vless_collect() {
       if $security=="reality" then (.xray.outbound.streamSettings.realitySettings.fingerprint // "chrome")
       else (.xray.outbound.streamSettings.tlsSettings.fingerprint // "chrome") end' <<<"$node") || return 1
     prompt_value sni '客户端 SNI' "$sni" || return 1
-    prompt_value fingerprint '客户端指纹' "$fingerprint" || return 1
+    ui_choose_fingerprint fingerprint "$fingerprint" || return 1
     __vless_args+=(--tls-server-name "$sni" --fingerprint "$fingerprint")
     if [[ "$security" == tls ]]; then
       alpn=$(jq -r '(.xray.outbound.streamSettings.tlsSettings.alpn // []) | join(",")' <<<"$node") || return 1

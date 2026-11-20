@@ -6,7 +6,7 @@ SBM_LIB="${SBM_LIB:-${SBM_PREFIX}/lib/xray-manager}"
 SBM_BIN_DIR="${SBM_BIN_DIR:-${SBM_PREFIX}/bin}"
 if [[ -z ${SBM_VERSION:-} ]]; then
   if [[ -r "$SBM_LIB/VERSION" ]]; then SBM_VERSION=$(tr -d '[:space:]' <"$SBM_LIB/VERSION" 2>/dev/null || true); fi
-  SBM_VERSION=${SBM_VERSION:-0.1.0-alpha.16}
+  SBM_VERSION=${SBM_VERSION:-0.1.0-alpha.17}
 fi
 SBM_ETC="${SBM_ETC:-/etc/xray-manager}"
 SBM_VAR="${SBM_VAR:-/var/lib/xray-manager}"
@@ -228,7 +228,7 @@ format_hostport() {
 
 ensure_program_permissions() {
   local path
-  for path in "$(dirname "$SBM_LIB")" "$SBM_LIB" "$SBM_BIN_DIR" "$SBM_CORE_DIR"; do
+  for path in "$(dirname "$SBM_LIB")" "$SBM_LIB" "$SBM_BIN_DIR" "$(dirname "$SBM_XRAY_BIN")" "$(dirname "$SBM_CLOUDFLARED_BIN")" "$SBM_CORE_DIR"; do
     [[ -d "$path" ]] && chmod 0755 "$path"
   done
   if [[ -d "$SBM_CORE_DIR" ]]; then

@@ -411,7 +411,7 @@ _xray_switch_to() {
   render_config_from_state "$SBM_STATE" "$config" && xray_validate_config "$target" "$config" || { rm -f "$config"; return 1; }
   backup=$(snapshot_create core-switch) || { rm -f "$config"; return 1; }
   touch "$backup/force-core-restart" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
-  mkdir -p "$(dirname "$SBM_XRAY_BIN")" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
+  mkdir -p -m 0755 "$(dirname "$SBM_XRAY_BIN")" || { rm -f "$config"; rm -rf -- "$backup"; return 1; }
   if ln -sfn "$target" "$SBM_XRAY_BIN.new" && mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"; then
     safe_install_file "$config" "$SBM_CONFIG" 0640 && set_group_if_exists "$SBM_SERVICE_USER" "$SBM_CONFIG" || rc=1
     (( rc != 0 )) || xray_service_reconcile 1 || rc=1
@@ -434,7 +434,7 @@ _xray_install_binary() {
   local target
   [[ ! -x "$SBM_XRAY_BIN" ]] || return 0
   target=$(xray_download_version latest) || return 1
-  mkdir -p "$(dirname "$SBM_XRAY_BIN")" && ln -sfn "$target" "$SBM_XRAY_BIN.new" && mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"
+  mkdir -p -m 0755 "$(dirname "$SBM_XRAY_BIN")" && ln -sfn "$target" "$SBM_XRAY_BIN.new" && mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"
 }
 
 _xray_install() {

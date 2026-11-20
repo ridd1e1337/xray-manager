@@ -563,7 +563,7 @@ validate_runtime_binary_path xray "$core_binary"
 ensure_program_permissions
 prepare_singbox_binary_for_backend "$core_binary" "$BACKEND"
 if [[ "$KEEP_CORE" != 1 ]]; then
-  mkdir -p "$(dirname "$SBM_XRAY_BIN")"
+  mkdir -p -m 0755 "$(dirname "$SBM_XRAY_BIN")"
   ln -sfn "$core_binary" "$SBM_XRAY_BIN.new"; mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"
 fi
 prepare_singbox_binary_for_backend "$SBM_XRAY_BIN" "$BACKEND"
