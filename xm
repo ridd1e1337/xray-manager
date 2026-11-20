@@ -102,6 +102,7 @@ sb_help_full() {
   xm user online [NODE_ID]        在线用户与 IP
   xm user purge-depleted [NODE_ID]  删除流量耗尽或已到期的用户
   xm user set-usage NODE_ID USER_ID SIZE   修改本周期已用流量
+  xm user tg NODE_ID USER_ID TG_USER_ID|none   绑定 Telegram：用户私聊机器人 /me /link，并接收到期/流量预警
   xm user export NODE_ID USER_ID [文件] | import NODE_ID 文件 [新ID]   迁移用户（含凭据，客户端无需重导）
   xm user enable|disable|delete|rotate <NODE_ID> <USER_ID>
   xm user limit <NODE_ID> <USER_ID> [--quota SIZE|unlimited] [--reset-day 1-28|none]
@@ -142,7 +143,7 @@ sb_help_full() {
   xm traffic disable|remove NODE_ID
   xm traffic reset NODE_ID|all [--yes]
   xm notify status|configure|disable|test|check
-  xm notify bot enable --admin TG_USER_ID[,ID] | disable | status   Telegram 命令机器人
+  xm notify bot enable --admin TG_USER_ID[,ID] | disable | status | backup on|off   Telegram 命令机器人
   xm health status|check|enable|disable [WARN_DAYS]
   xm health configure --disk-free N --memory-max N [...]
   xm config validate|diff [--json]
@@ -464,6 +465,7 @@ main() {
             (($# >= 2)) || die '用法：xm user add NODE_ID USER_ID [NAME] | xm user add NODE_ID --count N [--prefix P]'; node_user_add "$1" "$2" "${3:-$2}"
           fi ;;
         purge-depleted) node_user_purge_depleted "${1:-}" ;;
+        tg) (($# == 3)) || die '用法：xm user tg NODE_ID USER_ID TG_USER_ID|none'; user_tg_set "$1" "$2" "$3" ;;
         set-usage) (($# == 3)) || die '用法：xm user set-usage NODE_ID USER_ID SIZE'; user_usage_set "$1" "$2" "$3" ;;
         export) (($# >= 2)) || die '用法：xm user export NODE_ID USER_ID [文件]'; user_export "$1" "$2" "${3:-}" ;;
         import) (($# >= 2)) || die '用法：xm user import NODE_ID 文件 [新用户ID]'; user_import "$1" "$2" "${3:-}" ;;

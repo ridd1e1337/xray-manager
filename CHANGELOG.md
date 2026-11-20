@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.10
+
+- Telegram 机器人（3x-ui 对齐）：`/online`；`/backup` 把完整备份发到管理员会话（含凭据，需 `xm notify bot backup on` 开启）。
+- `xm user tg NODE USER TG_ID`：绑定后该用户私聊机器人可用 `/me`（用量、到期）与 `/link`（分享链接），只能看到自己的数据。
+- 到期前 3 天、流量达 80% 时各提醒一次（管理员通知渠道；已绑定的用户也会收到），按周期去重。
+
 ## 0.1.0-alpha.9
 
 - `xm node clone SRC NEW`：复制节点全部设置（含传输、REALITY 目标、QUIC 参数），自动选端口并重新生成全部凭据。
