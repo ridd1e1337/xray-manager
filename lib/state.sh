@@ -249,20 +249,10 @@ state_normalize_v2_file() {
         | if .protocol == "hysteria2" then
             .obfs //= {}
             | .obfs.type //= ""
-            | .disable_chrome_parrot //= false
-            | .bbr_profile //= ""
-            | .brutal_debug //= false
-          else . end
-        | if .protocol == "snell" then
-            .snell_version //= 5
-            | .snell_mode //= "default"
-            | .credential_mode //= (if (.users|length)>1 then "multi" else "single" end)
-          else . end
-        | if .protocol == "hysteria2" then
-            .realm_enabled //= false
-            | .realm_id //= ""
-            | .realm_ip_version //= 0
-            | .realm_port_mapping //= false
+            # sing-box-only Hysteria2 options from sb-manager states.
+            | del(.disable_chrome_parrot, .bbr_profile, .brutal_debug,
+                  .realm_enabled, .realm_id, .realm_ip_version, .realm_port_mapping, .obfs.min_packet_size, .obfs.max_packet_size)
+            | if .obfs.type == "gecko" then .obfs = {} else . end
           else . end
       )
   ' "$file" >"$tmp"
@@ -416,17 +406,7 @@ state_validate() {
         (.domain | nonempty)
         and (.server_address | string)
         and (.obfs | type == "object")
-        and ((.obfs.type // "") | IN("", "salamander", "gecko"))
-        and ((.obfs.min_packet_size // 512) | type == "number" and floor == . and . >= 64 and . <= 1500)
-        and ((.obfs.max_packet_size // 1200) | type == "number" and floor == . and . >= 64 and . <= 1500)
-        and ((.obfs.type // "") != "gecko" or ((.obfs.min_packet_size // 512) <= (.obfs.max_packet_size // 1200)))
-        and ((.disable_chrome_parrot // false) | type == "boolean")
-        and ((.bbr_profile // "") | IN("", "conservative", "standard", "aggressive"))
-        and ((.brutal_debug // false) | type == "boolean")
-        and ((.realm_enabled // false) | type == "boolean")
-        and ((.realm_id // "") | type == "string" and length <= 64)
-        and ((.realm_ip_version // 0) | type == "number" and IN(0, 4, 6))
-        and ((.realm_port_mapping // false) | type == "boolean")
+        and ((.obfs.type // "") | IN("", "salamander"))
         and (.masquerade | string)
       elif .protocol == "trojan" then
         (.domain | nonempty) and (.server_address | string)
