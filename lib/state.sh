@@ -19,10 +19,6 @@ state_default_json() {
         public_ipv6: "",
         public_ip_detected_at: null,
         outbound_ip_strategy: "prefer_ipv4",
-        dns_optimistic: false,
-        dns_optimistic_timeout: "3d",
-        dns_timeout: "10s",
-        core_channel: "stable",
         core_update_policy: "notify",
         manager_auto_update: true,
         manager_update_minute: $manager_update_minute,
@@ -191,20 +187,10 @@ state_normalize_v2_file() {
     | .settings.public_ipv6 //= ""
     | .settings.public_ip_detected_at //= null
     | .settings.outbound_ip_strategy //= "prefer_ipv4"
-    | .settings.dns_optimistic //= false
-    | .settings.dns_optimistic_timeout //= "3d"
-    | .settings.dns_timeout //= "10s"
-    | .settings |= del(.xray_update_policy, .vless_engine)
+    # sing-box-only settings and services inherited from sb-manager states.
+    | .settings |= del(.xray_update_policy, .vless_engine, .dns_optimistic, .dns_optimistic_timeout, .dns_timeout, .core_channel)
+    | del(.api, .realm)
     | if (.nginx_stream.backend // "")=="sing-box" then .nginx_stream.backend="nginx" else . end
-    | .api //= {enabled:false,listen:"127.0.0.1",port:9090,dashboard:false}
-    | .realm //= {enabled:false,listen:"::",port:9443,public_url:"",tls_domain:"",user_name:"default",max_realms:0}
-    | .realm.enabled //= false
-    | .realm.listen //= "::"
-    | .realm.port //= 9443
-    | .realm.public_url //= ""
-    | .realm.tls_domain //= ""
-    | .realm.user_name //= "default"
-    | .realm.max_realms //= 0
     | .nginx_stream //= {enabled:false,listen:"::",port:443,routes:[]}
     | if .nginx_stream.backend==null then
         .nginx_stream.backend=(if .nginx_stream.enabled==true or ((.nginx_stream.routes // [])|length)>0 then "nginx" else "nginx" end)
@@ -297,11 +283,6 @@ state_migrate_v1_to_v2() {
     | .settings.public_ipv6=""
     | .settings.public_ip_detected_at=null
     | .settings.outbound_ip_strategy="prefer_ipv4"
-    | .settings.dns_optimistic=false
-    | .settings.dns_optimistic_timeout="3d"
-    | .settings.dns_timeout="10s"
-    | .api={enabled:false,listen:"127.0.0.1",port:9090,dashboard:false}
-    | .realm={enabled:false,listen:"::",port:9443,public_url:"",tls_domain:"",user_name:"default",max_realms:0}
     | .nginx_stream={enabled:false,listen:"::",port:443,routes:[]}
     | .notifications={enabled:false,provider:"none",traffic_thresholds:[80,90,100]}
     | .health={enabled:false,certificate_warn_days:21,resources:{disk_min_free_percent:10,inode_max_percent:90,memory_max_percent:90,cpu_load_per_core_max:2,file_descriptors_max_percent:80,fail2ban_banned_warn:10,service_restart_warn:3}}
@@ -456,10 +437,6 @@ state_validate() {
       and (.public_ipv6 | string)
       and ((.public_ip_detected_at | type) == "string" or (.public_ip_detected_at | type) == "null")
       and (.outbound_ip_strategy | IN("prefer_ipv4", "prefer_ipv6", "ipv4_only"))
-      and (.dns_optimistic | type == "boolean")
-      and (.dns_optimistic_timeout | type == "string" and test("^[0-9]+(ms|s|m|h|d)$"))
-      and (.dns_timeout | type == "string" and test("^[0-9]+(ms|s|m|h|d)$"))
-      and (.core_channel | IN("stable", "preview"))
       and (.core_update_policy | IN("manual", "notify", "patch", "stable"))
       and (.manager_auto_update | type == "boolean")
       and (.manager_update_minute | type == "number" and floor==. and .>=0 and .<180)
@@ -471,19 +448,6 @@ state_validate() {
       and ((.domain | type) == "string" or (.domain | type) == "null")
       and ((.client_address | type) == "string" or (.client_address | type) == "null")
       and (.protocol | nonempty))
-    and (.api | type == "object"
-      and (.enabled | type == "boolean")
-      and .listen == "127.0.0.1"
-      and (.port | port)
-      and (.dashboard | type == "boolean"))
-    and (.realm | type == "object"
-      and (.enabled | type == "boolean")
-      and (.listen | nonempty)
-      and (.port | port)
-      and (.public_url | string)
-      and (.tls_domain | string)
-      and (.user_name | nonempty and length <= 128)
-      and (.max_realms | type == "number" and floor == . and . >= 0 and . <= 1000000))
     and (if .caddy_apt==null then true else
       .caddy==null and (.caddy_apt | type=="object" and (.enabled|type=="boolean")
         and (.config|web_path))

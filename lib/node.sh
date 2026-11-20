@@ -822,6 +822,6 @@ settings_detect_public_ip() { with_state_transaction settings-detect-ip _setting
 
 
 settings_show_addresses() {
-  if [[ ${1:-0} == 1 ]]; then jq '.settings | {default_server_address,default_server_address_source,public_ipv4,public_ipv6,outbound_ip_strategy,dns_optimistic,dns_optimistic_timeout,dns_timeout,public_ip_detected_at}' "$SBM_STATE"; return; fi
-  jq -r '"默认入口：\(.settings.default_server_address // "-")\n来源：\(.settings.default_server_address_source // "-")\n公网 IPv4：\(.settings.public_ipv4 // "-")\n公网 IPv6：\(.settings.public_ipv6 // "-")\n出站 IP 策略：\(.settings.outbound_ip_strategy // "prefer_ipv4")\nDNS optimistic：\(.settings.dns_optimistic // false)（超时 \(.settings.dns_optimistic_timeout // "3d")）\nDNS 查询超时：\(.settings.dns_timeout // "10s")\n探测时间：\(.settings.public_ip_detected_at // "-")"' "$SBM_STATE"
+  if [[ ${1:-0} == 1 ]]; then jq '.settings | {default_server_address,default_server_address_source,public_ipv4,public_ipv6,outbound_ip_strategy,public_ip_detected_at}' "$SBM_STATE"; return; fi
+  jq -r '"默认入口：\(.settings.default_server_address // "-")\n来源：\(.settings.default_server_address_source // "-")\n公网 IPv4：\(.settings.public_ipv4 // "-")\n公网 IPv6：\(.settings.public_ipv6 // "-")\n出站 IP 策略：\(.settings.outbound_ip_strategy // "prefer_ipv4")\n探测时间：\(.settings.public_ip_detected_at // "-")"' "$SBM_STATE"
 }

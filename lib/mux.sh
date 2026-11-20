@@ -35,9 +35,7 @@ mux_reserved_port() {
   local state=$1 port=$2
   [[ "$port" != "$SBM_SUBSCRIPTION_PORT" ]] || return 0
   jq -e --argjson port "$port" '
-    (.api.enabled==true and .api.port==$port)
-    or (.realm.enabled==true and .realm.port==$port)
-    or (.substore.enabled==true and .substore.port==$port)
+    (.substore.enabled==true and .substore.port==$port)
     or (.nginx_stream.website.managed==true and
         (.nginx_stream.website.website_port==$port or .nginx_stream.website.relay_port==$port))
     or (.reality_site.enabled==true and .reality_site.backend_port==$port)
