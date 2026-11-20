@@ -112,22 +112,22 @@ node_list_json() {
 }
 
 node_list() {
-  local json=${1:-0} tag=${2:-} region=${3:-}
+  local json=${1:-0} tag=${2:-} region=${3:-} id p enabled port endpoint metadata name
   if [[ "$json" == "1" ]]; then node_list_json "$tag" "$region"; return; fi
   printf '%-18s %-18s %-8s %-10s %-20s %-14s %s\n' 'ID' '协议' '状态' '端口' '域名/地址' '地区/标签' '名称'
   printf '%-18s %-18s %-8s %-10s %-20s %-14s %s\n' '------------------' '------------------' '--------' '----------' '--------------------' '--------------' '----'
-  local node id p enabled port endpoint name route public_port metadata
-  public_port=$(jq -r '.nginx_stream.port // 443' "$SBM_STATE")
-  while IFS= read -r node; do
-    id=$(jq -r '.id' <<<"$node"); p=$(jq -r '.protocol' <<<"$node"); enabled=$(jq -r 'if .enabled then "启用" else "停用" end' <<<"$node")
-    port=$(jq -r '.port' <<<"$node"); endpoint=$(jq -r '(.domain // .server_address // "-")' <<<"$node"); name=$(jq -r '.name' <<<"$node")
-    metadata=$(jq -r '([.metadata.region] + .metadata.tags | map(select(length>0)) | join(",")) // ""' <<<"$node")
-    if declare -F nginx_stream_route_for_node >/dev/null 2>&1 && nginx_stream_state_enabled "$SBM_STATE"; then
-      route=$(nginx_stream_route_for_node "$SBM_STATE" "$id")
-      [[ -z "$route" ]] || port="${public_port}→$(jq -r '.backend_port' <<<"$route")"
-    fi
-    printf '%-18s %-18s %-8s %-10s %-20s %-14s %s\n' "$id" "$(node_protocol_label "$p")" "$enabled" "$port" "$endpoint" "${metadata:--}" "$name"
-  done < <(node_list_json "$tag" "$region" | jq -c '.[]')
+  # One jq pass for the whole table: per-node jq calls dominated latency.
+  while IFS=$'\t' read -r id p enabled port endpoint metadata name; do
+    printf '%-18s %-18s %-8s %-10s %-20s %-14s %s\n' "$id" "$(node_protocol_label "$p")" "$enabled" "$port" "$endpoint" "$metadata" "$name"
+  done < <(node_list_json "$tag" "$region" | jq -r --slurpfile state "$SBM_STATE" '
+    ($state[0]) as $s | ($s.nginx_stream.port // 443) as $pub |
+    (if ($s.nginx_stream.enabled // false) then ($s.nginx_stream.routes // []) else [] end) as $routes |
+    .[] | . as $n | ([$routes[] | select(.node_id==$n.id)] | first) as $r |
+    [.id, .protocol, (if .enabled then "启用" else "停用" end),
+     (if $r then "\($pub)→\($r.backend_port)" else (.port|tostring) end),
+     (.domain // .server_address // "-" | if .=="" then "-" else . end),
+     (([.metadata.region] + (.metadata.tags // []) | map(select(. != null and length>0)) | join(",")) | if .=="" then "-" else . end),
+     .name] | @tsv')
 }
 
 node_show() {
