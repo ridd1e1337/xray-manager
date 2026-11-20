@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.7
+
+- 订阅（3x-ui 对齐）：不带 `?format` 时按 User-Agent 自动选择——Clash/mihomo/Stash/FlClash → mihomo，
+  sing-box/SFA/Hiddify → sing-box，v2rayN/v2rayNG/Shadowrocket/Happ/NekoBox 等 → base64 链接；新增 `format=base64`；
+  返回 `Profile-Title`、`Profile-Update-Interval`。用户停用/到期/流量用尽时返回说明原因的占位节点。
+- `xm subscription remark set '{name} | 剩余 {remaining} | {days}天'`：用户订阅链接的节点名模板（面板订阅菜单 4）。
+
 ## 0.1.0-alpha.6
 
 - `xm xray outbound test [TAG]`：为每个出站临时启动本机 Xray 测连通与延迟，支持链式出站，不影响运行中的服务。

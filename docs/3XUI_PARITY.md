@@ -65,7 +65,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | Xray | 出站订阅（远程链接池作为出站） | ⬜ | |
 | Xray | 核心版本切换、回滚、自动更新 | ✅ | `xm core` |
 | 订阅 | 链接 / Xray JSON / mihomo / sing-box 格式、Subscription-Userinfo | ✅ | |
-| 订阅 | 按 User-Agent 自动选择格式、备注模板、到期/耗尽占位节点 | ⬜ | |
+| 订阅 | 按 User-Agent 自动选择格式、base64、备注模板、到期/耗尽占位节点、Profile-Title | ✅ | `xm subscription remark` |
 | 机器人 | 状态、节点、用户、启停、续期、订阅 | ✅ | `xm notify bot` |
 | 机器人 | 用户自助查询（tgId）、到期/流量预警、备份发送到 Telegram | ⬜ | |
 | 工具 | UUID/X25519/ML-KEM/ECH 密钥生成、REALITY 目标检查、证书哈希 | ✅ | `xm tools` |

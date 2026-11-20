@@ -111,6 +111,8 @@ sb_help_full() {
   xm export config [文件] [--mode mixed|tun] [--tun-dns-mode disabled|native|hijack] [--tun-dns-address IP]
   xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL]
   xm subscription list|status|revoke <ID_OR_TOKEN>
+  xm subscription remark show|set TEMPLATE|clear   用户订阅节点名模板，如 '{name} | 剩余 {remaining} | {days} 天'
+                                 订阅地址不带 ?format 时按客户端自动选择：Clash/mihomo、sing-box、v2rayN/Shadowrocket（base64）
   xm bbr enable|disable|status [--json]
   xm tcp plan|enable --bandwidth Mbps --rtt MS [--dry-run] [--json]
   xm tcp status [--json]|disable   TCP 自适应缓冲区、MTU 黑洞探测与恢复
@@ -530,6 +532,7 @@ main() {
         list) subscription_list "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         status) subscription_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         revoke) [[ $# == 3 ]] || usage_die '用法：xm subscription revoke ID_OR_TOKEN'; subscription_revoke "$3" ;;
+        remark) shift 2; subscription_remark_cli "$@" ;;
         *) usage_die '用法：xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL] | list | status | revoke ID_OR_TOKEN' ;;
       esac
       ;;
