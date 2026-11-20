@@ -363,7 +363,7 @@ xray_outbound_test() (
       outbounds:([.outbounds[] | select(.tag==$tag)] + [.outbounds[] | select(.tag!=$tag)]),
       routing:{rules:[{type:"field",inboundTag:["test-in"],outboundTag:$tag}]}}' <<<"$routing" >"$dir/config.json" || return 1
     XRAY_LOCATION_ASSET="${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}" "$SBM_XRAY_BIN" run -config "$dir/config.json" >"$dir/log" 2>&1 & pid=$!
-    for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | grep -q ":$port " && break; sleep 0.2; done
+    for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | pipe_has ":$port " && break; sleep 0.2; done
     if result=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 10 -x "socks5h://127.0.0.1:$port" "$url") \
       && [[ "${result%% *}" =~ ^(204|200)$ ]]; then
       printf '%-20s %-10s %s ms\n' "$tag" 通 "$(awk -v t="${result#* }" 'BEGIN{printf "%.0f", t*1000}')"
@@ -397,7 +397,7 @@ xray_route_test() (
       # Blackholes never pass health checks, so balancers pick at random here.
       routing:(.routing | if .balancers then .balancers |= map(.strategy={type:"random"} | del(.fallbackTag)) else . end)}' <<<"$routing" >"$dir/config.json" || return 1
   XRAY_LOCATION_ASSET="${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}" "$SBM_XRAY_BIN" run -config "$dir/config.json" >"$dir/log" 2>&1 & pid=$!
-  for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | grep -q ":$lport " && break; sleep 0.2; done
+  for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | pipe_has ":$lport " && break; sleep 0.2; done
   curl -s -o /dev/null --max-time 3 -x "socks5h://127.0.0.1:$lport" "http://$(format_hostport "$host" "$port")/" || true
   for _ in 1 2 3 4 5; do [[ -s "$dir/access.log" ]] && break; sleep 0.2; done
   line=$(grep -m1 'accepted' "$dir/access.log" 2>/dev/null || true)

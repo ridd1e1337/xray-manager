@@ -24,7 +24,7 @@ tools_reality_check() {
   if grep -q 'TLS Version:.*TLS 1.3' <<<"$section"; then printf '  [通过] TLS 1.3\n'; else printf '  [失败] 不支持 TLS 1.3\n'; ok=0; fi
   if grep -q 'Post-Quantum key exchange:.*true' <<<"$section"; then printf '  [通过] 支持 X25519MLKEM768\n'
   else printf '  [失败] 不支持 X25519MLKEM768（Xray 26.9.8+ REALITY 需要）\n'; ok=0; fi
-  for name in $(sed -n 's/.*allowed domains:[[:space:]]*\[\(.*\)\].*/\1/p' <<<"$section" | head -1); do
+  for name in $(sed -n 's/.*allowed domains:[[:space:]]*\[\(.*\)\].*/\1/p' <<<"$section" | sed -n 1p); do
     [[ "$name" == "$domain" || ( "$name" == '*.'* && "${domain#*.}" == "${name#\*.}" ) ]] && covered=1
   done
   if (( covered )); then printf '  [通过] 证书覆盖该域名\n'; else printf '  [警告] 证书域名列表未包含 %s\n' "$domain"; fi

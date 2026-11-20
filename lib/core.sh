@@ -85,7 +85,7 @@ artifact_record() {
   manifest="$SBM_VAR/install-manifest.json"
   mkdir -p "$SBM_VAR"
   if [[ -n "$binary" && -x "$binary" ]]; then
-    details=$("$binary" version 2>/dev/null | head -n 20 || true)
+    details=$("$binary" version 2>/dev/null | sed -n 1,20p || true)
     binary_digest="sha256:$(sha256sum "$binary" | awk '{print $1}')"
   fi
   tmp=$(mktemp "$SBM_VAR/.install-manifest.XXXXXX")
@@ -111,7 +111,7 @@ artifact_record() {
 core_check_free_space() {
   local path=${1:-$SBM_CORE_DIR} required=${2:-${SBM_CORE_MIN_FREE_BYTES:-260000000}} available
   [[ "$required" =~ ^[0-9]+$ ]] || required=260000000
-  available=$(df -Pk "$path" 2>/dev/null | awk 'NR==2 {printf "%.0f\n", $4 * 1024; exit}') || return 1
+  available=$(df -Pk "$path" 2>/dev/null | awk 'NR==2 {printf "%.0f\n", $4 * 1024}') || return 1
   [[ "$available" =~ ^[0-9]+$ ]] || { log_error "无法确认磁盘剩余空间：$path"; return 1; }
   if (( available < required )); then
     log_error "磁盘剩余空间不足：$(numfmt --to=iec "$available" 2>/dev/null || printf '%s bytes' "$available")，至少需要约 $(numfmt --to=iec "$required" 2>/dev/null || printf '%s bytes' "$required") 才能安全下载/解压核心。"
@@ -223,7 +223,7 @@ cloudflared_download_latest() {
   [[ -n "$url" ]] || die "未找到 cloudflared 资产：$asset_name"
   target="$SBM_CORE_DIR/cloudflared/$version/cloudflared"
   if [[ -x "$target" ]]; then
-    "$target" version 2>/dev/null | grep -Fq "$version" || die "已缓存的 cloudflared $version 无法通过版本校验。"
+    "$target" version 2>/dev/null | pipe_has -F "$version" || die "已缓存的 cloudflared $version 无法通过版本校验。"
     ensure_program_permissions
     artifact_record cloudflared "$version" "$url" "${digest:-previously-verified}" "$target"
     printf '%s\n' "$target"
