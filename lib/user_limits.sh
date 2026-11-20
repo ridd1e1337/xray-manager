@@ -430,3 +430,54 @@ user_online() {
     | .id as $n | .users[] | select(.enabled) | "\($n):\(.id)"' "$SBM_STATE")
   (( count )) || printf '当前没有在线用户。\n'
 }
+
+# 3x-ui "edit used traffic": set this cycle's usage (counted as download).
+_user_usage_set() {
+  local node_id=$1 user_id=$2 value=$3 bytes
+  state_user_exists "$node_id" "$user_id" || die "用户不存在：$node_id/$user_id"
+  if [[ "$value" == 0 ]]; then bytes=0; else bytes=$(traffic_parse_size "$value") || die "无效流量：$value（示例：10G、0）"; fi
+  user_usage_init_unlocked || return 1
+  user_usage_collect_unlocked || true
+  user_usage_update_unlocked '.users[$key]=((.users[$key] // {}) + {upload_bytes:0,download_bytes:$bytes})' \
+    --arg key "$(user_limits_key "$node_id" "$user_id")" --argjson bytes "$bytes" || return 1
+  user_limits_tick_unlocked || return 1
+  log_ok "已将 $node_id/$user_id 本周期已用流量设为 $(traffic_format_bytes "$bytes")"
+}
+user_usage_set() { require_root; with_lock _user_usage_set "$@"; }
+
+# Portable user record (3x-ui client export): profile, limits and the
+# credential, so a user can move to another node of the same protocol without
+# re-importing the client. The file is a secret (0600).
+user_export() {
+  local node_id=$1 user_id=$2 output=${3:-} node record
+  require_root
+  node=$(state_get_node "$node_id"); [[ -n "$node" ]] || die "节点不存在：$node_id"
+  state_user_exists "$node_id" "$user_id" || die "用户不存在：$node_id/$user_id"
+  record=$(jq -n --argjson node "$node" --arg u "$user_id" --argjson secret "$(state_get_user_secret "$node_id" "$user_id")" '
+    ($node.users[] | select(.id==$u)) as $user |
+    {format:"xray-manager-user",version:1,protocol:$node.protocol,method:($node.method // null),
+     user:($user | {id,name,enabled,limits}),secret:$secret}') || return 1
+  if [[ -z "$output" ]]; then printf '%s\n' "$record"; return; fi
+  (umask 077; printf '%s\n' "$record" >"$output") && log_ok "已导出用户：$output（含凭据，请妥善保管）"
+}
+
+_user_import() {
+  local node_id=$1 file=$2 new_id=${3:-} node record protocol user_id candidate
+  node=$(state_get_node "$node_id"); [[ -n "$node" ]] || die "节点不存在：$node_id"
+  record=$(jq -ce 'select(.format=="xray-manager-user" and .version==1)' "$file") || die '不是有效的用户导出文件。'
+  protocol=$(jq -r '.protocol' <<<"$record")
+  [[ "$protocol" == "$(jq -r '.protocol' <<<"$node")" ]] || die "协议不同：文件为 $protocol，目标节点为 $(jq -r '.protocol' <<<"$node")。"
+  [[ "$protocol" != shadowsocks || $(jq -r '.method' <<<"$record") == $(jq -r '.method' <<<"$node") ]] || die 'Shadowsocks 加密方式不同，凭据不可复用。'
+  [[ "$protocol" != wireguard ]] || die 'WireGuard 用户地址属于原节点子网，请在目标节点新建用户。'
+  user_id=${new_id:-$(jq -r '.user.id' <<<"$record")}
+  validate_node_id "$user_id" || die "无效用户 ID：$user_id"
+  state_user_exists "$node_id" "$user_id" && die "用户已存在：$node_id/$user_id"
+  state_write_user_secret "$node_id" "$user_id" "$(jq -c '.secret' <<<"$record")" || return 1
+  candidate=$(state_candidate) || return 1
+  jq --arg n "$node_id" --arg u "$user_id" --argjson r "$record" --arg now "$(now_iso)" '
+    (.nodes[]|select(.id==$n)|.users) += [($r.user + {id:$u,created_at:$now}) | with_entries(select(.value!=null))]' "$SBM_STATE" >"$candidate" || { rm -f "$candidate"; return 1; }
+  if ! apply_candidate_state "$candidate" "user-import-$node_id-$user_id"; then rm -f "$candidate"; return 1; fi
+  rm -f "$candidate"
+  log_ok "已导入用户：$node_id/$user_id"
+}
+user_import() { require_root; with_state_transaction user-import _user_import "$@"; }

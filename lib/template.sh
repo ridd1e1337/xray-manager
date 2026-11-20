@@ -5,13 +5,20 @@ template_validate_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9._-]{0,47}$ ]]; }
 
 node_template_safe_defaults() {
   local node=$1
+  # Non-secret settings only. The Xray override keeps transport/TLS options but
+  # drops anything credential-shaped a hand-written override might contain.
   jq '{name,protocol,domain:(.domain // ""),server_address:(.server_address // ""),client_address:(.client_address // ""),
-      port,listen,network:(.network // ""),method:(.method // ""),multiplex:(.multiplex // true),ws_path:(.ws_path // ""),
-      obfs:(.obfs.type // ""),obfs_host:(.obfs_host // ""),masquerade:(.masquerade // ""),security:(.security // ""),flow:(.flow // ""),
-      handshake_server:(.handshake_server // ""),handshake_port:(.handshake_port // 443),congestion_control:(.congestion_control // .quic_congestion_control // "cubic"),
-      strict_mode:(.strict_mode // true),wildcard_sni:(.wildcard_sni // "off"),obfs_mode:(.obfs_mode // "none"),snell_version:(.snell_version // 5),snell_mode:(.snell_mode // "default"),
+      port,listen,network:(.network // ""),method:(.method // ""),ws_path:(.ws_path // ""),
+      obfs:(.obfs.type // ""),masquerade:(.masquerade // ""),security:(.security // ""),flow:(.flow // ""),
+      handshake_server:(.handshake_server // ""),handshake_port:(.handshake_port // 443),
+      subnet:(.subnet // ""),mtu:(.mtu // null),target_address:(.target_address // ""),target_port:(.target_port // null),
+      follow_redirect:(.follow_redirect // false),
       metadata:(.metadata // {remark:"",region:"",purpose:"",line:"",tags:[]}),
-      singbox:(.singbox // {inbound:{},outbound:{}})}' <<<"$node"
+      xray:{inbound:((.xray.inbound // {}) | del(.settings.clients, .settings.accounts, .settings.password, .settings.decryption, .settings.peers,
+                     .settings.secretKey, .streamSettings.realitySettings.privateKey, .streamSettings.realitySettings.shortIds,
+                     .streamSettings.realitySettings.mldsa65Seed)),
+            outbound:((.xray.outbound // {}) | del(.settings, .streamSettings.realitySettings.publicKey, .streamSettings.realitySettings.shortId))},
+      singbox:{outbound:(.singbox.outbound // {})}}' <<<"$node"
 }
 
 _node_template_save() {
@@ -53,50 +60,67 @@ node_template_delete() { with_state_transaction template-delete _node_template_d
 node_template_get() { jq -c --arg name "$1" '.node_templates[]? | select(.name==$name)' "$SBM_STATE"; }
 
 node_template_add() {
-  local name=$1 id=$2 template defaults protocol value address domain port node_name disabled=0 inbound_json outbound_json
+  local name=$1 id=$2 template
   shift 2
   template=$(node_template_get "$name"); [[ -n "$template" ]] || die "模板不存在：$name"
-  defaults=$(jq -c '.defaults' <<<"$template"); protocol=$(jq -r '.protocol' <<<"$template")
-  inbound_json=$(jq -c '.singbox.inbound // {}' <<<"$defaults")
-  outbound_json=$(jq -c '.singbox.outbound // {}' <<<"$defaults")
-  node_name=$(jq -r '.name // ""' <<<"$defaults"); node_name=${node_name:-$id}
-  address=$(jq -r '(.server_address // .client_address // "")' <<<"$defaults"); domain=$(jq -r '.domain // ""' <<<"$defaults"); port=$(jq -r '.port' <<<"$defaults")
+  node_add_from_defaults "$(jq -c '.defaults' <<<"$template")" "$id" "$@"
+}
+
+# Create a node from non-secret defaults (templates and clone); credentials,
+# REALITY keys and WireGuard keys are always generated fresh.
+node_add_from_defaults() {
+  local defaults=$1 id=$2 protocol value disabled=0 key
+  shift 2
+  protocol=$(jq -r '.protocol' <<<"$defaults")
+  local -A v=()
+  for key in name port domain server_address listen network method ws_path obfs masquerade security flow handshake_server handshake_port subnet mtu target_address target_port; do
+    v[$key]=$(jq -r --arg k "$key" '.[$k] // "" | tostring' <<<"$defaults")
+  done
   local remark region purpose line tags
-  remark=$(jq -r '.metadata.remark // ""' <<<"$defaults"); region=$(jq -r '.metadata.region // ""' <<<"$defaults"); purpose=$(jq -r '.metadata.purpose // ""' <<<"$defaults"); line=$(jq -r '.metadata.line // ""' <<<"$defaults"); tags=$(jq -r '.metadata.tags|join(",")' <<<"$defaults")
-  local -a args=("$protocol" --id "$id" --name "$node_name" --port "$port" --sing-box-inbound-json "$inbound_json" --sing-box-outbound-json "$outbound_json")
-  [[ -n "$address" ]] && args+=(--address "$address")
-  [[ -n "$domain" ]] && args+=(--domain "$domain")
-  case "$protocol" in
-    socks|http|mixed) args+=(--listen "$(jq -r '.listen' <<<"$defaults")");;
-    vmess-ws-cf) [[ -n $(jq -r '.ws_path // ""' <<<"$defaults") ]] && args+=(--path "$(jq -r '.ws_path' <<<"$defaults")");;
-    shadowsocks) args+=(--method "$(jq -r '.method' <<<"$defaults")" --network "$(jq -r '.network' <<<"$defaults")"); [[ $(jq -r '.multiplex' <<<"$defaults") == true ]] || args+=(--no-mux);;
-    hysteria2) [[ $(jq -r '.obfs // ""' <<<"$defaults") == salamander ]] && args+=(--obfs salamander); [[ -n $(jq -r '.masquerade // ""' <<<"$defaults") ]] && args+=(--masquerade "$(jq -r '.masquerade' <<<"$defaults")");;
-    vless) args+=(--security "$(jq -r '.security' <<<"$defaults")" --handshake-server "$(jq -r '.handshake_server' <<<"$defaults")" --handshake-port "$(jq -r '.handshake_port' <<<"$defaults")");;
-  esac
+  remark=$(jq -r '.metadata.remark // ""' <<<"$defaults"); region=$(jq -r '.metadata.region // ""' <<<"$defaults")
+  purpose=$(jq -r '.metadata.purpose // ""' <<<"$defaults"); line=$(jq -r '.metadata.line // ""' <<<"$defaults"); tags=$(jq -r '(.metadata.tags // [])|join(",")' <<<"$defaults")
   while (($#)); do
     case "$1" in
-      --name|--port|--address|--domain|--remark|--region|--purpose|--line|--tags|--sing-box-inbound-json|--inbound-json|--sing-box-outbound-json|--outbound-json)
+      --name|--port|--address|--domain|--remark|--region|--purpose|--line|--tags)
         value=${2:?缺少参数值}
         case "$1" in
-          --name) node_name=$value;; --port) port=$value;; --address) address=$value;; --domain) domain=$value;;
+          --name) v[name]=$value;; --port) v[port]=$value;; --address) v[server_address]=$value;; --domain) v[domain]=$value;;
           --remark) remark=$value;; --region) region=$value;; --purpose) purpose=$value;; --line) line=$value;; --tags) tags=$value;;
-          --sing-box-inbound-json|--inbound-json) inbound_json=$(node_json_argument "$value"); node_validate_json_object 'sing-box inbound JSON' "$inbound_json";;
-          --sing-box-outbound-json|--outbound-json) outbound_json=$(node_json_argument "$value"); node_validate_json_object 'sing-box outbound JSON' "$outbound_json";;
         esac
         shift 2;;
       --disabled) disabled=1; shift;; *) die "模板创建不支持参数：$1";;
     esac
   done
-  # Rebuild common overrides after parsing so no user value is silently lost.
-  args=("$protocol" --id "$id" --name "$node_name" --port "$port" --sing-box-inbound-json "$inbound_json" --sing-box-outbound-json "$outbound_json")
-  [[ -n "$address" ]] && args+=(--address "$address"); [[ -n "$domain" ]] && args+=(--domain "$domain")
+  local -a args=("$protocol" --id "$id" --name "${v[name]:-$id}" --port "${v[port]}")
+  [[ -z "${v[server_address]}" || "$protocol" == tunnel ]] || args+=(--address "${v[server_address]}")
+  [[ -z "${v[domain]}" ]] || args+=(--domain "${v[domain]}")
+  [[ $(jq -c '.xray.inbound // {}' <<<"$defaults") == '{}' ]] || args+=(--xray-inbound-json "$(jq -c '.xray.inbound' <<<"$defaults")")
+  [[ $(jq -c '.xray.outbound // {}' <<<"$defaults") == '{}' ]] || args+=(--xray-outbound-json "$(jq -c '.xray.outbound' <<<"$defaults")")
+  [[ $(jq -c '.singbox.outbound // {}' <<<"$defaults") == '{}' ]] || args+=(--sing-box-outbound-json "$(jq -c '.singbox.outbound' <<<"$defaults")")
   case "$protocol" in
-    socks|http|mixed) args+=(--listen "$(jq -r '.listen' <<<"$defaults")");;
-    vmess-ws-cf) args+=(--path "$(jq -r '.ws_path' <<<"$defaults")");; shadowsocks) args+=(--method "$(jq -r '.method' <<<"$defaults")" --network "$(jq -r '.network' <<<"$defaults")"); [[ $(jq -r '.multiplex' <<<"$defaults") == true ]] || args+=(--no-mux);;
-    hysteria2) [[ $(jq -r '.obfs // ""' <<<"$defaults") == salamander ]] && args+=(--obfs salamander); [[ -n $(jq -r '.masquerade // ""' <<<"$defaults") ]] && args+=(--masquerade "$(jq -r '.masquerade' <<<"$defaults")");;
-    vless) args+=(--security "$(jq -r '.security' <<<"$defaults")"); [[ -n $(jq -r '.flow // ""' <<<"$defaults") ]] && args+=(--flow "$(jq -r '.flow' <<<"$defaults")"); [[ $(jq -r '.security' <<<"$defaults") != reality ]] || args+=(--handshake-server "$(jq -r '.handshake_server' <<<"$defaults")" --handshake-port "$(jq -r '.handshake_port' <<<"$defaults")");;
+    socks|http|mixed) args+=(--listen "${v[listen]}");;
+    vmess-ws-cf) [[ -z "${v[ws_path]}" ]] || args+=(--path "${v[ws_path]}");;
+    shadowsocks) args+=(--method "${v[method]}" --network "${v[network]:-tcp}"); [[ -z "${v[security]}" ]] || args+=(--security "${v[security]}");;
+    hysteria2) [[ "${v[obfs]}" != salamander ]] || args+=(--obfs salamander); [[ -z "${v[masquerade]}" ]] || args+=(--masquerade "${v[masquerade]}");;
+    vless|vmess|trojan)
+      [[ -z "${v[security]}" ]] || args+=(--security "${v[security]}")
+      [[ "$protocol" != vless ]] || args+=(--flow "${v[flow]}")
+      [[ "${v[security]}" != reality ]] || args+=(--handshake-server "${v[handshake_server]}" --handshake-port "${v[handshake_port]}");;
+    wireguard) [[ -z "${v[mtu]}" ]] || args+=(--mtu "${v[mtu]}");;
+    masque) [[ -z "${v[mtu]}" ]] || args+=(--mtu "${v[mtu]}");;
+    tunnel) args+=(--target "$(format_hostport "${v[target_address]}" "${v[target_port]}")" --network "${v[network]:-tcp}"); [[ $(jq -r '.follow_redirect // false' <<<"$defaults") != true ]] || args+=(--follow-redirect);;
   esac
-  args+=(--remark "$remark" --region "$region" --purpose "$purpose" --line "$line" --tags "$tags")
+  [[ -z "$remark" ]] || args+=(--remark "$remark"); [[ -z "$region" ]] || args+=(--region "$region")
+  [[ -z "$purpose" ]] || args+=(--purpose "$purpose"); [[ -z "$line" ]] || args+=(--line "$line"); [[ -z "$tags" ]] || args+=(--tags "$tags")
   (( disabled == 0 )) || args+=(--disabled)
   node_add "${args[@]}"
+}
+
+# 3x-ui "clone inbound": same settings, new ID/port, fresh credentials.
+node_clone() {
+  local src=${1:?用法：xm node clone SRC_ID NEW_ID [--port N] [--name NAME] [--domain DOMAIN]} id=${2:?缺少新节点 ID} node port
+  shift 2
+  node=$(state_get_node "$src"); [[ -n "$node" ]] || die "节点不存在：$src"
+  port=$(node_choose_port "$(node_transport_kinds "$node" | head -1)") || return 1
+  node_add_from_defaults "$(node_template_safe_defaults "$node")" "$id" --port "$port" --name "$(jq -r '.name' <<<"$node") copy" "$@"
 }

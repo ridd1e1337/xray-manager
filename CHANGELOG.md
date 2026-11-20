@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.9
+
+- `xm node clone SRC NEW`：复制节点全部设置（含传输、REALITY 目标、QUIC 参数），自动选端口并重新生成全部凭据。
+- 修复：节点模板此前会传入已移除的 sing-box 参数而失败，且不保存 Xray 传输设置；现在保存 `xray.inbound`
+  （剔除私钥、用户等机密）并支持全部协议。
+- `xm user set-usage`（修改本周期已用流量）、`xm user export|import`（同协议节点间迁移用户，凭据不变）；面板用户菜单 17–19。
+
 ## 0.1.0-alpha.8
 
 - `xm xray dns set SERVERS [--strategy UseIP|UseIPv4|UseIPv6] [--fakedns]|clear`：Xray 内置 DNS 与 FakeDNS。

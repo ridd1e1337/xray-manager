@@ -53,9 +53,9 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | 用户 | 首次使用后才开始计时的到期（delayed start） | ✅ | `--expire-after-first-use N` |
 | 用户 | 按日/周/月自动重置流量 | ✅ | `--reset-period day|week|month --reset-day N` |
 | 用户 | 查看在线 IP / 在线用户 | ✅ | `xm user online` |
-| 用户 | 删除已耗尽用户 / 修改已用流量、用户导出导入 | ✅ / ⬜ | `xm user purge-depleted` |
+| 用户 | 删除已耗尽用户、修改已用流量、用户导出导入 | ✅ | `xm user purge-depleted`、`set-usage`、`export`/`import` |
 | 用户 | HWID 设备数限制 | ➖ | 依赖订阅客户端上报设备 ID，Xray 本身不提供 |
-| 入站 | 克隆节点、重置全部流量、导出全部链接 | ⬜ / ✅ / ✅ | `xm share all`、`xm traffic reset all` |
+| 入站 | 克隆节点、重置全部流量、导出全部链接 | ✅ | `xm node clone`、`xm traffic reset all`、`xm share all` |
 | 入站 | 入站级配额、到期、端口冲突检查、回落 | ✅ | `xm traffic set`、`xm node expiry` |
 | Xray | 出站、WARP、负载均衡、分流规则 | ✅ | `xm xray outbound/warp/balancer/route` |
 | Xray | geoip/geosite 数据下载与 `geosite:`/`geoip:` 规则 | ✅ | `xm xray geo update` |

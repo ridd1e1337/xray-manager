@@ -82,6 +82,7 @@ sb_help_full() {
   xm node enable|disable|delete|rotate <ID>
   xm node enable-all|disable-all --tag TAG|--region REGION
   xm node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]
+  xm node clone SRC_ID NEW_ID [--port N] [--name NAME]   复制节点设置，重新生成凭据
   xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH|--listen IP
                  [--remark TEXT] [--region REGION] [--purpose PURPOSE] [--line LINE] [--tags a,b]
                  [--method METHOD] [--network tcp|udp] [--obfs salamander|none] [--masquerade URL]
@@ -100,6 +101,8 @@ sb_help_full() {
   xm user add <NODE_ID> --count N [--prefix P] [--start K] [--quota 50G] [--days 30] [--ip-limit 2] [--reset-day 1]  批量添加
   xm user online [NODE_ID]        在线用户与 IP
   xm user purge-depleted [NODE_ID]  删除流量耗尽或已到期的用户
+  xm user set-usage NODE_ID USER_ID SIZE   修改本周期已用流量
+  xm user export NODE_ID USER_ID [文件] | import NODE_ID 文件 [新ID]   迁移用户（含凭据，客户端无需重导）
   xm user enable|disable|delete|rotate <NODE_ID> <USER_ID>
   xm user limit <NODE_ID> <USER_ID> [--quota SIZE|unlimited] [--reset-day 1-28|none]
                  [--days N|--expire-at UTC|--expire-after-first-use N|--no-expiry]
@@ -412,6 +415,7 @@ main() {
           while (($#)); do case "$1" in --tag) tag=${2:?缺少标签}; shift 2;; --region) region=${2:?缺少地区}; shift 2;; *) usage_die '用法：xm node enable-all|disable-all --tag TAG|--region REGION';; esac; done
           [[ "$action" == enable-all ]] && node_batch_enable "$tag" "$region" || node_batch_disable "$tag" "$region"
           ;;
+        clone) (($# >= 2)) || usage_die '用法：xm node clone SRC_ID NEW_ID [--port N] [--name NAME] [--domain DOMAIN]'; node_clone "$@" ;;
         template)
           local template_action=${1:-list}; shift || true
           case "$template_action" in
@@ -460,6 +464,9 @@ main() {
             (($# >= 2)) || die '用法：xm user add NODE_ID USER_ID [NAME] | xm user add NODE_ID --count N [--prefix P]'; node_user_add "$1" "$2" "${3:-$2}"
           fi ;;
         purge-depleted) node_user_purge_depleted "${1:-}" ;;
+        set-usage) (($# == 3)) || die '用法：xm user set-usage NODE_ID USER_ID SIZE'; user_usage_set "$1" "$2" "$3" ;;
+        export) (($# >= 2)) || die '用法：xm user export NODE_ID USER_ID [文件]'; user_export "$1" "$2" "${3:-}" ;;
+        import) (($# >= 2)) || die '用法：xm user import NODE_ID 文件 [新用户ID]'; user_import "$1" "$2" "${3:-}" ;;
         online) user_online "${1:-}" ;;
         enable) (($# == 2)) || die '用法：xm user enable NODE_ID USER_ID'; node_user_enable "$1" "$2" ;;
         disable) (($# == 2)) || die '用法：xm user disable NODE_ID USER_ID'; node_user_disable "$1" "$2" ;;
