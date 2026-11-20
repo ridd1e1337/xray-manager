@@ -62,7 +62,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | Xray | 出站连通性测试、路由测试 | ✅ | `xm xray outbound test`、`xm xray route test DOMAIN|IP[:PORT]` |
 | Xray | Observatory、DNS / FakeDNS、路由域名策略、日志级别与访问日志 | 自动 / ✅ / ✅ / ✅ | leastPing/leastLoad 负载均衡自动启用 burstObservatory；`xm xray dns`、`xm xray route strategy`、`xm xray log access` |
 | Xray | NordVPN / PIA 账号出站 | ➖ | 需第三方账号 API；可用 `xm xray outbound add` 导入 WireGuard 出站 |
-| Xray | 出站订阅（远程链接池作为出站） | ⬜ | |
+| Xray | 出站订阅（远程链接池作为出站） | ✅ | `xm xray outbound sub add NAME URL`，每日刷新，可自动建负载均衡 |
 | Xray | 核心版本切换、回滚、自动更新 | ✅ | `xm core` |
 | 订阅 | 链接 / Xray JSON / mihomo / sing-box 格式、Subscription-Userinfo | ✅ | |
 | 订阅 | 按 User-Agent 自动选择格式、base64、备注模板、到期/耗尽占位节点、Profile-Title | ✅ | `xm subscription remark` |

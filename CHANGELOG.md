@@ -4,6 +4,14 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.11
+
+- 出站订阅（3x-ui 对齐）：`xm xray outbound sub add NAME URL [--balancer leastPing|…|none]` 把远程订阅（链接列表或 base64）
+  导入为出站 `NAME-1…N` 并建同名负载均衡；每日任务自动刷新，失败保留原节点；订阅地址存于 0600 密钥文件。
+  新增 `libexec/share_to_xray.jq`：vless/vmess/trojan/ss/hysteria2/socks/http 链接转 Xray 出站，拒绝 allowInsecure，
+  已用 xm 自身全部协议的分享链接往返实测。面板分流菜单 13。
+- 修复：路由测试在使用 leastPing/leastLoad 负载均衡时无法启动；结果中注明所属负载均衡。
+
 ## 0.1.0-alpha.10
 
 - Telegram 机器人（3x-ui 对齐）：`/online`；`/backup` 把完整备份发到管理员会话（含凭据，需 `xm notify bot backup on` 开启）。

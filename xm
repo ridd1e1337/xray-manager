@@ -40,6 +40,7 @@ source "$SBM_LIB/lib/expiry.sh"
 source "$SBM_LIB/lib/user_limits.sh"
 source "$SBM_LIB/lib/xray_routing.sh"
 source "$SBM_LIB/lib/xray_geo.sh"
+source "$SBM_LIB/lib/xray_outsub.sh"
 source "$SBM_LIB/lib/tools.sh"
 source "$SBM_LIB/lib/telegram_bot.sh"
 source "$SBM_LIB/lib/firewall.sh"
@@ -172,6 +173,8 @@ sb_help_full() {
   xm xray traffic [--json|reset]  Xray 入站/出站累计流量
   xm xray routing [--json]         查看 Xray 出站、负载均衡与路由
   xm xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG | test [TAG]
+  xm xray outbound sub add NAME URL [--prefix P] [--balancer leastPing|leastLoad|random|roundRobin|none]
+                     | list | refresh [NAME] | remove NAME   导入远程订阅为出站（每日自动刷新）
   xm xray warp [--tag warp] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c]
   xm xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG] | remove TAG
   xm xray route add [--node ID] [--user NODE:USER] [--domain domain:x|geosite:cn] [--ip CIDR|geoip:cn] [--network tcp|udp] [--port P] --to TAG|balancer:TAG

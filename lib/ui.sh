@@ -1151,9 +1151,9 @@ ui_xray_routing_menu() {
   local -a args=()
   xray_routing_show
   printf '\n1. 添加原生出站（SOCKS/HTTP/VLESS/Trojan/Shadowsocks 等 JSON）\n2. 添加 WARP（自动注册）\n3. 导入已有 WARP/WireGuard 参数\n4. 删除出站\n'
-  printf '5. 设置负载均衡\n6. 删除负载均衡\n7. 添加分流规则\n8. 删除分流规则\n9. 设置默认出口\n10. geoip/geosite 数据（%s）\n11. 路由测试（某个域名/IP 会走哪个出口）\n12. 出站连通性测试\n0. 返回\n' \
+  printf '5. 设置负载均衡\n6. 删除负载均衡\n7. 添加分流规则\n8. 删除分流规则\n9. 设置默认出口\n10. geoip/geosite 数据（%s）\n11. 路由测试（某个域名/IP 会走哪个出口）\n12. 出站连通性测试\n13. 出站订阅（导入远程节点列表）\n0. 返回\n' \
     "$(xray_geo_installed && echo 已安装 || echo 未安装)"
-  ui_menu_choice choice '路由操作' 12 || return 0
+  ui_menu_choice choice '路由操作' 13 || return 0
   case "$choice" in
     1)
       prompt_value tag '出站标签' '' || return 1
@@ -1194,6 +1194,19 @@ ui_xray_routing_menu() {
       case "$value" in 1) xray_geo_cli update;; 2) xray_geo_cli remove;; esac;;
     11) prompt_value value '域名或 IP[:端口]' www.google.com || return 1; xray_route_test "$value" || true;;
     12) xray_outbound_test || true;;
+    13)
+      xray_outsub_cli list
+      printf '\n1. 添加订阅\n2. 立即刷新全部\n3. 删除订阅\n0. 返回\n'
+      ui_menu_choice value '出站订阅' 3 || return 0
+      case "$value" in
+        1)
+          prompt_value tag '订阅名称（同时作为负载均衡名与标签前缀）' sub || return 1
+          prompt_value via '订阅地址 https://…' '' || return 1
+          prompt_value strategy '负载均衡 leastPing/leastLoad/random/roundRobin/none' leastPing || return 1
+          xray_outsub_cli add "$tag" "$via" --balancer "$strategy" && printf '把分流规则指向 balancer:%s 即可使用这些节点。\n' "$tag";;
+        2) xray_outsub_cli refresh;;
+        3) prompt_value tag '订阅名称' '' || return 1; xray_outsub_cli remove "$tag";;
+      esac;;
   esac
 }
 

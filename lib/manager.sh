@@ -239,6 +239,10 @@ manager_auto_run() (
     && [[ -n $(find "${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}/version.json" -mtime +6 2>/dev/null) ]]; then
     "$SBM_BIN_DIR/xm" xray geo update >>"$SBM_VAR/updates/manager.log" 2>&1 || log_warn 'geo 数据更新失败，继续使用原文件。'
   fi
+  # Outbound subscriptions refresh daily; a failure keeps the previous set.
+  if jq -e '(.xray_routing.subscriptions // [])|length>0' "$SBM_STATE" >/dev/null 2>&1; then
+    "$SBM_BIN_DIR/xm" xray outbound sub refresh >>"$SBM_VAR/updates/manager.log" 2>&1 || log_warn '出站订阅刷新失败，继续使用原节点。'
+  fi
   exit "$rc"
 )
 

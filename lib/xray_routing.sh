@@ -315,6 +315,7 @@ xray_routing_cli() {
           require_root; with_state_transaction xray-outbound _xray_outbound_add "$tag" "$json" "$via";;
         remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray outbound remove TAG'; require_root; with_state_transaction xray-outbound _xray_outbound_remove "$3";;
         test) require_root; xray_outbound_test "${3:-}";;
+        sub) shift 2; xray_outsub_cli "$@";;
         *) usage_die '用法：xm xray outbound add|remove ...';;
       esac;;
     balancer)
@@ -393,14 +394,18 @@ xray_route_test() (
       log:{loglevel:"warning",access:$log},
       inbounds:[{tag:"route-test",listen:"127.0.0.1",port:$port,protocol:"socks",settings:{udp:false}}],
       outbounds:[.outbounds[] | {tag,protocol:"blackhole"}],
-      routing:.routing}' <<<"$routing" >"$dir/config.json" || return 1
+      # Blackholes never pass health checks, so balancers pick at random here.
+      routing:(.routing | if .balancers then .balancers |= map(.strategy={type:"random"} | del(.fallbackTag)) else . end)}' <<<"$routing" >"$dir/config.json" || return 1
   XRAY_LOCATION_ASSET="${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}" "$SBM_XRAY_BIN" run -config "$dir/config.json" >"$dir/log" 2>&1 & pid=$!
   for _ in 1 2 3 4 5 6 7 8 9 10; do ss -H -ltn 2>/dev/null | grep -q ":$lport " && break; sleep 0.2; done
   curl -s -o /dev/null --max-time 3 -x "socks5h://127.0.0.1:$lport" "http://$(format_hostport "$host" "$port")/" || true
   for _ in 1 2 3 4 5; do [[ -s "$dir/access.log" ]] && break; sleep 0.2; done
   line=$(grep -m1 'accepted' "$dir/access.log" 2>/dev/null || true)
   [[ -n "$line" ]] || { log_error "未能得到路由结果；日志：$(tail -1 "$dir/log" 2>/dev/null)"; return 1; }
-  printf '%s:%s → %s\n' "$host" "$port" "$(sed -E 's/.*\[route-test (->|>>) ([^]]+)\].*/\2/' <<<"$line")"
+  local chosen balancer
+  chosen=$(sed -E 's/.*\[route-test (->|>>) ([^]]+)\].*/\2/' <<<"$line")
+  balancer=$(jq -r --arg t "$chosen" '[.routing.balancers[]? | select(.selector|index($t)) | .tag] | join(",")' <<<"$routing")
+  printf '%s:%s → %s%s\n' "$host" "$port" "${balancer:+负载均衡 $balancer（}${chosen}${balancer:+ 为其成员，实际出口由策略决定）}"
 )
 
 
