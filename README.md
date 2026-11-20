@@ -9,7 +9,7 @@ Rocky、Alma、Fedora、Arch、openSUSE）。
 配置目录、服务名、端口和防火墙表互不重叠。TUIC、AnyTLS、NaiveProxy、ShadowTLS、Snell 等
 sing-box 协议请使用 sb-manager。
 
-当前版本：`0.1.0-alpha.19`
+当前版本：`0.1.0-alpha.20`
 
 ## 安装
 
@@ -116,8 +116,11 @@ xm tools reality-check www.apple.com             # REALITY 目标是否合适；
 
 ## 运维
 
-- **共用 443**：`xm mux setup` 接入已有 Nginx/Caddy 网站做 SNI 分流；`xm reality setup DOMAIN nginx|caddy`
-  让 VLESS REALITY 与真实网站共用 443。
+- **REALITY 与网站共用 443**：添加 VLESS 节点时会检测本机 Nginx/Caddy 网站并推荐用它伪装；也可
+  `xm reality setup 域名`。域名已是本机网站就直接使用（不装 OpenList），否则自动建一个 OpenList 网站。
+  之后 `xm reality site add 域名 [--proxy 本机端口]` 继续加网站，手写的 `listen 443 ssl` 站点用
+  `xm reality sync` 接入；所有网站域名都可作为 SNI。`xm reality detach` 恢复网站直接监听 443，
+  只还原迁移过的 `listen` 行，后来加的网站和修改都保留。`xm mux setup` 另提供 SNI 分流方式。
 - **Cloudflare Tunnel**、**Sub-Store**、**OpenList**、**Telegram 通知与命令机器人**、健康检查、备份恢复、
   BBR/TCP 调优、测速：见面板对应菜单或 `xm help`。
 - **更新**：`xm core update|rollback|policy`（Xray，保留上一版可回滚），`xm update`（脚本与 Caddy）。

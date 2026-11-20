@@ -443,6 +443,12 @@ openlist_site_ready() {
 _openlist_setup() {
   local domain=$1 server=$2 backup port binary config
   local -a context=()
+  # While REALITY owns 443 a new site must listen behind it.
+  if jq -e '.reality_site.enabled==true' "$SBM_STATE" >/dev/null; then
+    [[ $(jq -r '.reality_site.server' "$SBM_STATE") == nginx ]] || { log_error 'Reality 共存（Caddy）下暂不能添加网站。'; return 1; }
+    _reality_site_add "$domain" openlist || return 1
+    log_ok "OpenList 网站已配置：https://$domain（与 Reality 共用 443）"; return 0
+  fi
   openlist_require_runtime || return 1
   # Existing mux transactions own the website configuration. Avoid creating
   # entries that their later rollback would silently remove.
@@ -500,6 +506,7 @@ openlist_forget_site() (
   local domain=$1 candidate
   candidate=$(state_candidate) || return 1
   trap 'rm -f -- "$candidate"' EXIT
+  jq -e --arg domain "$domain" 'any(.openlist.sites[]?; .domain==$domain)' "$SBM_STATE" >/dev/null || return 0
   jq --arg domain "$domain" '.openlist.sites |= map(select(.domain!=$domain))' "$SBM_STATE" >"$candidate" || return 1
   state_validate "$candidate" && state_update_timestamp "$candidate" || return 1
   safe_install_file "$candidate" "$SBM_STATE" 0600
@@ -510,6 +517,10 @@ _openlist_detach() {
   if jq -e --arg domain "$domain" '.reality_site.enabled==true and .reality_site.domain==$domain' "$SBM_STATE" >/dev/null; then
     log_error '此网站仍由 Reality 入口使用；请先运行 xm reality detach，再移除 OpenList 网站。'
     return 1
+  fi
+  if jq -e '.reality_site.enabled==true' "$SBM_STATE" >/dev/null; then
+    _reality_site_change remove _reality_site_remove_files "$domain" && openlist_forget_site "$domain" || return 1
+    log_ok "已移除网站：$domain"; return 0
   fi
   site=$(jq -c --arg domain "$domain" 'first(.openlist.sites[]? | select(.domain==$domain)) // empty' "$SBM_STATE") || return 1
   [[ -n "$site" ]] || { log_error '此域名未登记为 OpenList 网站。'; return 1; }

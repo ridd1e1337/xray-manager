@@ -101,7 +101,7 @@ traffic_format_bytes() {
 
 traffic_format_rate() {
   local bps=${1:-null}
-  [[ "$bps" != null ]] || { printf '不限'; return; }
+  [[ "$bps" != null ]] || { printf '不限'; return $?; }
   awk -v n="$bps" 'BEGIN {
     split("bit/s Kbit/s Mbit/s Gbit/s Tbit/s", u, " "); i=1;
     while (n >= 1000 && i < 5) {n/=1000; i++}

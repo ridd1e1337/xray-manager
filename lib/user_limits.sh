@@ -332,7 +332,7 @@ _user_limit_set() {
 user_limit_cli() {
   local node_id=${1:-} user_id=${2:-}
   [[ -n "$node_id" && -n "$user_id" ]] || usage_die '用法：xm user limit NODE_ID USER_ID [--quota SIZE|unlimited] [--reset-day 1-28|none] [--days N|--expire-at UTC|--no-expiry] [--ip-limit N|unlimited] [--clear]'
-  if (($# == 2)); then user_stats_json "$node_id" | jq --arg u "$user_id" '.[] | select(.user==$u)'; return; fi
+  if (($# == 2)); then user_stats_json "$node_id" | jq --arg u "$user_id" '.[] | select(.user==$u)'; return $?; fi
   require_root
   if [[ ${SBM_DRY_RUN:-0} == 1 ]]; then with_lock _user_limit_set "$@"
   else with_state_transaction user-limit _user_limit_set "$@"; fi
@@ -374,7 +374,7 @@ user_stats() {
   [[ -z "$filter" ]] || state_node_exists "$filter" || die "节点不存在：$filter"
   if [[ $EUID -eq 0 ]]; then with_lock user_usage_collect_unlocked || true; fi
   rows=$(user_stats_json "$filter") || return 1
-  if [[ "$json" == 1 ]]; then printf '%s\n' "$rows"; return; fi
+  if [[ "$json" == 1 ]]; then printf '%s\n' "$rows"; return $?; fi
   printf '%-14s %-12s %-6s %-11s %-11s %-12s %-8s %s\n' 节点 用户 状态 本期上行 本期下行 配额 在线IP 到期
   jq -r '.[] | [.node,.user,
       (if .limits.suspended!=null then "暂停:"+.limits.suspended elif .enabled then "启用" else "停用" end),
@@ -399,7 +399,7 @@ xray_traffic() {
   local json=${1:-0} rows
   if [[ $EUID -eq 0 ]]; then with_lock user_usage_collect_unlocked || true; fi
   rows=$(xray_traffic_json) || return 1
-  if [[ "$json" == 1 ]]; then printf '%s\n' "$rows"; return; fi
+  if [[ "$json" == 1 ]]; then printf '%s\n' "$rows"; return $?; fi
   printf '%-10s %-28s %-12s %s\n' 类型 标签 上行 下行
   jq -r '(.inbounds|to_entries[]|["入站",.key,.value.upload_bytes,.value.download_bytes]),
          (.outbounds|to_entries[]|["出站",.key,.value.upload_bytes,.value.download_bytes]) | @tsv' <<<"$rows" |
@@ -459,7 +459,7 @@ user_export() {
     ($node.users[] | select(.id==$u)) as $user |
     {format:"xray-manager-user",version:1,protocol:$node.protocol,method:($node.method // null),
      user:($user | {id,name,enabled,limits}),secret:$secret}') || return 1
-  if [[ -z "$output" ]]; then printf '%s\n' "$record"; return; fi
+  if [[ -z "$output" ]]; then printf '%s\n' "$record"; return $?; fi
   (umask 077; printf '%s\n' "$record" >"$output") && log_ok "已导出用户：$output（含凭据，请妥善保管）"
 }
 

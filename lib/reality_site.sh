@@ -50,6 +50,9 @@ reality_site_choose_node() {
   fi
   ids=$(jq -r '.nodes[]|select(.enabled and .protocol=="vless" and .port==443)|.id' "$SBM_STATE") || return 1
   if [[ "$ids" == *$'\n'* ]]; then log_error '多个 VLESS 节点占用 443，请明确指定 --node。'; return 1; fi
+  if [[ -n "$ids" ]]; then printf '%s\n' "$ids"; return 0; fi
+  # Reuse the node a previous detach left disabled for the same website.
+  ids=$(jq -r --arg d "${2:-}" 'first(.nodes[]|select((.enabled|not) and .protocol=="vless" and .port==443 and .security=="reality" and .domain==$d)|.id) // empty' "$SBM_STATE") || return 1
   if [[ -n "$ids" ]]; then printf '%s\n' "$ids"
   else state_unique_id vless-reality; fi
 }
@@ -118,6 +121,37 @@ reality_site_backend_ready() {
   log_error 'OpenList 本机 TLS 1.3 网站尚未就绪；请核对域名解析、证书和 HTTP80 可达性。'; return 1
 }
 
+# Any HTTP answer over TLS 1.3 with a valid certificate is enough for an
+# existing website to serve as the REALITY target.
+reality_site_tls_ready() {
+  local domain=$1 port=$2 attempt code
+  for ((attempt=0; attempt<20; attempt++)); do
+    code=$(curl --noproxy '*' --resolve "$domain:$port:127.0.0.1" --tlsv1.3 --tls-max 1.3 \
+      -sS -o /dev/null -w '%{http_code}' --connect-timeout 1 --max-time 3 "https://$domain:$port/" 2>/dev/null || true)
+    [[ "$code" =~ ^[1-5][0-9][0-9]$ ]] && return 0
+    sleep 1
+  done
+  log_error "网站 $domain 没有在本机端口 $port 提供有效的 TLS 1.3（检查证书是否匹配该域名）。"; return 1
+}
+
+# JSON list of HTTPS domains the running web server already serves.
+reality_site_local_domains() {
+  local server=$1
+  local -a context=()
+  command_exists "$server" && command_exists python3 && service_active "$server.service" || { printf '[]\n'; return 0; }
+  mapfile -t context < <(openlist_proxy_context "$server" true 2>/dev/null)
+  (( ${#context[@]} == 2 )) || { printf '[]\n'; return 0; }
+  python3 "$SBM_LIB/libexec/reality_site.py" domains "$server" "${context[0]}" "${context[1]}" 2>/dev/null || printf '[]\n'
+}
+
+# "server<TAB>domain" lines for every local HTTPS site (used by the wizards).
+reality_site_local_sites() {
+  local server
+  for server in nginx caddy; do
+    reality_site_local_domains "$server" | jq -r --arg s "$server" '.[] | "\($s)\t\(.)"'
+  done
+}
+
 reality_site_security() {
   local backup=$1 distro port_list unit
   local -a packages=()
@@ -138,7 +172,7 @@ reality_site_security() {
 }
 
 reality_site_candidate() {
-  local id=$1 domain=$2 server=$3 binary=$4 config=$5 backend_port=$6 candidate=$7 node secret existing
+  local id=$1 domain=$2 server=$3 binary=$4 config=$5 backend_port=$6 candidate=$7 with_openlist=${8:-true} domains=${9:-[]} node secret existing
   existing=$(state_get_node "$id") || return 1
   if [[ -n "$existing" ]]; then
     if ! jq -e 'all([.xray.inbound,.xray.outbound,.singbox.inbound,.singbox.outbound][]; (. // {}|length)==0)' <<<"$existing" >/dev/null; then
@@ -160,19 +194,24 @@ reality_site_candidate() {
     .enabled=true | .listen="::" | .port=443 | .security="reality" | .flow="xtls-rprx-vision"
     | .domain=$domain | .server_address=(if (.server_address // "")=="" then $domain else .server_address end)
     | .server_address_source="manual" | .handshake_server="127.0.0.1" | .handshake_port=$port
-  ' <<<"$node") || return 1
+    | .reality_server_names=($names - [$domain])
+  ' --argjson names "$domains" <<<"$node") || return 1
   jq --argjson node "$node" --arg domain "$domain" --arg server "$server" --arg binary "$binary" --arg config "$config" \
-    --argjson port "$backend_port" --argjson openlist_port "$(openlist_port)" --arg journal "$SBM_REALITY_SITE_DIR/current" '
+    --argjson port "$backend_port" --argjson openlist_port "$(openlist_port)" --arg journal "$SBM_REALITY_SITE_DIR/current" \
+    --argjson with_openlist "$with_openlist" --argjson domains "$domains" '
     .settings.log_level="warn" | .nodes=(.nodes|map(select(.id!=$node.id)))+[$node]
-    | .reality_site={enabled:true,node_id:$node.id,domain:$domain,server:$server,binary:$binary,config:$config,backend_port:$port,journal:$journal}
-    | .openlist.sites=((.openlist.sites // []|map(select(.domain!=$domain)))+[{domain:$domain,server:$server,binary:$binary,config:$config,port:$openlist_port}])
+    | .reality_site={enabled:true,node_id:$node.id,domain:$domain,server:$server,binary:$binary,config:$config,backend_port:$port,journal:$journal,
+        openlist:$with_openlist,domains:(([$domain]+$domains)|unique)}
+    | if $with_openlist then
+        .openlist.sites=((.openlist.sites // []|map(select(.domain!=$domain)))+[{domain:$domain,server:$server,binary:$binary,config:$config,port:$openlist_port}])
+      else . end
   ' "$SBM_STATE" >"$candidate" || return 1
   state_normalize_v2_file "$candidate"
 }
 
 _reality_site_setup() (
   set -Eeuo pipefail
-  local domain=$1 server=$2 requested=$3 security=$4 id binary config port candidate snapshot work
+  local domain=$1 server=$2 requested=$3 security=$4 id binary config port candidate snapshot work existing=false domains
   local complete=false standard_changed=false reality_changed=false runtime_changed=false web_ready=false security_started=false recovered=true
   local -a context=()
   require_init_system
@@ -183,7 +222,7 @@ _reality_site_setup() (
   if nginx_stream_state_enabled "$SBM_STATE"; then log_error '请先解除已有 TCP/SNI 分流，再接入 Reality 网站。'; return 1; fi
   [[ ! -e "$SBM_REALITY_SITE_DIR/current" ]] || { log_error '存在未完成的 Reality 网站恢复记录，请先处理该记录。'; return 1; }
   dependency_require_feature probe || return 1
-  id=$(reality_site_choose_node "$requested") || return 1
+  id=$(reality_site_choose_node "$requested" "$domain") || return 1
   reality_site_port_owner "$id" "$server" || return 1
   reality_site_space "$server" "$security" || return 1
   snapshot=$(snapshot_create reality-setup) || return 1
@@ -207,7 +246,14 @@ _reality_site_setup() (
   exit "$rc"' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
-  if [[ "$server" == nginx ]]; then
+  # A domain the local web server already serves becomes the REALITY target
+  # as is; OpenList is installed only when a new website is needed.
+  if reality_site_local_domains "$server" | jq -e --arg d "$domain" 'index($d)!=null' >/dev/null; then
+    existing=true
+    log_info "使用本机已有的 $server 网站 $domain 作为 Reality 目标（不安装 OpenList）。"
+  fi
+  if [[ "$existing" == true ]]; then :
+  elif [[ "$server" == nginx ]]; then
     _cert_prepare_node_domain "$domain" || return 1
   elif [[ -s "$SBM_CF_DNS_ENV" ]]; then
     reality_site_prepare_dns "$domain" || return 1
@@ -215,7 +261,8 @@ _reality_site_setup() (
     log_error 'Caddy 需要域名已解析至本机，或先配置 Cloudflare DNS 凭据。'; return 1
   fi
   [[ -x "$SBM_XRAY_BIN" ]] || _xray_install || return 1
-  if [[ ! -x "$SBM_OPENLIST_BIN" ]]; then _openlist_install || return 1
+  if [[ "$existing" == true ]]; then :
+  elif [[ ! -x "$SBM_OPENLIST_BIN" ]]; then _openlist_install || return 1
   else
     [[ -L "$SBM_OPENLIST_BIN" && $(readlink -f "$SBM_OPENLIST_BIN") == "$SBM_CORE_DIR/openlist/"* ]] || {
       log_error '现有 OpenList 不是本项目管理，拒绝自动发布网站。'; return 1;
@@ -227,7 +274,7 @@ _reality_site_setup() (
   fi
   # OpenList keeps its initialized local DB if a later website step fails.
   # Preserve its matching administrator secret across the state rollback.
-  if [[ -s "$SBM_SECRETS/openlist-admin.txt" && ! -e "$snapshot/secrets/openlist-admin.txt" ]]; then
+  if [[ "$existing" != true && -s "$SBM_SECRETS/openlist-admin.txt" && ! -e "$snapshot/secrets/openlist-admin.txt" ]]; then
     mkdir -p "$snapshot/secrets" || return 1
     cp -p "$SBM_SECRETS/openlist-admin.txt" "$snapshot/secrets/openlist-admin.txt" || return 1
   fi
@@ -237,7 +284,7 @@ _reality_site_setup() (
   (( ${#context[@]} == 2 )) || return 1
   binary=${context[0]}; config=${context[1]}
   website_mux_require_python || return 1
-  if ! jq -e --arg domain "$domain" --arg server "$server" '.openlist.sites[]?|select(.domain==$domain and .server==$server)' "$SBM_STATE" >/dev/null; then
+  if [[ "$existing" != true ]] && ! jq -e --arg domain "$domain" --arg server "$server" '.openlist.sites[]?|select(.domain==$domain and .server==$server)' "$SBM_STATE" >/dev/null; then
     standard_changed=true
     python3 "$SBM_LIB/libexec/openlist_proxy.py" prepare "$server" "$binary" "$config" "$domain" "$(openlist_port)" "$SBM_CERTS/$domain/fullchain.pem" "$SBM_CERTS/$domain/key.pem" "$work/site" || return 1
   fi
@@ -251,18 +298,25 @@ _reality_site_setup() (
     security_started=true
     reality_site_security "$work/security" || return 1
   fi
-  openlist_web_reload "$server" && reality_site_backend_ready "$domain" "$port" || return 1
+  openlist_web_reload "$server" || return 1
+  if [[ "$existing" == true ]]; then reality_site_tls_ready "$domain" "$port" || return 1
+  else reality_site_backend_ready "$domain" "$port" || return 1; fi
+  domains=$(jq -c '.domains // []' "$SBM_REALITY_SITE_DIR/current/frontend.json") || return 1
   candidate="$work/state.json"
-  reality_site_candidate "$id" "$domain" "$server" "$binary" "$config" "$port" "$candidate" || return 1
+  reality_site_candidate "$id" "$domain" "$server" "$binary" "$config" "$port" "$candidate" \
+    "$([[ "$existing" == true ]] && echo false || echo true)" "$domains" || return 1
   runtime_changed=true
   apply_candidate_state "$candidate" reality-site || return 1
-  openlist_site_ready "$domain" || return 1
+  if [[ "$existing" == true ]]; then reality_site_tls_ready "$domain" 443 || return 1
+  else openlist_site_ready "$domain" || return 1; fi
   subscription_refresh_live || return 1
   complete=true
   rm -f "$SBM_REALITY_SITE_DIR/current"/*.log
-  log_ok "OpenList 与 VLESS Vision Reality 已共用 443：https://$domain"
-  log_info "节点：$id；网站程序：$server；更新客户端订阅以使用新的 SNI。"
-  log_info "初始管理员信息：$SBM_SECRETS/openlist-admin.txt；节点分享：xm share $id"
+  if [[ "$existing" == true ]]; then log_ok "本机网站与 VLESS Vision Reality 已共用 443：https://$domain"
+  else log_ok "OpenList 与 VLESS Vision Reality 已共用 443：https://$domain"; fi
+  log_info "节点：$id；网站程序：$server；伪装域名：$(jq -r --arg d "$domain" '([$d]+.)|unique|join("、")' <<<"$domains")；更新客户端订阅以使用新的 SNI。"
+  [[ "$existing" == true ]] || log_info "初始管理员信息：$SBM_SECRETS/openlist-admin.txt"
+  log_info "节点分享：xm share $id；以后添加网站：xm reality site add 域名"
 )
 
 reality_site_setup() {
@@ -296,10 +350,13 @@ _reality_site_detach() (
   jq '.reality_site.node_id as $id | (.nodes[]|select(.id==$id)).enabled=false | del(.reality_site)' "$SBM_STATE" >"$candidate" || return 1
   apply_candidate_state "$candidate" reality-detach || return 1
   python3 "$SBM_LIB/libexec/reality_site.py" detach "$SBM_REALITY_SITE_DIR/current" "$work/active" || return 1
-  openlist_web_reload "$server" && openlist_site_ready "$domain" || return 1
+  openlist_web_reload "$server" || return 1
+  if jq -e '.openlist==false' <<<"$info" >/dev/null; then reality_site_tls_ready "$domain" 443 || return 1
+  else openlist_site_ready "$domain" || return 1; fi
   subscription_refresh_live || return 1
   complete=true
   rm -rf -- "$SBM_REALITY_SITE_DIR/current"
+  rmdir -- "$SBM_REALITY_SITE_DIR" 2>/dev/null || true
   log_ok '网站已恢复直接使用 443；原 Reality 节点已停用，凭据保留。'
 )
 
@@ -309,9 +366,139 @@ reality_site_detach() {
   with_lock _reality_site_detach
 }
 
+# Apply the domains currently behind REALITY to state and the node.
+reality_site_domains_candidate() {
+  local domains=$1 candidate=$2
+  jq --argjson domains "$domains" '
+    .reality_site as $r | .reality_site.domains=(([$r.domain]+$domains)|unique)
+    | .nodes |= map(if .id==$r.node_id then .reality_server_names=(($domains|unique)-[$r.domain]) else . end)
+  ' "$SBM_STATE" >"$candidate" && state_normalize_v2_file "$candidate"
+}
+
+# Shared body of sync/site add/site remove. PRE (optional) changes the website
+# configuration first and leaves its own rollback journal in $work/site.
+_reality_site_change() (
+  set -Eeuo pipefail
+  local label=$1 pre=${2:-} pre_arg=${3:-} info server port binary config work snapshot candidate domains before
+  local complete=false site_changed=false sync_changed=false recovered=true
+  local -a context=()
+  info=$(jq -c '.reality_site // empty' "$SBM_STATE") || return 1
+  [[ -n "$info" ]] || { log_error '尚未接入 Reality 网站；先运行 xm reality setup 域名。'; return 1; }
+  server=$(jq -r '.server' <<<"$info"); port=$(jq -r '.backend_port' <<<"$info")
+  [[ "$server" == nginx ]] || { log_error '共存后添加网站目前只支持 Nginx。'; return 1; }
+  website_mux_require_python || return 1
+  mapfile -t context < <(openlist_proxy_context nginx true)
+  (( ${#context[@]} == 2 )) || return 1
+  binary=${context[0]}; config=${context[1]}
+  before=$(jq -c '.domains // [.domain]' <<<"$info")
+  snapshot=$(snapshot_create "reality-$label") || return 1
+  work=$(mktemp -d "$SBM_RUN/reality-$label.XXXXXX") || return 1
+  chmod 0700 "$work" || return 1
+  export SBM_OPERATION_SNAPSHOT="$snapshot"
+  trap 'rc=$?; trap - EXIT; if [[ "$complete" != true ]]; then
+    if [[ "$sync_changed" == true && -s "$work/sync/files.json" ]]; then python3 "$SBM_LIB/libexec/reality_site.py" rollback "$work/sync" || recovered=false; fi
+    if [[ "$site_changed" == true && -s "$work/site/files.json" ]]; then python3 "$SBM_LIB/libexec/openlist_proxy.py" rollback "$work/site" || recovered=false; fi
+    # Reload only when a journal shows the website configuration was touched.
+    if [[ -s "$work/sync/files.json" || -s "$work/site/files.json" ]]; then openlist_web_reload nginx || recovered=false; fi
+    snapshot_restore "$snapshot" || recovered=false
+    [[ "$recovered" == true ]] || log_error "自动恢复未完成，记录保留在：$work"
+  fi
+  if [[ "$complete" == true || "$recovered" == true ]]; then rm -rf -- "$work" "$snapshot"; fi
+  exit "$rc"' EXIT
+  if [[ -n "$pre" ]]; then
+    site_changed=true
+    "$pre" "$pre_arg" "$binary" "$config" "$work" || return 1
+  fi
+  sync_changed=true
+  python3 "$SBM_LIB/libexec/reality_site.py" sync nginx "$binary" "$config" "$port" "$work/sync" || return 1
+  domains=$(jq -c '.domains' "$work/sync/frontend.json") || return 1
+  if [[ "$site_changed" == true ]] || jq -e '.changed' "$work/sync/frontend.json" >/dev/null; then
+    openlist_web_reload nginx || return 1
+  fi
+  local d
+  for d in $(jq -r --argjson before "$before" '.-$before|.[]' <<<"$domains"); do
+    reality_site_tls_ready "$d" "$port" || return 1
+  done
+  candidate="$work/state.json"
+  reality_site_domains_candidate "$domains" "$candidate" || return 1
+  if ! cmp -s <(jq -S . "$candidate") <(jq -S . "$SBM_STATE"); then
+    apply_candidate_state "$candidate" "reality-$label" || return 1
+  fi
+  subscription_refresh_live || return 1
+  complete=true
+  log_ok "与 Reality 共用 443 的网站：$(jq -r 'join("、")' <<<"$domains")"
+)
+
+reality_site_sync() {
+  require_root
+  with_lock _reality_site_change sync
+}
+
+# PRE hook: add an OpenList or reverse-proxy site (listen 443) for sync to move.
+_reality_site_add_files() {
+  local spec=$1 binary=$2 config=$3 work=$4 domain target
+  domain=${spec%%|*}; target=${spec#*|}
+  python3 "$SBM_LIB/libexec/openlist_proxy.py" prepare nginx "$binary" "$config" "$domain" "$target" \
+    "$SBM_CERTS/$domain/fullchain.pem" "$SBM_CERTS/$domain/key.pem" "$work/site"
+}
+
+_reality_site_add() {
+  local domain=$1 target=$2 port
+  jq -e '.reality_site.enabled==true' "$SBM_STATE" >/dev/null || { log_error '尚未接入 Reality 网站；先运行 xm reality setup 域名。'; return 1; }
+  if ! cert_usable "$domain"; then
+    [[ -s "$SBM_CF_DNS_ENV" ]] || { log_error "没有 $domain 的证书；先配置 xm cert setup-cloudflare，或把证书放到 $SBM_CERTS/$domain/。"; return 1; }
+    # 443 belongs to REALITY; the certificate comes from Cloudflare DNS-01.
+    _state_transaction_run reality-certificate _cert_prepare_node_domain "$domain" || return 1
+  fi
+  if [[ "$target" == openlist ]]; then
+    if [[ ! -x "$SBM_OPENLIST_BIN" ]]; then _openlist_install || return 1
+    else service_start "$SBM_OPENLIST_SERVICE" && openlist_ready "$(openlist_port)" || return 1; fi
+    port=$(openlist_port) || return 1
+  else port=$target; fi
+  _reality_site_change add _reality_site_add_files "$domain|$port" || return 1
+  if [[ "$target" == openlist ]]; then
+    local mapped; mapfile -t mapped < <(openlist_proxy_context nginx true)
+    openlist_record_site "$domain" nginx "${mapped[0]}" "${mapped[1]}" "$port" || return 1
+  fi
+}
+
+reality_site_add() {
+  require_root
+  local domain=${1,,} target=${2:-openlist}
+  domain=${domain%.}
+  validate_domain "$domain" || usage_die "无效域名：$domain"
+  if [[ "$target" != openlist ]]; then
+    target=${target#http://}; target=${target#127.0.0.1:}; target=${target#localhost:}; target=${target%/}
+    [[ "$target" =~ ^[1-9][0-9]{0,4}$ ]] && (( target <= 65535 )) || usage_die '--proxy 只接受本机端口，例如 --proxy 3000 或 --proxy http://127.0.0.1:3000'
+  fi
+  with_lock _reality_site_add "$domain" "$target" || return 1
+  if [[ "$target" == openlist ]]; then log_ok "已添加 OpenList 网站：https://$domain（与 Reality 共用 443）"
+  else log_ok "已添加网站：https://$domain → 127.0.0.1:$target（与 Reality 共用 443）"; fi
+}
+
+_reality_site_remove_files() {
+  local domain=$1 binary=$2 config=$3 work=$4
+  python3 "$SBM_LIB/libexec/reality_site.py" remove-site "$config" "$domain" "$work/site"
+}
+
+reality_site_remove() {
+  require_root
+  local domain=${1,,}
+  domain=${domain%.}
+  validate_domain "$domain" || usage_die "无效域名：$domain"
+  if jq -e --arg d "$domain" '.reality_site.domain==$d' "$SBM_STATE" >/dev/null; then
+    usage_die '这是 Reality 的主域名；要整体解除请用 xm reality detach。'
+  fi
+  # remove-site journals like openlist_proxy, so the shared rollback applies.
+  with_lock _reality_site_change remove _reality_site_remove_files "$domain" || return 1
+  with_lock openlist_forget_site "$domain" || return 1
+  log_ok "已移除网站：$domain"
+}
+
 reality_site_status() {
   jq -r 'if .reality_site==null then "Reality 网站：未接入" else .reality_site |
-    "网站：https://\(.domain)","节点：\(.node_id) / Xray VLESS Vision Reality", "TCP入口：443 → 网站 127.0.0.1:\(.backend_port)","网站程序：\(.server)" end' "$SBM_STATE"
+    "网站：https://\(.domain)\(if .openlist==false then "（本机已有网站）" else "（OpenList）" end)","节点：\(.node_id) / Xray VLESS Vision Reality", "TCP入口：443 → 网站 127.0.0.1:\(.backend_port)","网站程序：\(.server)",
+    "共用 443 的网站：\((.domains // [.domain])|join("、"))" end' "$SBM_STATE"
 }
 
 reality_site_cli() {
@@ -320,6 +507,17 @@ reality_site_cli() {
   case "$action" in
     status) (($# == 0)) || usage_die '用法：xm reality status'; reality_site_status;;
     detach) (($# == 0)) || usage_die '用法：xm reality detach'; reality_site_detach;;
+    sync) (($# == 0)) || usage_die '用法：xm reality sync'; reality_site_sync;;
+    sites) (($# == 0)) || usage_die '用法：xm reality sites'; reality_site_local_sites | awk -F'\t' '{printf "%s  %s\n", $1, $2}';;
+    site)
+      case "${1:-}" in
+        add)
+          (($# == 2 || $# == 4)) || usage_die '用法：xm reality site add DOMAIN [--proxy 本机端口]'
+          if (($# == 4)); then [[ "$3" == --proxy ]] || usage_die "未知参数：$3"; reality_site_add "$2" "$4"
+          else reality_site_add "$2" openlist; fi;;
+        remove) (($# == 2)) || usage_die '用法：xm reality site remove DOMAIN'; reality_site_remove "$2";;
+        *) usage_die '用法：xm reality site add DOMAIN [--proxy 本机端口]|remove DOMAIN';;
+      esac;;
     setup)
       (($# >= 1)) || usage_die '用法：xm reality setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]'
       domain=$1; shift
@@ -332,6 +530,6 @@ reality_site_cli() {
         esac
       done
       reality_site_setup "$domain" "$server" "$id" "$security";;
-    *) usage_die '用法：xm reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach';;
+    *) usage_die '用法：xm reality status|sites|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|sync|site add DOMAIN [--proxy 端口]|site remove DOMAIN|detach';;
   esac
 }

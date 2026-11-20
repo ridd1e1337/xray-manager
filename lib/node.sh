@@ -87,7 +87,7 @@ node_list_json() {
 
 node_list() {
   local json=${1:-0} tag=${2:-} region=${3:-} id p enabled port endpoint metadata name
-  if [[ "$json" == "1" ]]; then node_list_json "$tag" "$region"; return; fi
+  if [[ "$json" == "1" ]]; then node_list_json "$tag" "$region"; return $?; fi
   printf '%-18s %-18s %-8s %-10s %-20s %-14s %s\n' 'ID' '协议' '状态' '端口' '域名/地址' '地区/标签' '名称'
   printf '%-18s %-18s %-8s %-10s %-20s %-14s %s\n' '------------------' '------------------' '--------' '----------' '--------------------' '--------------' '----'
   # One jq pass for the whole table: per-node jq calls dominated latency.
@@ -110,7 +110,7 @@ node_show() {
   [[ -n "$node" ]] || die "节点不存在：$id"
   if [[ "$json" == 1 ]]; then
     jq . <<<"$node"
-    return
+    return $?
   fi
   printf '%s\n' "$node" | jq .
   printf '元数据：备注=%s；地区=%s；用途=%s；线路=%s；标签=%s\n' \
@@ -166,7 +166,7 @@ node_native_fragment() {
       jq -cn --argjson v "$value" '{settings:{allowTransparent:$v}}';;
     --port-map)
       # LISTEN_PORT=HOST:PORT[,...]; "none" clears the map.
-      if [[ "$value" == none ]]; then printf '{"settings":{"portMap":{}}}\n'; return; fi
+      if [[ "$value" == none ]]; then printf '{"settings":{"portMap":{}}}\n'; return $?; fi
       [[ "$value" =~ ^[0-9]{1,5}=[^,=[:space:]]+:[0-9]{1,5}(,[0-9]{1,5}=[^,=[:space:]]+:[0-9]{1,5})*$ ]] || die '--port-map 格式：端口=主机:端口[,…]，或 none。'
       jq -cn --arg v "$value" '{settings:{portMap:($v|split(",")|map(split("=")|{key:.[0],value:.[1]})|from_entries)}}';;
     *) return 1;;
@@ -661,7 +661,7 @@ node_user_generate_secret() {
 node_user_list() {
   local node_id=$1 json=${2:-0} node
   node=$(state_get_node "$node_id"); [[ -n "$node" ]] || die "节点不存在：$node_id"
-  if [[ "$json" == 1 ]]; then jq '.users' <<<"$node"; return; fi
+  if [[ "$json" == 1 ]]; then jq '.users' <<<"$node"; return $?; fi
   printf '%-18s %-8s %s\n' 'USER_ID' '状态' '名称'
   jq -r '.users[] | [.id,(if .enabled then "启用" else "停用" end),.name] | @tsv' <<<"$node" |
     while IFS=$'\t' read -r id enabled name; do printf '%-18s %-8s %s\n' "$id" "$enabled" "$name"; done
@@ -793,7 +793,7 @@ node_user_delete() { with_state_transaction user-delete _node_user_delete "$@"; 
 
 _settings_set_default_address() {
   local address=$1 candidate
-  if [[ "$address" == auto ]]; then _settings_detect_public_ip; return; fi
+  if [[ "$address" == auto ]]; then _settings_detect_public_ip; return $?; fi
   validate_address "$address" || die "无效地址：$address"
   candidate=$(state_candidate)
   jq --arg a "$address" '.settings.default_server_address=$a | .settings.default_server_address_source="manual"' "$SBM_STATE" >"$candidate"
@@ -842,6 +842,6 @@ settings_detect_public_ip() { with_state_transaction settings-detect-ip _setting
 
 
 settings_show_addresses() {
-  if [[ ${1:-0} == 1 ]]; then jq '.settings | {default_server_address,default_server_address_source,public_ipv4,public_ipv6,outbound_ip_strategy,public_ip_detected_at}' "$SBM_STATE"; return; fi
+  if [[ ${1:-0} == 1 ]]; then jq '.settings | {default_server_address,default_server_address_source,public_ipv4,public_ipv6,outbound_ip_strategy,public_ip_detected_at}' "$SBM_STATE"; return $?; fi
   jq -r '"默认入口：\(.settings.default_server_address // "-")\n来源：\(.settings.default_server_address_source // "-")\n公网 IPv4：\(.settings.public_ipv4 // "-")\n公网 IPv6：\(.settings.public_ipv6 // "-")\n出站 IP 策略：\(.settings.outbound_ip_strategy // "prefer_ipv4")\n探测时间：\(.settings.public_ip_detected_at // "-")"' "$SBM_STATE"
 }

@@ -209,7 +209,7 @@ xray_inbound_for_node() {
   if ! xray_stream_protocol "$protocol"; then
     rendered=$(xray_protocol_inbound "$node" "$credentials" "$secret") || return 1
     xray_apply_override "$rendered" "$(xray_node_override "$node" inbound)"
-    return
+    return $?
   fi
   id=$(jq -r '.id' <<<"$node"); domain=$(jq -r '.domain // ""' <<<"$node")
   flow=$(jq -r '.flow // ""' <<<"$node"); security=$(xray_node_security "$node")
@@ -225,9 +225,10 @@ xray_inbound_for_node() {
   fi
   if [[ "$security" == reality ]]; then
     target=$(format_hostport "$(jq -r '.handshake_server' <<<"$node")" "$(jq -r '.handshake_port' <<<"$node")") || return 1
-    rendered=$(jq --arg target "$target" --arg server_name "$domain" \
+    # Other local websites behind the same REALITY target are valid SNIs too.
+    rendered=$(jq --arg target "$target" --arg server_name "$domain" --argjson extra "$(jq -c '.reality_server_names // []' <<<"$node")" \
       --arg private "$(jq -r '.reality_private_key' <<<"$secret")" --arg short_id "$(jq -r '.reality_short_id' <<<"$secret")" \
-      '.streamSettings += {security:"reality",realitySettings:{show:false,target:$target,xver:0,serverNames:[$server_name],privateKey:$private,shortIds:[$short_id]}}' <<<"$rendered") || return 1
+      '.streamSettings += {security:"reality",realitySettings:{show:false,target:$target,xver:0,serverNames:([$server_name]+($extra-[$server_name])),privateKey:$private,shortIds:[$short_id]}}' <<<"$rendered") || return 1
   elif [[ "$security" == tls ]]; then
     rendered=$(jq --arg cert "$SBM_CERTS/$domain/fullchain.pem" --arg key "$SBM_CERTS/$domain/key.pem" \
       '.streamSettings += {security:"tls",tlsSettings:{certificates:[{certificateFile:$cert,keyFile:$key}]}}' <<<"$rendered") || return 1

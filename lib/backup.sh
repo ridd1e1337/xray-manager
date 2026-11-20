@@ -173,7 +173,7 @@ backup_validate_archive() {
     path=${path%/}
     [[ -n "$path" && "$path" != /* && "$path" != *$'\n'* ]] || return 1
     case "$path" in
-      etc|etc/state.json|etc/config.json|etc/secrets|etc/secrets/*|etc/certs|etc/certs/*|meta|meta/manifest.txt|var|var/subscriptions|var/subscriptions/*|var/traffic-usage.json|var/substore|var/substore/app|var/substore/app/*|var/substore/data|var/substore/data/*|var/website-mux|var/website-mux/*) ;;
+      etc|etc/state.json|etc/config.json|etc/secrets|etc/secrets/*|etc/certs|etc/certs/*|meta|meta/manifest.txt|var|var/subscriptions|var/subscriptions/*|var/traffic-usage.json|var/user-usage.json|var/substore|var/substore/app|var/substore/app/*|var/substore/data|var/substore/data/*|var/website-mux|var/website-mux/*) ;;
       *) return 1 ;;
     esac
     IFS=/ read -r -a parts <<<"$path"

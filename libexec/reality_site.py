@@ -10,12 +10,18 @@ import subprocess
 import sys
 import tempfile
 
-from openlist_proxy import command, safe_path
-from website_mux import Journal, atomic, digest, edits, fail, parse, write_json
+from openlist_proxy import caddy_hosts, command, ipv6_available, safe_path
+from website_mux import Journal, atomic, digest, edits, fail, parse, tokens, write_json
 
 
 DOMAIN = re.compile(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}')
 PUBLIC_443 = {'443', '*:443', '0.0.0.0:443', '[::]:443'}
+# A migrated listen keeps its original public listeners in this trailing
+# comment, so detach restores exactly those lines and keeps everything else
+# (sites added or edited later). Directives only needed behind REALITY carry
+# the "added" marker and are removed on detach.
+MARK = '# xray-manager-reality:'
+ADDED = '# xray-manager-reality-added'
 
 
 def walk_nodes(nodes):
@@ -200,7 +206,7 @@ def nginx_read(main):
     return files, sites
 
 
-def nginx_plan(binary, main, port, log):
+def nginx_plan(binary, main, port, log, incremental=False):
     try:
         result = subprocess.run([binary, '-V'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, timeout=60)
@@ -212,14 +218,25 @@ def nginx_plan(binary, main, port, log):
         fail('Nginx 需要可识别的官方版本及 http_v2 模块才能提供 Reality TLS 目标')
     version = tuple(int(part) for part in version_match.groups())
     modern_http2 = version >= (1, 25, 1)
-    command([binary, '-t', '-c', str(main)], log, main.parent)
+    check = subprocess.run([binary, '-t', '-c', str(main)], cwd=main.parent, text=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    if check.returncode:
+        reason = next((line for line in check.stderr.splitlines() if '[emerg]' in line), check.stderr.strip()[-300:])
+        fail('当前 Nginx 配置没有通过 nginx -t，请先修复：' + reason)
     files, sites = nginx_read(main)
     changes, domains, found, quic = {}, set(), False, False
     for site in sites:
         directives = site['directives']
         listens = [(path, node) for path, node in directives if node['words'][:1] == ['listen']]
         if any(node['words'][1].rsplit(':', 1)[-1] == str(port) for _, node in listens):
-            fail('Nginx 已配置所选后端端口，请选择其他端口')
+            if not incremental:
+                fail('Nginx 已配置所选后端端口，请选择其他端口')
+            # Already behind REALITY: only report its names.
+            for _, node in directives:
+                if node['words'][0] == 'server_name':
+                    domains.update(name.lower().rstrip('.') for name in node['words'][1:]
+                                   if DOMAIN.fullmatch(name.lower().rstrip('.')))
+            continue
         public = []
         for path, node in listens:
             words = node['words']
@@ -244,7 +261,7 @@ def nginx_plan(binary, main, port, log):
             fail('Nginx 已显式关闭 HTTP/2，需先确认 Reality 目标策略')
         additions = ''
         if modern_http2 and not http2_directives:
-            additions += '\n    http2 on;\n'
+            additions += f'\n    http2 on; {ADDED}'
         tls_protocols = [(path, node) for path, node in directives
                          if node['words'][:1] == ['ssl_protocols']]
         if tls_protocols:
@@ -257,7 +274,7 @@ def nginx_plan(binary, main, port, log):
             protocols = list(site['inherited'].get('ssl_protocols', defaults))
             if 'TLSv1.3' not in protocols:
                 protocols.append('TLSv1.3')
-            additions += '\n    ssl_protocols ' + ' '.join(protocols) + ';\n'
+            additions += '\n    ssl_protocols ' + ' '.join(protocols) + f'; {ADDED}'
         for path, node in directives:
             words = node['words']
             if (words[0] in ('real_ip_header', 'set_real_ip_from', 'allow', 'deny', 'geo')
@@ -270,6 +287,7 @@ def nginx_plan(binary, main, port, log):
             if words[0] == 'server_name':
                 domains.update(name.lower().rstrip('.') for name in words[1:]
                                if DOMAIN.fullmatch(name.lower().rstrip('.')))
+        original = ' '.join(' '.join(files[path][node['start']:node['end']].split()) for path, node in public)
         for path, node in public:
             words = node['words']
             retained = [value for value in words[2:] if not value.startswith('ipv6only=')]
@@ -280,16 +298,26 @@ def nginx_plan(binary, main, port, log):
                 generated_options = [value for value in generated_options if value != 'http2']
             elif not http2_directives and 'http2' not in generated_options:
                 generated_options.append('http2')
-            replacement = (f'listen 127.0.0.1:{port} ' + ' '.join(generated_options) + ';'
-                           if options is None else '')
-            changes.setdefault(path, []).append((node['start'], node['end'], replacement))
+            text = files[path]
+            start, end = node['start'], node['end']
+            rest = text[end:text.find('\n', end) if '\n' in text[end:] else len(text)]
+            if options is None:
+                # The marker comment must not swallow directives on the same line.
+                replacement = (f'listen 127.0.0.1:{port} ' + ' '.join(generated_options) + f'; {MARK} {original}'
+                               + ('' if not rest.strip() else '\n'))
+            else:
+                replacement = ''
+                line_start = text.rfind('\n', 0, start) + 1
+                if not text[line_start:start].strip() and not rest.strip():
+                    start, end = max(line_start - 1, 0), end + len(rest)
+            changes.setdefault(path, []).append((start, end, replacement))
             options = retained
         if not port_redirect:
-            additions += '\n    port_in_redirect off;\n'
+            additions += f'\n    port_in_redirect off; {ADDED}'
         if additions:
             node = site['node']
             changes.setdefault(site['path'], []).append((node['open'], node['open'], additions))
-    if not found:
+    if not found and not incremental:
         fail('没有找到可迁移的 Nginx TCP/443 HTTPS 网站')
     planned = {path: edits(files[path], list(set(items))) for path, items in changes.items()}
     return planned, files, sorted(domains), quic
@@ -347,7 +375,7 @@ def validate_candidate(server, binary, main, planned, files, port, domains, log)
         candidate.unlink(missing_ok=True)
 
 
-def prepare(server, binary, main_name, port_text, backup_name):
+def prepare(server, binary, main_name, port_text, backup_name, incremental=False):
     if server not in ('caddy', 'nginx'):
         fail('网站程序只能是 caddy 或 nginx')
     if not re.fullmatch(r'[1-9][0-9]{3,4}', port_text) or not 1024 <= int(port_text) <= 65535:
@@ -364,9 +392,15 @@ def prepare(server, binary, main_name, port_text, backup_name):
     os.chmod(backup, 0o700)
     log = backup / 'config-check.log'
     if server == 'caddy':
+        if incremental:
+            fail('接入新网站目前只支持 Nginx；Caddy 请先 xm reality detach，添加网站后重新 setup')
         planned, files, domains, quic = caddy_plan(binary, main, port, log)
     else:
-        planned, files, domains, quic = nginx_plan(binary, main, port, log)
+        planned, files, domains, quic = nginx_plan(binary, main, port, log, incremental)
+    if incremental and not planned:
+        write_json(backup / 'frontend.json', {'server': server, 'binary': binary, 'config': str(main),
+                                              'backend_port': port, 'domains': domains, 'changed': False})
+        return
     expected = {path: hashlib.sha256(text.encode()).hexdigest() for path, text in files.items()}
     validate_candidate(server, binary, main, planned, files, port, domains, log)
     for path, checksum in expected.items():
@@ -380,7 +414,7 @@ def prepare(server, binary, main_name, port_text, backup_name):
         'server': server, 'binary': binary, 'config': str(main), 'backend_port': port,
         'target': f'127.0.0.1:{port}', 'domains': domains, 'quic_public': quic,
         'certificate_challenge': 'http-01-or-existing-files' if server == 'caddy' else 'existing-files',
-        'client_address': '127.0.0.1',
+        'client_address': '127.0.0.1', 'changed': True,
     })
     try:
         for path, text in planned.items():
@@ -459,17 +493,158 @@ def restore(backup_name, recovery_name=None):
         write_json(recovery.index, recovery.entries)
 
 
+def unmigrate_text(text, port, ipv6):
+    marked = re.compile(r'(?m)^([ \t]*)listen[ \t]+127\.0\.0\.1:%d(?![0-9])[^;\n]*;[ \t]*%s[ \t]*([^\n]*)$'
+                        % (port, re.escape(MARK)))
+
+    def original(match):
+        parts = [part.strip() + ';' for part in match.group(2).split(';') if part.strip()]
+        return match.group(1) + ('\n' + match.group(1)).join(parts)
+    text, count = marked.subn(original, text)
+    # Listeners migrated before markers existed: restore the public pair.
+    legacy = re.compile(r'listen[ \t]+127\.0\.0\.1:%d(?![0-9])([^;\n]*);' % port)
+
+    def public(match):
+        options = match.group(1)
+        return f'listen 443{options};' + (f' listen [::]:443{options};' if ipv6 else '')
+    text, legacy_count = legacy.subn(public, text)
+    text = re.sub(r'\n[ \t]*[^\n#]*;[ \t]*%s[ \t]*(?=\n|$)' % re.escape(ADDED), '', text)
+    return text, count + legacy_count
+
+
+def unmigrate(backup_name, recovery_name):
+    backup, recovery_path = safe_path(backup_name), safe_path(recovery_name)
+    info = json.loads((backup / 'frontend.json').read_text())
+    main, binary, port = Path(info['config']), info['binary'], int(info['backend_port'])
+    if recovery_path.is_symlink() or (recovery_path / 'files.json').exists():
+        fail('请使用新的独立 Reality 恢复事务目录')
+    recovery_path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    log = recovery_path / 'config-check.log'
+    files, _ = nginx_read(main)
+    ipv6 = ipv6_available()
+    planned, total = {}, 0
+    for path, text in files.items():
+        changed, count = unmigrate_text(text, port, ipv6)
+        total += count
+        if changed != text:
+            planned[path] = changed
+    if not total:
+        fail('没有找到 Reality 迁移过的 Nginx 监听')
+    validate_candidate('nginx', binary, main, planned, files, port, [], log)
+    write_json(recovery_path / 'frontend.json', info)
+    tx = Journal(recovery_path)
+    for path in files:
+        tx.save(path)
+        tx.installed(path)
+    try:
+        for path, text in planned.items():
+            atomic(path, text, 0o644)
+            tx.installed(path)
+        command([binary, '-t', '-c', str(main)], log, main.parent)
+    except Exception:
+        tx.restore(strict=True)
+        raise
+
+
+def list_domains(server, binary, main_name):
+    """HTTPS domains the local web server serves (on 443 or behind REALITY)."""
+    main = safe_path(main_name)
+    found = set()
+    if server == 'caddy':
+        config = json.loads(subprocess.run([binary, 'adapt', '--adapter', 'caddyfile', '--config', str(main)],
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                                           timeout=60, check=True).stdout)
+        for srv in config.get('apps', {}).get('http', {}).get('servers', {}).values():
+            if any(not address.endswith(':80') for address in srv.get('listen', [])):
+                found.update(caddy_hosts(srv))
+    else:
+        dump = subprocess.run([binary, '-T', '-c', str(main)], stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True, timeout=60, check=True).stdout
+        words = [value for value, _, _ in tokens(dump, 'nginx')]
+        depth, server_depth, statement, tls, names = 0, None, [], False, []
+        for word in words:
+            if word == '{':
+                if statement == ['server'] and server_depth is None:
+                    server_depth, tls, names = depth, False, []
+                depth += 1
+                statement = []
+            elif word == '}':
+                depth -= 1
+                if server_depth is not None and depth == server_depth:
+                    if tls:
+                        found.update(names)
+                    server_depth = None
+                statement = []
+            elif word == ';':
+                if server_depth is not None and depth == server_depth + 1 and statement:
+                    if statement[0] == 'listen' and len(statement) > 1 and (
+                            ('ssl' in statement and statement[1].rsplit(':', 1)[-1] == '443')
+                            or statement[1].startswith('127.0.0.1:')):
+                        tls = tls or 'ssl' in statement
+                    if statement[0] == 'server_name':
+                        names += statement[1:]
+                statement = []
+            else:
+                statement.append(word)
+    domains = sorted({name.lower().rstrip('.') for name in found
+                      if DOMAIN.fullmatch(name.lower().rstrip('.'))})
+    print(json.dumps(domains))
+
+
+def remove_site(main_name, domain, backup_name):
+    """Remove a site this manager added while REALITY owns 443."""
+    main = safe_path(main_name).resolve(strict=True)
+    if not DOMAIN.fullmatch(domain):
+        fail('域名无效')
+    snippet = main.parent / f'.xray-manager-openlist-{domain}.conf'
+    if snippet.is_symlink() or not snippet.is_file() or not snippet.read_text().startswith('# Managed by xray-manager'):
+        fail('该网站不是本项目添加的，请手动修改 Nginx 配置后运行 xm reality sync')
+    text = main.read_text()
+    # openlist_proxy inserts "\n  include FILE;\n" right after "http {".
+    include = r'\n[ \t]*include[ \t]+%s;[ \t]*' % re.escape(str(snippet))
+    planned_main, count = re.subn(include + r'\n(?=\n)', '', text, count=1)
+    if not count:
+        planned_main, count = re.subn(include + r'(?=\n)', '', text, count=1)
+    if count != 1:
+        fail('主配置中没有找到该网站的 include')
+    backup = safe_path(backup_name)
+    backup.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tx = Journal(backup)
+    for path in (str(main), str(snippet)):
+        tx.save(path)
+        tx.installed(path)
+    write_json(backup / 'frontend.json', {'server': 'nginx', 'config': str(main)})
+    try:
+        atomic(str(main), planned_main, 0o644)
+        tx.installed(str(main))
+        snippet.unlink()
+        tx.installed(str(snippet))
+    except Exception:
+        tx.restore(strict=True)
+        raise
+
+
 def main():
     os.umask(0o077)
     args = sys.argv[1:]
     if len(args) == 6 and args[0] == 'prepare':
         prepare(*args[1:])
+    elif len(args) == 6 and args[0] == 'sync':
+        prepare(*args[1:], incremental=True)
+    elif len(args) == 4 and args[0] == 'domains':
+        list_domains(*args[1:])
+    elif len(args) == 4 and args[0] == 'remove-site':
+        remove_site(*args[1:])
     elif len(args) == 2 and args[0] in ('rollback', 'detach'):
         restore(args[1])
     elif len(args) == 3 and args[0] == 'detach':
-        restore(args[1], args[2])
+        info = json.loads((safe_path(args[1]) / 'frontend.json').read_text())
+        if info.get('server') == 'nginx':
+            unmigrate(args[1], args[2])
+        else:
+            restore(args[1], args[2])
     else:
-        fail('用法：prepare SERVER BINARY MAIN BACKEND_PORT BACKUP | rollback BACKUP | detach BACKUP [RECOVERY]')
+        fail('用法：prepare|sync SERVER BINARY MAIN BACKEND_PORT BACKUP | domains SERVER BINARY MAIN | remove-site MAIN DOMAIN BACKUP | rollback BACKUP | detach BACKUP [RECOVERY]')
 
 
 if __name__ == '__main__':

@@ -306,6 +306,27 @@ Telegram 机器人作为 root 服务长轮询 getUpdates，令牌经 curl 标准
 用户停用、到期或流量用尽时各格式返回 422 及原因，但仍携带用量头。状态事务和
 用户限额周期任务都会刷新用户订阅。
 
+## Reality 与本机网站共用 443（alpha.20）
+
+```bash
+xm reality sites                                  # 本机 Nginx/Caddy 已有的 HTTPS 域名
+xm reality setup blog.example.com nginx           # 已有网站：直接作为 Reality 目标
+xm reality site add files.example.com             # 再加 OpenList 网站
+xm reality site add app.example.com --proxy 3000  # 再加反代本机端口的网站
+xm reality sync                                   # 接入手写的 listen 443 ssl 网站
+xm reality site remove app.example.com
+```
+
+`setup` 的域名若已由本机网站以 HTTPS 提供，就直接把它作为 Reality 目标，不安装 OpenList；否则按下文自动建
+OpenList 网站。添加 VLESS 节点时面板会列出这些网站并推荐“借用本机网站伪装并共用 443”。
+
+迁移时每条 `listen 443 ssl` 改为 `listen 127.0.0.1:后端端口`，并在行尾以 `# xray-manager-reality:` 记录原写法；
+只为 Reality 补充的 `http2 on`、`ssl_protocols`、`port_in_redirect off` 带 `# xray-manager-reality-added`。
+`detach` 只按这些标记还原，所以共存期间添加或编辑的网站都会保留并恢复监听 443。`sync` 跳过已迁移的站点，
+只迁移新的 443 站点；当前配置未通过 `nginx -t` 时直接报告 Nginx 的错误，不做改动。所有迁移过的域名写入节点的
+`reality_server_names`，渲染为 Xray `serverNames`，客户端可用其中任一域名作 SNI。`site add` 需要该域名已有证书
+（`/etc/xray-manager/certs/域名/`）或 Cloudflare DNS 凭据。共存后添加网站目前只支持 Nginx。
+
 ## OpenList 与 Reality 共用 443（alpha.72）
 
 ```bash

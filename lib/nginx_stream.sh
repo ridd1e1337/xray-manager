@@ -473,7 +473,7 @@ nginx_stream_status() {
     elif service_active "$service"; then service_state=running
     else service_state=stopped; fi
     jq --arg state "$service_state" '.nginx_stream + {service_state:$state}' "$SBM_STATE"
-    return
+    return $?
   fi
   printf 'TCP/SNI 复用：%s，方式：%s，公网端口：%s/TCP，路由：%s 条\n' "$([[ "$enabled" == true ]] && echo '启用' || echo '停用')" "$(mux_backend_label)" "$port" "$routes"
   if website_mux_managed; then printf '网站自动接入已启用；节点变化会自动同步网站分流，后端只监听本机。\n'

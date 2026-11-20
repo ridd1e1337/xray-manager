@@ -120,7 +120,7 @@ ui_select_json() {
     [[ "$__ui_new" == 1 ]] || { log_warn "没有可选的${__ui_label}。"; return 1; }
     prompt_value "$__ui_var" "新建${__ui_label} ID（留空返回）" '' || return 1
     [[ -n ${!__ui_var} ]] || return 1
-    return
+    return $?
   fi
   __ui_index=$(jq -r --arg id "$__ui_default" 'to_entries|map(select(.value.id==$id))|if length>0 then (.[0].key+1|tostring) else empty end' <<<"$__ui_items")
   while true; do
@@ -135,7 +135,7 @@ ui_select_json() {
         [[ "$__ui_new" == 1 ]] || { log_error '选择无效'; continue; }
         prompt_value "$__ui_var" "新建${__ui_label} ID（留空返回）" '' || return 1
         [[ -n ${!__ui_var} ]] || return 1
-        return;;
+        return $?;;
       m)
         prompt_value __ui_id "${__ui_label} ID（留空返回）" '' || return 1
         [[ -n "$__ui_id" ]] || return 1;;
@@ -314,7 +314,7 @@ ui_issue_certificate() {
   local domain=$1 reset_credentials=${2:-0} prepare_dns=${3:-0}
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '证书申请不支持 --dry-run；请退出预览模式后再操作。'
   validate_domain "$domain" || die "无效域名：$domain"
-  if ui_certificate_usable "$domain"; then log_info "复用现有证书：$domain"; return; fi
+  if ui_certificate_usable "$domain"; then log_info "复用现有证书：$domain"; return $?; fi
   printf '\n正在为 %s 准备证书。域名需由 Cloudflare 托管 DNS。\n' "$domain"
   if [[ "$prepare_dns" == 1 ]]; then
     printf '将自动探测本机公网 IP，添加 DNS only 的 A/AAAA 记录，再申请证书。\n'
@@ -426,7 +426,7 @@ ui_prompt_server_address() {
 ui_node_finish_menu() {
   local id=$1 choice node user_id output max_choice=5
   node=$(state_get_node "$id")
-  [[ -n "$node" ]] || { ui_page_back; return; }
+  [[ -n "$node" ]] || { ui_page_back; return $?; }
   printf '\n%s（%s）\n' "$(jq -r '.name' <<<"$node")" "$id"
   if [[ $(jq -r '.protocol' <<<"$node") == snell ]]; then printf '1. 再次显示 Surge 原生配置\n'
   else printf '1. 再次显示节点分享链接和二维码\n'; fi
@@ -701,17 +701,30 @@ ui_vless_collect() {
 }
 
 ui_vless_add() {
-  local name address port vless_domain vless_transport kind choice
+  local name address port vless_domain vless_transport kind choice sites='' site_server site_domain
   local -a vless_args=()
-  printf '1. 推荐：VLESS + REALITY + Vision（只需选端口，其余自动）\n2. 自定义传输、安全层与加密\n0. 返回\n'
-  ui_menu_choice choice '添加方式（回车=推荐）' 2 1 || return 1
+  # Websites already on this server make the best REALITY camouflage.
+  if ! jq -e '.reality_site.enabled==true' "$SBM_STATE" >/dev/null 2>&1; then sites=$(reality_site_local_sites); fi
+  if [[ -n "$sites" ]]; then
+    printf '检测到本机网站：%s\n' "$(cut -f2 <<<"$sites" | paste -sd ' ' | sed 's/ /、/g')"
+    printf '1. 推荐：VLESS + REALITY + Vision，借用本机网站伪装并与它共用 443\n2. VLESS + REALITY + Vision，借用外部网站（如 www.apple.com）\n3. 自定义传输、安全层与加密\n0. 返回\n'
+    ui_menu_choice choice '添加方式（回车=推荐）' 3 1 || return 1
+    case "$choice" in
+      1) ui_reality_pick_site site_server site_domain "$sites" || return 1
+         reality_site_setup "$site_domain" "$site_server" '' false; return $?;;
+      2) choice=1;; 3) choice=2;; *) return 1;;
+    esac
+  else
+    printf '1. 推荐：VLESS + REALITY + Vision（只需选端口，其余自动）\n2. 自定义传输、安全层与加密\n0. 返回\n'
+    ui_menu_choice choice '添加方式（回车=推荐）' 2 1 || return 1
+  fi
   case "$choice" in
     1)
       # Public IP is detected automatically; ask only when detection fails.
       address=$(node_auto_address '' 2>/dev/null) || ui_prompt_server_address address '' || return 1
       ui_prompt_port port tcp '监听端口' 443 8443 9443 10443 || return 1
       ui_add_node_and_deliver vless --name 'VLESS Reality' --address "$address" --port "$port" --transport raw --security reality
-      return;;
+      return $?;;
     2) ;;
     *) return 1;;
   esac
@@ -806,12 +819,12 @@ ui_user_menu() {
         ui_prompt_optional value '每人在线 IP 上限（留空不限）' '' || return 1; [[ -z "$value" ]] || args+=(--ip-limit "$value")
       fi
       ui_prompt_optional days '有效天数（留空永久）' '' || return 1; [[ -z "$days" ]] || args+=(--days "$days")
-      node_user_batch_add "$id" "$prefix" "$count" 1 "${args[@]}"; return;;
-    13) user_online "$id"; return;;
+      node_user_batch_add "$id" "$prefix" "$count" 1 "${args[@]}"; return $?;;
+    13) user_online "$id"; return $?;;
     19)
       prompt_value value '用户导出文件路径' "$SBM_EXPORTS/user.json" || return 1
-      user_import "$id" "$value"; return;;
-    14) node_user_purge_depleted "$id"; return;;
+      user_import "$id" "$value"; return $?;;
+    14) node_user_purge_depleted "$id"; return $?;;
   esac
   if [[ "$choice" != 1 ]]; then
     prompt_value user_id '用户 ID' "$(state_get_node "$id" | jq -r '.users[0].id')" || return 1
@@ -959,19 +972,19 @@ ui_add_node() {
     '0. 返回'
   ui_menu_choice choice '选择协议' 10
   case "$choice" in
-    2) ui_stream_node_add vmess; return;;
-    4) ui_stream_node_add trojan; return;;
-    5) ui_stream_node_add shadowsocks; return;;
-    7) ui_wireguard_add; return;;
-    8) ui_tunnel_add; return;;
+    2) ui_stream_node_add vmess; return $?;;
+    4) ui_stream_node_add trojan; return $?;;
+    5) ui_stream_node_add shadowsocks; return $?;;
+    7) ui_wireguard_add; return $?;;
+    8) ui_tunnel_add; return $?;;
     10)
       local mq_name mq_domain mq_address mq_port
-      prompt_value mq_name '节点名称' MASQUE || return
-      ui_select_certificate_domain mq_domain || { ui_cancel; return; }
-      ui_prompt_server_address mq_address "$(ui_client_address_default "$mq_domain")" || return
-      ui_prompt_port mq_port udp 'UDP 端口（HTTP/3）' 443 8443 9443 10443 || return
+      prompt_value mq_name '节点名称' MASQUE || return $?
+      ui_select_certificate_domain mq_domain || { ui_cancel; return $?; }
+      ui_prompt_server_address mq_address "$(ui_client_address_default "$mq_domain")" || return $?
+      ui_prompt_port mq_port udp 'UDP 端口（HTTP/3）' 443 8443 9443 10443 || return $?
       ui_add_node_and_deliver masque --name "$mq_name" --domain "$mq_domain" --address "$mq_address" --port "$mq_port"
-      return;;
+      return $?;;
   esac
   # Map the remaining entries onto the shared wizard branches.
   case "$choice" in 1) choice=7;; 3) choice=1;; 6) choice=4;; 9) choice=11;; esac
@@ -984,16 +997,16 @@ ui_add_node() {
       ui_add_node_and_deliver "${args[@]}"
       ;;
     4)
-      prompt_value name '节点名称' 'Hysteria2'; ui_select_certificate_domain domain || { ui_cancel; return; }; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port udp 'UDP 端口' 443 8443 9443 10443
+      prompt_value name '节点名称' 'Hysteria2'; ui_select_certificate_domain domain || { ui_cancel; return $?; }; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port udp 'UDP 端口' 443 8443 9443 10443
       local -a hy2_args=(hy2 --name "$name" --domain "$domain" --address "$address" --port "$port")
       if ! ui_use_recommended; then
         printf '1. 不启用混淆\n2. Salamander\n'; ui_menu_choice hy2_obfs_choice '选择 Hysteria2 混淆' 2
         case "$hy2_obfs_choice" in
           1) ;;
           2) hy2_args+=(--obfs salamander) ;;
-          *) log_error '选择无效'; return ;;
+          *) log_error '选择无效'; return $? ;;
         esac
-        ui_prompt_optional hy2_realm_choice '伪装网站 URL（masquerade，可留空）' '' || return
+        ui_prompt_optional hy2_realm_choice '伪装网站 URL（masquerade，可留空）' '' || return $?
         [[ -z "$hy2_realm_choice" ]] || hy2_args+=(--masquerade "$hy2_realm_choice")
       fi
       ui_add_node_and_deliver "${hy2_args[@]}"
@@ -1008,17 +1021,17 @@ ui_add_node() {
       prompt_value name '节点名称' '认证代理'
       ui_add_node_and_deliver "$proxy_type" --listen "$proxy_listen" --address "$address" --port "$port" --name "$name"
       ;;
-    0) return;; *) log_error '选择无效';;
+    0) return $?;; *) log_error '选择无效';;
   esac
 }
 
 ui_manage_nodes() {
   local id=${1:-} action value remark region purpose line tags node max_action=13
   if [[ -z "$id" ]]; then
-    ui_select_node id || { ui_page_back; return; }
-    if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then ui_open_submenu ui_manage_nodes "$id"; return; fi
+    ui_select_node id || { ui_page_back; return $?; }
+    if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then ui_open_submenu ui_manage_nodes "$id"; return $?; fi
   fi
-  state_node_exists "$id" || { ui_page_back; return; }
+  state_node_exists "$id" || { ui_page_back; return $?; }
   node=$(state_get_node "$id")
   node_show "$id"
   printf '\n1. 显示导入内容\n2. 启用节点\n3. 停用节点\n4. 修改端口\n5. 修改客户端地址\n6. 修改名称\n7. 修改备注、地区与标签\n8. 轮换凭据\n9. 删除节点\n10. 设置/延长节点有效期\n11. 清除节点到期策略\n'
@@ -1051,7 +1064,7 @@ ui_manage_nodes() {
 ui_share_export_menu() {
   local id
   printf '选择单个节点或全部节点。Snell 会优先显示 Surge 原生配置，其他协议显示分享链接。\n'
-  ui_select_node id 1 || { ui_page_back; return; }
+  ui_select_node id 1 || { ui_page_back; return $?; }
   if [[ "$id" == all ]]; then
     node_share_all
     export_all_outbounds
@@ -1073,20 +1086,20 @@ ui_client_export_menu() {
     3)
       prompt_value output 'Xray 配置文件' "$directory/client-xray.json" || return 1
       export_xray_client_config "$output" "$selected_node" "$selected_user"
-      return;;
+      return $?;;
     4)
       prompt_value output 'mihomo 配置文件' "$directory/client-mihomo.json" || return 1
       export_mihomo_client_config "$output" "$selected_node" "$selected_user"
-      return;;
-    0) return;;
-    *) log_error '选择无效'; return;;
+      return $?;;
+    0) return $?;;
+    *) log_error '选择无效'; return $?;;
   esac
   prompt_value output '输出文件' "$output"
   dns_mode=hijack; dns_address=''
   if [[ "$mode" == tun ]] && version_ge "$(core_current_version)" 1.14.0-rc.1; then
     printf '1. hijack\n2. native\n3. disabled\n'
     ui_menu_choice dns_mode 'TUN DNS 模式' 3
-    case "$dns_mode" in 1) dns_mode=hijack;; 2) dns_mode=native;; 3) dns_mode=disabled;; *) log_error '选择无效'; return;; esac
+    case "$dns_mode" in 1) dns_mode=hijack;; 2) dns_mode=native;; 3) dns_mode=disabled;; *) log_error '选择无效'; return $?;; esac
     if [[ "$dns_mode" != disabled ]]; then prompt_value dns_address 'DNS 地址（留空使用自动地址）' ''; fi
   fi
   export_client_config "$output" "$mode" "$dns_mode" "$dns_address" "$selected_node" "$selected_user"
@@ -1115,8 +1128,8 @@ ui_tunnel_menu() {
   case "$c" in
     1) tunnel_status;;
     2) cloudflared_install;;
-    3) [[ -n "$id" ]] || ui_select_node id || { ui_cancel; return; }; prompt_value domain 'Cloudflare 隧道公网域名' ''; prompt_value address '客户端连接地址（域名或 IP）' "$domain"; tunnel_setup_fixed "$id" "$domain" '' "$address";;
-    4) [[ -n "$id" ]] || ui_select_node id || { ui_cancel; return; }; tunnel_setup_quick "$id";;
+    3) [[ -n "$id" ]] || ui_select_node id || { ui_cancel; return $?; }; prompt_value domain 'Cloudflare 隧道公网域名' ''; prompt_value address '客户端连接地址（域名或 IP）' "$domain"; tunnel_setup_fixed "$id" "$domain" '' "$address";;
+    4) [[ -n "$id" ]] || ui_select_node id || { ui_cancel; return $?; }; tunnel_setup_quick "$id";;
     5) tunnel_refresh_quick;; 6) tunnel_set_token;; 7) confirm '停止 CF Tunnel？' N && tunnel_stop;;
     8) ui_open_submenu ui_tunnel_routes_menu;;
   esac
@@ -1266,7 +1279,7 @@ ui_manager_auto_menu() {
     1) manager_update_cli auto enable;;
     2) manager_update_cli auto disable;;
     3)
-      if ! manager_auto_enabled; then log_warn '请先开启自动更新，或使用上级菜单的“更新脚本与 Caddy”。'; return; fi
+      if ! manager_auto_enabled; then log_warn '请先开启自动更新，或使用上级菜单的“更新脚本与 Caddy”。'; return $?; fi
       manager_auto_run
       if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/xm"; fi;;
     4)
@@ -1311,7 +1324,7 @@ ui_uninstall_menu() {
     2)
       printf '%s警告：此操作会删除所有节点、证书、Token、核心和备份，无法撤销。%s\n' "$C_RED" "$C_RESET"
       prompt_value phrase '请输入 DELETE 确认彻底卸载' ''
-      [[ "$phrase" == DELETE ]] || { log_warn '确认文字不匹配，已取消。'; return; }
+      [[ "$phrase" == DELETE ]] || { log_warn '确认文字不匹配，已取消。'; return $?; }
       uninstall_manager 1 1
       ;;
     0) return 0 ;;
@@ -1335,7 +1348,7 @@ ui_mux_auto_menu() {
   count=$(jq 'length' <<<"$items")
   if (( count == 0 )); then
     log_warn '没有可加入 TCP/443 复用的启用节点。支持 AnyTLS、Trojan、VLESS TLS/Reality、Naive TCP 和 ShadowTLS。'
-    return
+    return $?
   fi
   printf '可复用节点（已有路由会跳过）：\n'
   jq -r '.[] | "- \(.id) | \(.protocol) | \(.domain // "-")"' <<<"$items"
@@ -1358,7 +1371,7 @@ ui_nginx_stream_menu() {
   case "$c" in
     1) ui_mux_auto_menu;;
     2)
-      ui_select_node id || { ui_cancel; return; }
+      ui_select_node id || { ui_cancel; return $?; }
       node=$(state_get_node "$id")
       sni=$(nginx_stream_node_sni "$node" 2>/dev/null || true)
       prompt_value sni 'SNI 域名（必须与客户端 server_name 一致）' "$sni"
@@ -1431,14 +1444,14 @@ ui_hy2_buffer_menu() {
 
 ui_tcp_tuning_menu() {
   local c bandwidth rtt plan
-  tcp_tuning_status || return
+  tcp_tuning_status || return $?
   printf '\n1. 预览 TCP 调优参数\n2. 预览并应用 TCP 调优\n3. 恢复首次启用前的设置\n0. 返回\n'
   ui_menu_choice c '选择操作' 3
   case "$c" in
     1|2)
       prompt_value bandwidth '线路带宽（Mbps，整数）' '500'
       prompt_value rtt '典型客户端 RTT（ms，整数）' '100'
-      plan=$(tcp_tuning_plan "$bandwidth" "$rtt") || return
+      plan=$(tcp_tuning_plan "$bandwidth" "$rtt") || return $?
       tcp_tuning_show_plan "$plan"
       if [[ "$c" == 2 ]] && confirm '应用以上 TCP 参数？' N; then tcp_tuning_enable "$bandwidth" "$rtt"; fi
       ;;
@@ -1452,7 +1465,7 @@ ui_template_menu() {
   printf '\n1. 从节点保存模板\n2. 使用模板创建节点\n3. 删除模板\n4. 按标签启用节点\n5. 按标签停用节点\n0. 返回\n'
   ui_menu_choice c '选择操作' 5
   case "$c" in
-    1) prompt_value name '模板名称' ''; ui_select_node id || { ui_cancel; return; }; node_template_save "$name" "$id" ;;
+    1) prompt_value name '模板名称' ''; ui_select_node id || { ui_cancel; return $?; }; node_template_save "$name" "$id" ;;
     2) prompt_value name '模板名称' ''; prompt_value id '新节点 ID' ''; node_template_add "$name" "$id" ;;
     3) prompt_value name '模板名称' ''; confirm "确认删除模板 $name？" N && node_template_delete "$name" ;;
     4) prompt_value tag '标签' ''; node_batch_enable "$tag" '' ;;
@@ -1471,7 +1484,7 @@ ui_firewall_menu() {
     3) confirm '将备份并移除 INPUT 链全局 DROP/REJECT，必要时调整默认策略，继续？' N && firewall_clear_iptables_input_deny 1 ;;
     4)
       firewall_list_protocol_ports
-      command_exists ufw || { log_error '未安装 UFW；请使用发行版包管理器安装（Alpine：apk add ufw）。'; return; }
+      command_exists ufw || { log_error '未安装 UFW；请使用发行版包管理器安装（Alpine：apk add ufw）。'; return $?; }
       confirm '将为所有启用协议端口执行 UFW allow，继续？' N && firewall_ufw_allow_protocol_ports 1
       ;;
     5) firewall_setup_fail2ban ;;
@@ -1531,23 +1544,53 @@ ui_openlist_menu() {
   esac
 }
 
+# Pick a local website ("server<TAB>domain" lines) or enter a new domain,
+# for which an OpenList site is created.
+ui_reality_pick_site() {
+  local -n __server=$1 __domain=$2
+  local sites=${3:-} choice i=0 line server_choice
+  local -a rows=()
+  [[ -n "$sites" ]] && mapfile -t rows <<<"$sites"
+  printf '\n选择伪装用的网站（Xray 接管 443，普通访问照常进入该网站）：\n'
+  for line in "${rows[@]}"; do i=$((i + 1)); printf '%d. %s（本机 %s 网站）\n' "$i" "${line#*$'\t'}" "${line%%$'\t'*}"; done
+  printf '%d. 新域名：自动建一个 OpenList 网盘站\n0. 返回\n' "$((i + 1))"
+  ui_menu_choice choice '选择网站（回车=推荐）' "$((i + 1))" 1 || return 1
+  if (( choice >= 1 && choice <= i )); then
+    line=${rows[$((choice - 1))]}; __server=${line%%$'\t'*}; __domain=${line#*$'\t'}; return 0
+  fi
+  (( choice == i + 1 )) || return 1
+  prompt_value __domain '新网站域名（A 记录指向本机，Cloudflare 请用灰色云）' '' || return 1
+  printf '1. Nginx（推荐，省内存）\n2. Caddy\n0. 返回\n'
+  ui_menu_choice server_choice '选择网站程序' 2 1 || return 1
+  case "$server_choice" in 1) __server=nginx;; 2) __server=caddy;; *) return 1;; esac
+}
+
 ui_reality_menu() {
-  local choice domain server_choice server
+  local choice domain server_choice server target
   reality_site_status
-  printf '\n1. 一键建站与基础防护\n2. 接入网站与 Reality\n3. 恢复网站直接使用 443\n0. 返回\n'
-  ui_menu_choice choice '选择 Reality 操作' 3
+  printf '\n1. 一键建站与基础防护\n2. 接入网站与 Reality\n3. 恢复网站直接使用 443\n4. 再添加一个网站（OpenList 或反代本机端口）\n5. 接入手动添加的 Nginx 网站\n6. 移除添加的网站\n0. 返回\n'
+  ui_menu_choice choice '选择 Reality 操作' 6
   case "$choice" in
     1|2)
-      prompt_value domain '网站域名' '' || return 1
-      printf '1. Nginx\n2. Caddy\n0. 返回\n'
-      ui_menu_choice server_choice '选择网站程序' 2
-      case "$server_choice" in 1) server=nginx;; 2) server=caddy;; *) return;; esac
+      ui_reality_pick_site server domain "$(reality_site_local_sites)" || return 1
       if [[ "$choice" == 1 ]]; then
         printf '安装并启用 UFW、Fail2ban，放行 SSH、80、443，保留已有规则。\n'
         reality_site_setup "$domain" "$server" '' true
       else reality_site_setup "$domain" "$server" '' false; fi;;
     3)
       confirm '恢复网站直接使用 443，并停用对应 Reality 节点？' N && reality_site_detach;;
+    4)
+      prompt_value domain '新网站域名' '' || return 1
+      printf '1. OpenList 网盘\n2. 反向代理到本机端口（例如已有的 Web 应用）\n0. 返回\n'
+      ui_menu_choice server_choice '网站内容' 2 1 || return 1
+      case "$server_choice" in
+        1) reality_site_add "$domain" openlist;;
+        2) prompt_value target '本机端口' '' || return 1; reality_site_add "$domain" "$target";;
+      esac;;
+    5)
+      printf '在 Nginx 里照常写 listen 443 ssl 的网站后执行此项，它会被移到 Reality 后面。\n'
+      reality_site_sync;;
+    6) prompt_value domain '要移除的网站域名' '' || return 1; confirm "移除 $domain？" N && reality_site_remove "$domain";;
   esac
 }
 
@@ -1622,7 +1665,7 @@ ui_traffic_menu() {
   ui_menu_choice c '选择操作' 7
   case "$c" in
     1)
-      ui_select_node id || { ui_cancel; return; }
+      ui_select_node id || { ui_cancel; return $?; }
       quota=$(jq -r --arg id "$id" '.nodes[]|select(.id==$id)|if .traffic.quota_bytes==null then "unlimited" else (.traffic.quota_bytes|tostring)+"B" end' "$SBM_STATE")
       reset_day=$(jq -r --arg id "$id" '.nodes[]|select(.id==$id)|.traffic.reset_day' "$SBM_STATE")
       upload_rate=$(jq -r --arg id "$id" '.nodes[]|select(.id==$id)|if .traffic.upload_rate_bps==null then "unlimited" else (.traffic.upload_rate_bps|tostring)+"bps" end' "$SBM_STATE")
@@ -1632,15 +1675,15 @@ ui_traffic_menu() {
       printf '1. 上行+下行计入配额\n2. 仅下行计入配额\n'
       printf '当前统计方式：%s\n' "$mode"
       ui_menu_choice mode_choice '配额统计方式' 2
-      case "$mode_choice" in 1) mode=total;; 2) mode=download;; *) log_error '选择无效'; return;; esac
+      case "$mode_choice" in 1) mode=total;; 2) mode=download;; *) log_error '选择无效'; return $?;; esac
       prompt_value reset_day '每月重置日（1-28，UTC）' "$reset_day"
       prompt_value upload_rate '上行限速（如 20M；unlimited 不限）' "$upload_rate"
       prompt_value download_rate '下行限速（如 100M；unlimited 不限）' "$download_rate"
       traffic_set "$id" --quota "$quota" --quota-mode "$mode" --reset-day "$reset_day" --upload-rate "$upload_rate" --download-rate "$download_rate"
       ;;
-    2) ui_select_node id || { ui_cancel; return; }; traffic_disable "$id" ;;
-    3) ui_select_node id 1 || { ui_cancel; return; }; confirm "确认清零 $id 的本周期流量统计？" N && traffic_reset "$id" ;;
-    4) ui_select_node id || { ui_cancel; return; }; confirm "确认移除 $id 的流量控制配置和累计用量？" N && traffic_remove "$id" ;;
+    2) ui_select_node id || { ui_cancel; return $?; }; traffic_disable "$id" ;;
+    3) ui_select_node id 1 || { ui_cancel; return $?; }; confirm "确认清零 $id 的本周期流量统计？" N && traffic_reset "$id" ;;
+    4) ui_select_node id || { ui_cancel; return $?; }; confirm "确认移除 $id 的流量控制配置和累计用量？" N && traffic_remove "$id" ;;
     5) traffic_reconcile ;;
     6) ui_open_submenu ui_traffic_group_menu;;
     7) ui_open_submenu ui_shaping_menu;;
@@ -1653,19 +1696,19 @@ ui_network_benchmark_menu() {
   ui_menu_choice c '选择操作' 4
   case "$c" in
     1)
-      command_exists "$SBM_NETWORK_IPERF_CMD" || { log_warn '尚未安装 iperf3，请先选择“安装测速依赖”。'; return; }
+      command_exists "$SBM_NETWORK_IPERF_CMD" || { log_warn '尚未安装 iperf3，请先选择“安装测速依赖”。'; return $?; }
       prompt_value host '目标 iperf3 服务器' ''; prompt_value port '端口' '5201'
       prompt_value seconds '测试秒数（1–30）' '10'; prompt_value streams '并发连接（1–16）' '1'
-      ui_select_json direction '测速方向' '[{"id":"down","label":"下载（服务器 → 本机）"},{"id":"up","label":"上传（本机 → 服务器）"}]' down || { ui_cancel; return; }
+      ui_select_json direction '测速方向' '[{"id":"down","label":"下载（服务器 → 本机）"},{"id":"up","label":"上传（本机 → 服务器）"}]' down || { ui_cancel; return $?; }
       network_speed "$host" "$port" "$seconds" "$streams" "$direction" 0;;
     2)
       data=$(network_history)
       jq -r 'if length==0 then "暂无测速记录。" else .[]|"\(.id)  \(.target):\(.port)  \(.direction)  \(.streams)连接  \(.seconds)s  \((.bits_per_second/1000000*100|round)/100) Mbps" end' <<<"$data";;
     3)
       data=$(network_history)
-      ui_select_benchmark before "$data" || { ui_cancel; return; }
+      ui_select_benchmark before "$data" || { ui_cancel; return $?; }
       printf '第二次仅列出测试条件相同的记录。\n'
-      ui_select_benchmark after "$data" "$before" || { ui_cancel; return; }
+      ui_select_benchmark after "$data" "$before" || { ui_cancel; return $?; }
       network_compare "$before" "$after";;
     4) dependency_require_feature benchmark;;
   esac
@@ -1680,17 +1723,17 @@ ui_traffic_group_menu() {
       data=$(traffic_group_cli status)
       jq -r 'if length==0 then "暂无共享配额组。" else .[]|"配额组：\(.id)；成员：\(.nodes|join(","))；用量：\(.used_bytes) / \(.quota_bytes) B；每月 \(.reset_day) 日重置；\(if .exhausted then "配额已用尽" else "配额可用" end)" end' <<<"$data";;
     2)
-      ui_select_group id '' 1 || { ui_cancel; return; }
+      ui_select_group id '' 1 || { ui_cancel; return $?; }
       group=$(jq -c --arg id "$id" 'first(.traffic_groups[]?|select(.id==$id)) // {}' "$SBM_STATE")
       members=$(jq -r '(.nodes // [])|join(",")' <<<"$group")
       quota=$(jq -r 'if .quota_bytes==null then "500G" else (.quota_bytes|tostring)+"B" end' <<<"$group")
       day=$(jq -r '.reset_day // 1' <<<"$group"); mode=$(jq -r '.quota_mode // "total"' <<<"$group")
-      ui_select_members members "$members" || { ui_cancel; return; }
+      ui_select_members members "$members" || { ui_cancel; return $?; }
       prompt_value quota '共享月配额（如 500G）' "$quota"; prompt_value day '每月重置日（1–28）' "$day"
-      ui_select_json mode '统计模式' '[{"id":"total","label":"双向合计"},{"id":"download","label":"仅下行"}]' "$mode" || { ui_cancel; return; }
+      ui_select_json mode '统计模式' '[{"id":"total","label":"双向合计"},{"id":"download","label":"仅下行"}]' "$mode" || { ui_cancel; return $?; }
       traffic_group_cli set "$id" --nodes "$members" --quota "$quota" --reset-day "$day" --quota-mode "$mode";;
-    3) ui_select_group id || { ui_cancel; return; }; confirm "确认移除配额组 $id？" N && traffic_group_cli remove "$id";;
-    4) ui_select_group id || { ui_cancel; return; }; confirm "确认清零配额组 $id 的累计用量？" N && traffic_group_cli reset "$id";;
+    3) ui_select_group id || { ui_cancel; return $?; }; confirm "确认移除配额组 $id？" N && traffic_group_cli remove "$id";;
+    4) ui_select_group id || { ui_cancel; return $?; }; confirm "确认清零配额组 $id 的累计用量？" N && traffic_group_cli reset "$id";;
   esac
 }
 
@@ -1703,9 +1746,9 @@ ui_shaping_menu() {
     2)
       interface=$(jq -r '.shaping.interface // ""' "$SBM_STATE")
       capacity=$(jq -r '(.shaping.capacity_bps // 1000000000|tostring)+"bps"' "$SBM_STATE")
-      ui_select_interface interface "$interface" || { ui_cancel; return; }
+      ui_select_interface interface "$interface" || { ui_cancel; return $?; }
       prompt_value capacity '网卡带宽容量（如 1G）' "$capacity"
-      shaping_cli plan "$interface" --capacity "$capacity" || return
+      shaping_cli plan "$interface" --capacity "$capacity" || return $?
       confirm '将管理该网卡的出口队列，应用以上整形？' N && shaping_cli enable "$interface" --capacity "$capacity";;
     3) shaping_cli disable;;
     4) dependency_require_feature shaping;;
@@ -1722,10 +1765,10 @@ ui_tunnel_routes_menu() {
       prompt_value id 'Tunnel UUID' "$(jq -r '.tunnel.tunnel_id // ""' "$SBM_STATE")"
       prompt_value credentials '凭据 JSON 文件路径' ''; tunnel_routes_cli managed "$id" "$credentials";;
     3|4)
-      [[ $(jq -r '.tunnel.mode' "$SBM_STATE") == managed ]] || { log_warn '请先导入命名 Tunnel 凭据。'; return; }
+      [[ $(jq -r '.tunnel.mode' "$SBM_STATE") == managed ]] || { log_warn '请先导入命名 Tunnel 凭据。'; return $?; }
       items=$(jq '[.tunnel.routes[]?|{id,label:(.id+"  "+.hostname+.path+" → "+.service)}]' "$SBM_STATE")
-      ui_select_json id '路由' "$items" '' "$([[ "$c" == 3 ]] && echo 1 || echo 0)" || { ui_cancel; return; }
-      if [[ "$c" == 4 ]]; then confirm "确认删除路由 $id？" N && tunnel_routes_cli route remove "$id"; return; fi
+      ui_select_json id '路由' "$items" '' "$([[ "$c" == 3 ]] && echo 1 || echo 0)" || { ui_cancel; return $?; }
+      if [[ "$c" == 4 ]]; then confirm "确认删除路由 $id？" N && tunnel_routes_cli route remove "$id"; return $?; fi
       route=$(jq -c --arg id "$id" 'first(.tunnel.routes[]?|select(.id==$id)) // {}' "$SBM_STATE")
       host=$(jq -r '.hostname // ""' <<<"$route"); url=$(jq -r '.service // ""' <<<"$route"); path=$(jq -r '.path // ""' <<<"$route")
       prompt_value host '公网域名' "$host"
@@ -1762,7 +1805,7 @@ EOF_GUIDE
 
 ui_substore_access() {
   local port ssh_port=''
-  [[ -f "$SBM_SUBSTORE_SECRET" ]] || { log_warn '请先选择“首次设置”安装 Sub-Store。'; return; }
+  [[ -f "$SBM_SUBSTORE_SECRET" ]] || { log_warn '请先选择“首次设置”安装 Sub-Store。'; return $?; }
   port=$(jq -r '.substore.port // 3002' "$SBM_STATE")
   [[ -z ${SSH_CONNECTION:-} ]] || ssh_port=$(awk '{print $4}' <<<"$SSH_CONNECTION")
   if ! validate_port "$ssh_port"; then ssh_port=$(firewall_ssh_ports_or_default | sed -n '1p'); fi
@@ -1823,7 +1866,7 @@ ui_substore_sources_menu() {
     1) substore_cli source list;;
     2|3|4)
       items=$(substore_source_list 1 | jq '[.[]|{id:.name,label:(.name+"（"+.source+"）")}]')
-      ui_select_json name '订阅来源' "$items" '' "$([[ "$c" == 2 ]] && echo 1 || echo 0)" || { ui_cancel; return; }
+      ui_select_json name '订阅来源' "$items" '' "$([[ "$c" == 2 ]] && echo 1 || echo 0)" || { ui_cancel; return $?; }
       case "$c" in
         2)
           printf '填写对方服务器生成的动态订阅 URL；首次接入后无需重复导入节点。\n'
@@ -1846,7 +1889,7 @@ ui_subscription_menu() {
       printf '变量：{name} 节点名 {user} 用户 {used} 已用 {total} 总量 {remaining} 剩余 {days} 剩余天数 {expire} 到期日\n'
       ui_prompt_optional items '模板（留空清除）' '{name} | 剩余 {remaining} | {days}天' || return 1
       if [[ -n "$items" ]]; then subscription_remark_cli set "$items"; else subscription_remark_cli clear; fi
-      return;;
+      return $?;;
     1)
       base=$(jq -r --arg service "http://127.0.0.1:$SBM_SUBSCRIPTION_PORT" 'first(.tunnel.routes[]?|select(.service==$service and .path=="")|"https://"+.hostname) // ""' "$SBM_STATE")
       printf '公网入口需已通过 HTTPS/Tunnel 转发到本机订阅服务；SSH 转发可留空。\n'
@@ -1858,7 +1901,7 @@ ui_subscription_menu() {
     2) subscription_list;;
     3)
       items=$(subscription_list 1 | jq '[.[]|{id,label:(.id+"（"+.status+", "+(if .live then "动态" else "快照" end)+"）")}]')
-      ui_select_json id '订阅地址' "$items" || { ui_cancel; return; }
+      ui_select_json id '订阅地址' "$items" || { ui_cancel; return $?; }
       confirm "确认撤销订阅 $id？使用此地址的客户端将无法再拉取。" N && subscription_revoke "$id";;
   esac
 }
@@ -1892,7 +1935,7 @@ EOF_MENU
 }
 
 ui_main() {
-  [[ -t 0 ]] || { sb_help; return; }
+  [[ -t 0 ]] || { sb_help; return $?; }
   local choice page
   local -a page_args=()
   SBM_UI_RESULT=0

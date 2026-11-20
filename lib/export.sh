@@ -229,14 +229,14 @@ node_xray_client_outbound() {
       {tag:$tag,protocol:"masque",settings:{address:$n.server_address,port:$n.port},
        streamSettings:{network:"masque",masqueSettings:{path:"/.well-known/masque/ip/{target}/{ipproto}/",user:($n.id+"@"+"'"$user_id"'"),pass:$u.password},
          security:"tls",tlsSettings:{serverName:$n.domain,alpn:["h3"]}}}'
-    return
+    return $?
   fi
   if [[ $(jq -r '.protocol // ""' <<<"$node") == wireguard ]]; then
     [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
     wireguard_client_profile "$id" "$user_id" | jq --arg tag "proxy-$id-$user_id" '{tag:$tag,protocol:"wireguard",settings:{
       secretKey:.private_key,address:[.address+"/32"],mtu:.mtu,noKernelTun:true,domainStrategy:"ForceIP",
       peers:[{publicKey:.server_public_key,endpoint:((if (.server|contains(":")) then "[\(.server)]" else .server end)+":"+(.port|tostring)),allowedIPs:["0.0.0.0/0","::/0"],keepAlive:25}]}}'
-    return
+    return $?
   fi
   case "$(jq -r '.protocol // ""' <<<"$node")" in
     hysteria2|socks|http|mixed)
@@ -254,7 +254,7 @@ node_xray_client_outbound() {
           {tag:$tag,protocol:(if $n.protocol=="http" then "http" else "socks" end),
            settings:{address:$addr,port:$n.port,user:$u.username,pass:$u.password}}
         end'
-      return;;
+      return $?;;
   esac
   [[ -n "$node" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$node")" || { log_warn "节点 $id 的协议没有 Xray 客户端配置。"; return 1; }
   if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node") || return 1; fi

@@ -4,6 +4,20 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.20
+
+- REALITY 与本机网站共用 443：
+  - `xm reality setup` 的域名已是本机 Nginx/Caddy 的 HTTPS 网站时直接使用，不再强制安装 OpenList；
+  - 添加 VLESS 节点时检测本机网站并推荐“借用本机网站伪装并共用 443”，Reality 菜单可直接选择本机网站；
+  - 新增 `xm reality sites`、`sync`、`site add DOMAIN [--proxy 端口]`、`site remove DOMAIN`，共存后继续添加
+    OpenList 或反代网站、接入手写的 443 网站；`xm openlist setup/detach` 在共存时自动走这条路径；
+  - 所有网站域名都写入 Xray `serverNames`；
+  - `detach` 改为按迁移标记还原 `listen`，保留共存期间添加或修改的网站（旧版本迁移的配置同样可还原）；
+  - 重新接入同一网站时复用上次停用的节点，`detach` 不留下空目录。
+- 修复：所有回滚都会误报“自动恢复未完成”。trap 中调用的函数里，裸 `return` 继承的是触发回滚的失败状态；
+  现统一改为 `return $?`。
+- 修复：xm 自己生成的备份无法恢复（`var/user-usage.json` 不在恢复白名单中）。
+
 ## 0.1.0-alpha.19
 
 - `xm update` 的前置检查同样接受“链接丢失但核心已下载”的情况，让 alpha.17 及更早版本更新后丢失 `bin/xray` 的机器可以直接修复。

@@ -293,7 +293,7 @@ _xray_route_default() {
 
 xray_routing_show() {
   local json=${1:-0}
-  if [[ "$json" == 1 ]]; then jq '.xray_routing // {outbounds:[],balancers:[],rules:[],default:null}' "$SBM_STATE"; return; fi
+  if [[ "$json" == 1 ]]; then jq '.xray_routing // {outbounds:[],balancers:[],rules:[],default:null}' "$SBM_STATE"; return $?; fi
   jq -r '(.xray_routing // {}) as $r |
     "出站：", (($r.outbounds // [])[] | "  \(.tag)  \(.protocol)" + (if .via then "  经由 \(.via)" else "" end)),
     "负载均衡：", (($r.balancers // [])[] | "  \(.tag)  \(.strategy)  [\(.selectors|join(","))]" + (if .fallback then "  回退 \(.fallback)" else "" end)),
