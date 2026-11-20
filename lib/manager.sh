@@ -233,6 +233,12 @@ manager_auto_run() (
     manager_auto_record "$day" "$started" failed "$rc" || exit 1
     log_error "自动更新未全部完成，详情：$SBM_VAR/updates/manager.log"
   fi
+  # Installed geo data is refreshed weekly by the same daily task; a failure
+  # keeps the old files and does not affect the manager update result.
+  if [[ -s "${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}/version.json" ]] \
+    && [[ -n $(find "${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}/version.json" -mtime +6 2>/dev/null) ]]; then
+    "$SBM_BIN_DIR/xm" xray geo update >>"$SBM_VAR/updates/manager.log" 2>&1 || log_warn 'geo 数据更新失败，继续使用原文件。'
+  fi
   exit "$rc"
 )
 

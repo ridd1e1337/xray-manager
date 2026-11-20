@@ -305,7 +305,7 @@ xray_test_config() (
   dir=$(mktemp -d "$SBM_RUN/xray-test.XXXXXX") || return 1
   trap 'rm -rf -- "$dir"' EXIT
   chmod 0700 "$dir" && cp "$config" "$dir/config.json" || return 1
-  "$bin" run -test -config "$dir/config.json" >"$log" 2>&1
+  XRAY_LOCATION_ASSET="${SBM_XRAY_ASSET_DIR:-$SBM_VAR/xray-assets}" "$bin" run -test -config "$dir/config.json" >"$log" 2>&1
 )
 
 xray_validate_config() {
@@ -333,6 +333,7 @@ StartLimitBurst=5
 Type=simple
 User=$SBM_SERVICE_USER
 Group=$SBM_SERVICE_USER
+Environment=XRAY_LOCATION_ASSET=$SBM_XRAY_ASSET_DIR
 ExecStart=$SBM_XRAY_BIN run -config $SBM_CONFIG
 Restart=on-failure
 RestartSec=3s
@@ -365,7 +366,7 @@ EOF_UNIT
       setcap cap_net_bind_service=+ep "$(readlink -f "$SBM_XRAY_BIN")" || {
         log_error '无法授予 Xray 低端口能力，未切换为 root 服务。'; return 1;
       }
-      write_openrc_supervised_service "$unit" 'xray-manager xray' 'xray-manager Xray-core service' "$SBM_XRAY_BIN" "run -config $SBM_CONFIG" "$SBM_SERVICE_USER" "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" 'after firewall' || return 1 ;;
+      write_openrc_supervised_service "$unit" 'xray-manager xray' 'xray-manager Xray-core service' /usr/bin/env "XRAY_LOCATION_ASSET=$SBM_XRAY_ASSET_DIR $SBM_XRAY_BIN run -config $SBM_CONFIG" "$SBM_SERVICE_USER" "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" 'after firewall' || return 1 ;;
     *) log_error 'Xray 需要 systemd 或 OpenRC。'; return 1 ;;
   esac
 }

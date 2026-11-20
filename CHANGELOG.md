@@ -4,6 +4,17 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.4
+
+- 新增 `xm xray geo status|update|remove`（面板 9 → 10）：按需下载 Loyalsoldier geoip/geosite（约 28 MiB），
+  按 GitHub 发布摘要校验，新文件先通过 Xray 配置检查再替换，失败恢复；已安装时每日任务每 7 天刷新。
+  分流规则支持 `geosite:`、`geoip:`（如 `geoip:private`），实测拦截生效。
+- 分享页统一：先显示链接与二维码，Xray / mihomo / sing-box 配置各自独立导出，某种格式无法表达时只跳过该格式；
+  MASQUE 显示 Xray 配置文件。
+- 修复：诊断与健康检查只检测 TCP，UDP 节点（Hysteria2、WireGuard、MASQUE、UDP 转发）被误报未监听。
+- 清理：sing-box 专属参数统一给出“请使用 sb-manager”的提示；删除 Snell/ShadowTLS 分享路径。
+- 文档：3XUI_PARITY 新增面板级功能对照表。
+
 ## 0.1.0-alpha.3
 
 - 状态精简：读取时移除 sb-manager 遗留的 sing-box 字段（`api`、`realm`、DNS 设置、`core_channel`、

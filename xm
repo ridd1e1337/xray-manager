@@ -39,6 +39,7 @@ source "$SBM_LIB/lib/shaping.sh"
 source "$SBM_LIB/lib/expiry.sh"
 source "$SBM_LIB/lib/user_limits.sh"
 source "$SBM_LIB/lib/xray_routing.sh"
+source "$SBM_LIB/lib/xray_geo.sh"
 source "$SBM_LIB/lib/telegram_bot.sh"
 source "$SBM_LIB/lib/firewall.sh"
 source "$SBM_LIB/lib/vps.sh"
@@ -162,8 +163,9 @@ sb_help_full() {
   xm xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG
   xm xray warp [--tag warp] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c]
   xm xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG] | remove TAG
-  xm xray route add [--node ID] [--user NODE:USER] [--domain domain:x] [--ip CIDR] [--network tcp|udp] [--port P] --to TAG|balancer:TAG
+  xm xray route add [--node ID] [--user NODE:USER] [--domain domain:x|geosite:cn] [--ip CIDR|geoip:cn] [--network tcp|udp] [--port P] --to TAG|balancer:TAG
   xm xray route remove INDEX | default direct|TAG|balancer:TAG
+  xm xray geo status|update|remove  geoip/geosite 数据（约 28 MiB，按需下载），启用 geosite:/geoip: 规则
   xm openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN
   xm reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach
   xm vps reality DOMAIN [nginx|caddy] [--node ID]  一键部署 OpenList、Reality 与基础防护
@@ -635,13 +637,14 @@ main() {
         routing) xray_routing_cli show "${3:-}" ;;
         outbound|balancer|route) shift 1; xray_routing_cli "$@" ;;
         warp) shift 2; xray_warp_cli "$@" ;;
+        geo) shift 2; xray_geo_cli "$@" ;;
         traffic)
           case "${3:-}" in
             ''|--json) xray_traffic "$([[ ${3:-} == --json ]] && echo 1 || echo 0)" ;;
             reset) xray_traffic_reset ;;
             *) usage_die '用法：xm xray traffic [--json|reset]' ;;
           esac ;;
-        *) usage_die '用法：xm xray status|update|config|policy <manual|notify|patch|stable>|api-port PORT|traffic|routing|outbound|warp|balancer|route' ;;
+        *) usage_die '用法：xm xray status|update|config|policy <manual|notify|patch|stable>|api-port PORT|traffic|routing|outbound|warp|balancer|route|geo' ;;
       esac
       ;;
     openlist)

@@ -32,6 +32,10 @@ xray_routing_validate_tag() {
 
 xray_routing_validate_state() {
   local state=$1 outbounds
+  # A restored or hand-edited state may reference geo rules without the data.
+  if xray_geo_required "$state" && ! xray_geo_installed; then
+    log_error '路由规则使用 geosite:/geoip:，但 geo 数据未安装；请运行 xm xray geo update。'; return 1
+  fi
   outbounds=$(xray_outbounds_read) || return 1
   jq -e --argjson outbounds "$outbounds" --argjson reserved "$XRAY_RESERVED_TAGS" '
     (.xray_routing // {}) as $r |
@@ -238,11 +242,13 @@ _xray_route_add() {
         value=${2:?}; [[ "$value" == *:* ]] && state_user_exists "${value%%:*}" "${value#*:}" || { log_error '--user 格式为 NODE_ID:USER_ID，且用户须存在。'; return 1; }
         rule=$(jq -c --arg v "$value" '.user=$v' <<<"$rule"); shift 2;;
       --domain)
-        value=${2:?}; [[ "$value" =~ ^((domain|full|keyword|regexp):[^,]+)(,(domain|full|keyword|regexp):[^,]+)*$ ]] \
-          || { log_error '域名规则使用 domain:/full:/keyword:/regexp: 前缀（未安装 geosite 数据库）。'; return 1; }
+        value=${2:?}; [[ "$value" =~ ^((domain|full|keyword|regexp|geosite):[^,]+)(,(domain|full|keyword|regexp|geosite):[^,]+)*$ ]] \
+          || { log_error '域名规则使用 domain:/full:/keyword:/regexp:/geosite: 前缀，多个用逗号分隔。'; return 1; }
+        [[ ! "$value" =~ (^|,)geosite: ]] || xray_geo_installed || { log_error 'geosite: 规则需要 geo 数据，请先运行 xm xray geo update。'; return 1; }
         rule=$(jq -c --arg v "$value" '.domain=$v' <<<"$rule"); shift 2;;
       --ip)
-        value=${2:?}; [[ "$value" =~ ^[0-9a-fA-F:./,]+$ ]] || { log_error 'IP 规则须为 CIDR，多个用逗号分隔（未安装 geoip 数据库）。'; return 1; }
+        value=${2:?}; [[ "$value" =~ ^((geoip:[a-zA-Z0-9!_-]+|[0-9a-fA-F:./]+)(,|$))+$ ]] || { log_error 'IP 规则须为 CIDR 或 geoip:CODE，多个用逗号分隔。'; return 1; }
+        [[ ! "$value" =~ (^|,)geoip: ]] || xray_geo_installed || { log_error 'geoip: 规则需要 geo 数据，请先运行 xm xray geo update。'; return 1; }
         rule=$(jq -c --arg v "$value" '.ip=$v' <<<"$rule"); shift 2;;
       --network) [[ "${2:?}" =~ ^(tcp|udp|tcp,udp)$ ]] || { log_error 'network 只能是 tcp、udp 或 tcp,udp。'; return 1; }; rule=$(jq -c --arg v "$2" '.network=$v' <<<"$rule"); shift 2;;
       --port) [[ "${2:?}" =~ ^[0-9,-]+$ ]] || { log_error '端口规则格式如 443 或 1000-2000,8443。'; return 1; }; rule=$(jq -c --arg v "$2" '.port=$v' <<<"$rule"); shift 2;;

@@ -1076,8 +1076,9 @@ ui_xray_routing_menu() {
   local -a args=()
   xray_routing_show
   printf '\n1. 添加原生出站（SOCKS/HTTP/VLESS/Trojan/Shadowsocks 等 JSON）\n2. 添加 WARP（自动注册）\n3. 导入已有 WARP/WireGuard 参数\n4. 删除出站\n'
-  printf '5. 设置负载均衡\n6. 删除负载均衡\n7. 添加分流规则\n8. 删除分流规则\n9. 设置默认出口\n0. 返回\n'
-  ui_menu_choice choice '路由操作' 9 || return 0
+  printf '5. 设置负载均衡\n6. 删除负载均衡\n7. 添加分流规则\n8. 删除分流规则\n9. 设置默认出口\n10. geoip/geosite 数据（%s）\n0. 返回\n' \
+    "$(xray_geo_installed && echo 已安装 || echo 未安装)"
+  ui_menu_choice choice '路由操作' 10 || return 0
   case "$choice" in
     1)
       prompt_value tag '出站标签' '' || return 1
@@ -1101,15 +1102,21 @@ ui_xray_routing_menu() {
       xray_routing_cli balancer set "$tag" --selectors "$value" --strategy "$strategy" ${fallback:+--fallback "$fallback"};;
     6) prompt_value tag '负载均衡标签' '' || return 1; xray_routing_cli balancer remove "$tag";;
     7)
-      printf '匹配条件可组合：节点、用户、域名（domain:/full:/keyword:/regexp:）、IP CIDR。\n'
+      printf '匹配条件可组合：节点、用户、域名（domain:/full:/keyword:/regexp:/geosite:）、IP（CIDR 或 geoip:）。\n'
+      xray_geo_installed || printf 'geosite:/geoip: 需先在本菜单 10 下载 geo 数据。\n'
       ui_prompt_optional value '节点 ID' '' || return 1; [[ -z "$value" ]] || args+=(--node "$value")
       ui_prompt_optional value '用户 NODE_ID:USER_ID' '' || return 1; [[ -z "$value" ]] || args+=(--user "$value")
       ui_prompt_optional value '域名' '' || return 1; [[ -z "$value" ]] || args+=(--domain "$value")
-      ui_prompt_optional value 'IP CIDR' '' || return 1; [[ -z "$value" ]] || args+=(--ip "$value")
+      ui_prompt_optional value 'IP（CIDR 或 geoip:cn、geoip:private）' '' || return 1; [[ -z "$value" ]] || args+=(--ip "$value")
       prompt_value value '出口：出站标签、block 或 balancer:标签' direct || return 1
       xray_routing_cli route add "${args[@]}" --to "$value";;
     8) prompt_value value '规则序号' '' || return 1; xray_routing_cli route remove "$value";;
     9) prompt_value value '默认出口 direct/标签/balancer:标签' direct || return 1; xray_routing_cli route default "$value";;
+    10)
+      xray_geo_status
+      printf '\n1. 下载/更新（约 28 MiB，Loyalsoldier/v2ray-rules-dat）\n2. 删除\n0. 返回\n'
+      ui_menu_choice value 'geo 数据' 2 || return 0
+      case "$value" in 1) xray_geo_cli update;; 2) xray_geo_cli remove;; esac;;
   esac
 }
 
