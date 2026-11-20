@@ -7,7 +7,7 @@ node_protocol_label() {
     tunnel) printf 'Tunnel' ;;
     wireguard) printf 'WireGuard' ;;
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
-    shadowsocks) printf 'Shadowsocks 2022' ;;
+    shadowsocks) printf 'Shadowsocks' ;;
     hysteria2) printf 'Hysteria2' ;;
     trojan) printf 'Trojan TLS' ;;
     vless) printf 'VLESS' ;;
@@ -247,9 +247,9 @@ _node_add() {
     ss|shadowsocks)
       protocol=shadowsocks; base=ss; transport=tcp
       [[ -n "$port" ]] || port=8388
-      [[ -n "$name" ]] || name='Shadowsocks 2022'
+      [[ -n "$name" ]] || name='Shadowsocks'
       [[ -n "$address" ]] || address=$default_address
-      case "$method" in 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305) ;; *) die "仅支持 Shadowsocks 2022 方法。";; esac
+      case "$method" in 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305|aes-128-gcm|aes-256-gcm|chacha20-poly1305|chacha20-ietf-poly1305|xchacha20-poly1305|xchacha20-ietf-poly1305) ;; *) die "不支持的 Shadowsocks 方法：$method";; esac
       [[ "$network" == tcp || "$network" == udp ]] || die 'Shadowsocks network 必须是 tcp（TCP+UDP）或 udp。'
       mux=false  # Xray does not implement sing-box multiplex
       secret=$(jq -n --arg password "$(ss2022_key "$method")" '{password:$password}')
@@ -405,6 +405,7 @@ _node_add() {
       node=$(jq --arg hs "$handshake_server" --argjson hp "$handshake_port" '.handshake_server=$hs | .handshake_port=$hp' <<<"$node") || return 1
     fi
     [[ -z "$path" || "$protocol" == vmess-ws-cf ]] || stream_args+=(--path "$path")
+    [[ -z "$domain" || "$protocol" == trojan ]] || stream_args+=(--domain "$domain")
     stream_args+=("${vless_options[@]}")
     if (( ${#stream_args[@]} > 0 )); then node=$(vless_config_apply "$node" "${stream_args[@]}") || return 1; fi
     if [[ "$protocol" == shadowsocks || "$protocol" == vmess ]] && [[ $(jq -r '.security // "none"' <<<"$node") != none ]]; then
@@ -655,7 +656,7 @@ _node_user_add() {
     (.nodes[] | select(.id==$nid) | .users) += [{id:$uid,name:$name,enabled:true,created_at:$now}]
   ' "$SBM_STATE" >"$candidate"
   protocol=$(jq -r '.protocol' <<<"$node")
-  if [[ "$protocol" == shadowsocks && $(jq -r '.credential_mode // "legacy"' <<<"$node") == legacy ]]; then
+  if [[ "$protocol" == shadowsocks && $(jq -r '.credential_mode // "legacy"' <<<"$node") == legacy && $(jq -r '.method' <<<"$node") == 2022-* ]]; then
     node_secret=$(jq -n --arg server_password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{server_password:$server_password}')
     state_write_secret "$node_id" "$node_secret" || return 1
     jq --arg nid "$node_id" '(.nodes[] | select(.id==$nid) | .credential_mode)="multi"' "$candidate" >"$candidate.tmp"

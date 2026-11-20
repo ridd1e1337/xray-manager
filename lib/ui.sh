@@ -22,7 +22,7 @@ ui_clear() { [[ -t 1 && -n ${TERM:-} && ${TERM:-} != dumb ]] && command_exists c
 # would disable it inside the backend and could let failed actions continue.
 ui_worker_allowed() {
   case "$1" in
-    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
+    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_stream_node_add|ui_wireguard_add|ui_tunnel_add|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
     *) return 1;;
   esac
 }
@@ -767,6 +767,77 @@ ui_user_menu() {
   esac
 }
 
+# Transport and security wizard for VMess, Trojan and Shadowsocks (3x-ui
+# parity). Advanced fields go through the same native JSON extensions.
+ui_stream_node_add() {
+  local protocol=$1 name transport security domain address port choice path host service mode hs hp method json
+  local -a args=()
+  case "$protocol" in vmess) name=VMess;; trojan) name=Trojan;; *) name=Shadowsocks;; esac
+  prompt_value name '节点名称' "$name" || return 1
+  printf '1. TCP / RAW\n2. WebSocket\n3. gRPC\n4. HTTPUpgrade\n5. XHTTP\n6. mKCP\n0. 返回\n'
+  ui_menu_choice choice '选择传输' 6 || return 1
+  case "$choice" in 1) transport=raw;; 2) transport=ws;; 3) transport=grpc;; 4) transport=httpupgrade;; 5) transport=xhttp;; 6) transport=kcp;; *) return 1;; esac
+  if [[ "$protocol" == trojan && "$transport" =~ ^(raw|grpc|xhttp)$ ]]; then
+    printf '1. TLS\n2. Reality\n0. 返回\n'; ui_menu_choice choice '选择安全层' 2 || return 1
+    case "$choice" in 1) security=tls;; 2) security=reality;; *) return 1;; esac
+  elif [[ "$protocol" == trojan ]]; then security=tls
+  else
+    printf '1. 不使用 TLS\n2. TLS\n0. 返回\n'; ui_menu_choice choice '选择安全层' 2 || return 1
+    case "$choice" in 1) security=none;; 2) security=tls;; *) return 1;; esac
+  fi
+  args+=(--transport "$transport" --security "$security")
+  case "$security" in
+    tls) ui_select_certificate_domain domain || { ui_cancel; return 1; }; args+=(--domain "$domain");;
+    reality)
+      domain=$SBM_RECOMMENDED_REALITY_SNI; hs=$domain; hp=443
+      if ! ui_use_recommended; then
+        prompt_value domain 'Reality SNI' "$domain" || return 1
+        prompt_value hs 'Reality 握手目标' "$domain" || return 1
+        prompt_value hp 'Reality 握手端口' 443 || return 1
+      fi
+      args+=(--domain "$domain" --handshake-server "$hs" --handshake-port "$hp");;
+  esac
+  case "$transport" in
+    ws|httpupgrade|xhttp)
+      prompt_value path '请求路径' "/$(random_hex 6)" || return 1; args+=(--path "$path")
+      ui_prompt_optional host 'Host（可留空）' '' || return 1; [[ -z "$host" ]] || args+=(--host "$host")
+      if [[ "$transport" == xhttp ]]; then prompt_value mode 'XHTTP 模式 auto/packet-up/stream-up/stream-one' auto || return 1; args+=(--xhttp-mode "$mode"); fi;;
+    grpc) prompt_value service 'gRPC serviceName' "$(random_hex 6)" || return 1; args+=(--service-name "$service");;
+  esac
+  if [[ "$protocol" == shadowsocks ]]; then
+    printf '加密方式：2022-blake3-aes-128-gcm / 2022-blake3-aes-256-gcm / aes-256-gcm / chacha20-ietf-poly1305\n'
+    prompt_value method '加密方式' 2022-blake3-aes-256-gcm || return 1; args+=(--method "$method")
+  fi
+  ui_prompt_server_address address "$(ui_client_address_default "${domain:-}")" || return 1
+  if [[ "$transport" == kcp ]]; then ui_prompt_port port udp 'UDP 端口' 443 8443 9443 10443 || return 1
+  else ui_prompt_port port tcp 'TCP 端口' 443 8443 9443 10443 || return 1; fi
+  prompt_value json '填写 Xray 原生扩展 JSON（嗅探、sockopt、传输细节等）？y/N' N || return 1
+  if [[ "$json" =~ ^[Yy]$ ]]; then
+    prompt_value json 'Xray 服务端入站扩展 JSON 或 @文件' '{}' || return 1
+    [[ "$json" == '{}' ]] || args+=(--xray-inbound-json "$json")
+  fi
+  ui_add_node_and_deliver "$protocol" --name "$name" --address "$address" --port "$port" "${args[@]}"
+}
+
+ui_wireguard_add() {
+  local name address port mtu
+  prompt_value name '节点名称' WireGuard || return 1
+  ui_prompt_server_address address "$(ui_client_address_default '')" || return 1
+  ui_prompt_port port udp 'UDP 端口' 51820 51821 443 8443 || return 1
+  prompt_value mtu 'MTU' 1420 || return 1
+  ui_add_node_and_deliver wireguard --name "$name" --address "$address" --port "$port" --mtu "$mtu"
+}
+
+ui_tunnel_add() {
+  local name port target network choice
+  prompt_value name '节点名称' Tunnel || return 1
+  prompt_value port '本机监听端口' '' || return 1
+  prompt_value target '转发目标 HOST:PORT' '' || return 1
+  printf '1. TCP\n2. UDP\n3. TCP + UDP\n'; ui_menu_choice choice '转发网络' 3 || return 1
+  case "$choice" in 1) network=tcp;; 2) network=udp;; 3) network=tcp,udp;; *) return 1;; esac
+  ui_add_node_and_deliver tunnel --name "$name" --port "$port" --target "$target" --network "$network"
+}
+
 ui_add_node() {
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '添加节点不支持 --dry-run；请退出预览模式后再操作。'
   local choice domain address port name id obfs method security security_choice snell_obfs_choice snell_obfs_host snell_version_choice snell_mode_choice
@@ -774,15 +845,25 @@ ui_add_node() {
   local handshake_server handshake_port congestion_control network strict_mode wildcard_sni
   printf '%s\n' \
     '1. VLESS（RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP，TLS/Reality/VLESS 加密）' \
-    '2. VMess + WebSocket + Cloudflare Tunnel' \
-    '3. Trojan TLS' \
-    '4. Shadowsocks 2022' \
-    '5. Hysteria2' \
-    '6. SOCKS5 / HTTP / mixed 认证代理' \
+    '2. VMess（任意传输，可选 TLS）' \
+    '3. VMess + WebSocket + Cloudflare Tunnel' \
+    '4. Trojan（任意传输，TLS/Reality）' \
+    '5. Shadowsocks 2022 / AEAD（可选传输与 TLS）' \
+    '6. Hysteria2' \
+    '7. WireGuard' \
+    '8. Tunnel 端口转发（dokodemo-door）' \
+    '9. SOCKS5 / HTTP / mixed 认证代理' \
     '0. 返回'
-  ui_menu_choice choice '选择协议' 6
-  # Map the Xray protocol list onto the shared wizard branches.
-  case "$choice" in 1) choice=7;; 2) choice=1;; 3) choice=5;; 4) choice=2;; 5) choice=4;; 6) choice=11;; esac
+  ui_menu_choice choice '选择协议' 9
+  case "$choice" in
+    2) ui_stream_node_add vmess; return;;
+    4) ui_stream_node_add trojan; return;;
+    5) ui_stream_node_add shadowsocks; return;;
+    7) ui_wireguard_add; return;;
+    8) ui_tunnel_add; return;;
+  esac
+  # Map the remaining entries onto the shared wizard branches.
+  case "$choice" in 1) choice=7;; 3) choice=1;; 6) choice=4;; 9) choice=11;; esac
   case "$choice" in
     1)
       prompt_value name '节点名称' 'VMess WS Cloudflare'; prompt_value domain '固定 Tunnel 域名（Quick Tunnel 可留空）' ''; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"

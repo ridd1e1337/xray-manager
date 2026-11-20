@@ -402,8 +402,9 @@ state_validate() {
         and (.domain | string)
         and (.client_address | string)
       elif .protocol == "shadowsocks" then
-        (.network == "tcp")
-        and (.method | IN("2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305"))
+        (.network | IN("tcp", "udp"))
+        and (.method | IN("2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305",
+          "aes-128-gcm", "aes-256-gcm", "chacha20-poly1305", "chacha20-ietf-poly1305", "xchacha20-poly1305", "xchacha20-ietf-poly1305"))
         and (.multiplex | type == "boolean")
         and (.server_address | string)
       elif .protocol == "anytls" then

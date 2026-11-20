@@ -159,7 +159,10 @@ ss2022_key() {
   case "$method" in
     2022-blake3-aes-128-gcm) bytes=16 ;;
     2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305) bytes=32 ;;
-    *) die "不支持的 Shadowsocks 2022 方法：$method" ;;
+    # Classic AEAD methods take an arbitrary password.
+    aes-128-gcm|aes-256-gcm|chacha20-poly1305|chacha20-ietf-poly1305|xchacha20-poly1305|xchacha20-ietf-poly1305)
+      random_password 24; return ;;
+    *) die "不支持的 Shadowsocks 方法：$method" ;;
   esac
   openssl rand -base64 "$bytes" | tr -d '\n'
 }

@@ -143,7 +143,13 @@ xray_protocol_inbound() {
         '. + {protocol:"trojan",settings:{clients:$c},streamSettings:({network:"raw"}+$tls)}' <<<"$base";;
     shadowsocks)
       mode=$(jq -r '.credential_mode // "legacy"' <<<"$node")
-      if [[ "$mode" == multi ]]; then
+      if [[ $(jq -r '.method' <<<"$node") != 2022-* ]]; then
+        # Classic AEAD: every client carries its own method and password.
+        clients=$(jq --arg n "$id" --arg method "$(jq -r '.method' <<<"$node")" '[.[] | {method:$method,password,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+        jq --argjson c "$clients" \
+          --arg network "$(jq -r 'if (.network // "tcp")=="udp" then "udp" else "tcp,udp" end' <<<"$node")" \
+          '. + {protocol:"shadowsocks",settings:{clients:$c,network:$network}}' <<<"$base"
+      elif [[ "$mode" == multi ]]; then
         clients=$(jq --arg n "$id" '[.[] | {password,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
         jq --argjson c "$clients" --arg method "$(jq -r '.method' <<<"$node")" --arg psk "$(jq -r '.server_password' <<<"$secret")" \
           --arg network "$(jq -r 'if (.network // "tcp")=="udp" then "udp" elif (.network // "tcp")=="tcp" then "tcp,udp" else .network end' <<<"$node")" \
