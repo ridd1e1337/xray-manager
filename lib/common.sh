@@ -115,6 +115,10 @@ with_lock() {
   ensure_runtime_dirs
   exec 9>"$SBM_LOCK"
   flock -x 9
+  # Operations that died mid-way can leave scratch files; with the lock held
+  # nothing is writing them, and the age guard spares unlocked readers.
+  find "$SBM_RUN" -maxdepth 1 -mmin +10 \( -name 'state.candidate.*' -o -name 'user-limits-before.*' -o -name 'xray-test.*' -o -name '*.tmp.*' \) \
+    -exec rm -rf {} + 2>/dev/null || true
   local rc=0
   "$fn" "$@" || rc=$?
   flock -u 9 || true
