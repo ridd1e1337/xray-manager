@@ -204,6 +204,8 @@ state_normalize_v2_file() {
     | .settings |= del(.xray_update_policy, .vless_engine, .dns_optimistic, .dns_optimistic_timeout, .dns_timeout, .core_channel)
     | del(.api, .realm)
     | if (.nginx_stream.backend // "")=="sing-box" then .nginx_stream.backend="nginx" else . end
+    # The Telegram /backup command was removed.
+    | if (.notifications.bot|type)=="object" then .notifications.bot|=del(.backup) else . end
     | .nginx_stream //= {enabled:false,listen:"::",port:443,routes:[]}
     | if .nginx_stream.backend==null then
         .nginx_stream.backend=(if .nginx_stream.enabled==true or ((.nginx_stream.routes // [])|length)>0 then "nginx" else "nginx" end)

@@ -67,7 +67,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | 订阅 | 链接 / Xray JSON / mihomo / sing-box 格式、Subscription-Userinfo | ✅ | |
 | 订阅 | 按 User-Agent 自动选择格式、base64、备注模板、到期/耗尽占位节点、Profile-Title | ✅ | `xm subscription remark` |
 | 机器人 | 状态、节点、用户、启停、续期、订阅 | ✅ | `xm notify bot` |
-| 机器人 | 用户自助查询（tgId）、到期/流量预警、备份发送到 Telegram、在线列表 | ✅ | `xm user tg`、`/me` `/link`、`xm notify bot backup on`、`/online` |
+| 机器人 | 用户自助查询（tgId）、到期/流量预警、在线列表（不提供备份发送） | ✅ | `xm user tg`、`/me` `/link`、`/online` |
 | 工具 | UUID/X25519/ML-KEM/ECH 密钥生成、REALITY 目标检查、证书哈希 | ✅ | `xm tools` |
 | 运维 | 备份恢复、面板自更新、BBR、证书、防火墙、Fail2ban | ✅ | |
 | 多机 | 多节点管理 | ➖ | 由配套项目 sb-manager-web 负责 |
