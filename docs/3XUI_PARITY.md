@@ -58,7 +58,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | 入站 | 克隆节点、重置全部流量、导出全部链接 | ⬜ / ✅ / ✅ | `xm share all`、`xm traffic reset all` |
 | 入站 | 入站级配额、到期、端口冲突检查、回落 | ✅ | `xm traffic set`、`xm node expiry` |
 | Xray | 出站、WARP、负载均衡、分流规则 | ✅ | `xm xray outbound/warp/balancer/route` |
-| Xray | geoip/geosite 数据下载与 `geosite:`/`geoip:` 规则 | ⬜ | |
+| Xray | geoip/geosite 数据下载与 `geosite:`/`geoip:` 规则 | ✅ | `xm xray geo update` |
 | Xray | 出站连通性测试、路由测试 | ⬜ | |
 | Xray | Observatory、DNS / FakeDNS、日志级别与访问日志查看 | ⬜ / ⬜ / 部分 | 日志级别已有 |
 | Xray | NordVPN / PIA 账号出站 | ➖ | 需第三方账号 API；可用 `xm xray outbound add` 导入 WireGuard 出站 |
