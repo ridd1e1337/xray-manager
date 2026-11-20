@@ -277,21 +277,21 @@ service_failure_report() {
   service_logs "$unit" 80 0 >&2 || true
   command_exists namei && {
     printf '%s\n' '---- 可执行文件路径权限 ----' >&2
-    namei -l "$SBM_SING_BOX_BIN" >&2 || true
+    namei -l "$SBM_XRAY_BIN" >&2 || true
     printf '%s\n' '---- 配置文件路径权限 ----' >&2
     namei -l "$SBM_CONFIG" >&2 || true
   }
 }
 
 ensure_singbox_bind_capability() {
-  local binary=${1:-$SBM_SING_BOX_BIN}
+  local binary=${1:-$SBM_XRAY_BIN}
   [[ $(init_system 2>/dev/null || true) == openrc ]] || return 0
   command_exists setcap || die 'OpenRC 低权限服务需要 setcap；请安装 Alpine 的 libcap 包。'
   setcap 'cap_net_bind_service=+ep' "$binary" || die "无法为 sing-box 设置低端口能力：$binary"
 }
 
 singbox_has_bind_capability() {
-  local binary=${1:-$SBM_SING_BOX_BIN}
+  local binary=${1:-$SBM_XRAY_BIN}
   command_exists getcap || return 1
   getcap "$binary" 2>/dev/null | grep -q 'cap_net_bind_service'
 }

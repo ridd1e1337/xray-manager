@@ -50,5 +50,5 @@ api_cli() {
   version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'sing-box API CLI 需要 1.14+ 核心。'
   port=$(jq -r '.api.port' "$SBM_STATE")
   secret=$(state_get_secret api | jq -r '.secret')
-  BOX_API_URL="http://127.0.0.1:$port" BOX_API_SECRET="$secret" "$SBM_SING_BOX_BIN" api "$@"
+  BOX_API_URL="http://127.0.0.1:$port" BOX_API_SECRET="$secret" "$SBM_XRAY_BIN" api "$@"
 }

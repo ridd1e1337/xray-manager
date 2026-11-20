@@ -261,24 +261,40 @@ xray_write_service() {
       mkdir -p "$SBM_SYSTEMD_DIR" || return 1
       cat >"$unit.new" <<EOF_UNIT || return 1
 [Unit]
-Description=xray-manager VLESS Xray-core service
+Description=xray-manager Xray-core service
+Documentation=https://xtls.github.io/
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=$SBM_SERVICE_USER
 Group=$SBM_SERVICE_USER
-ExecStart=$SBM_XRAY_BIN run -config $SBM_XRAY_CONFIG
+ExecStart=$SBM_XRAY_BIN run -config $SBM_CONFIG
 Restart=on-failure
 RestartSec=3s
 LimitNOFILE=1048576
+TasksMax=1024
+MemoryAccounting=true
+TasksAccounting=true
+UMask=0027
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 ReadOnlyPaths=$SBM_ETC $SBM_LIB
+
 [Install]
 WantedBy=multi-user.target
 EOF_UNIT
@@ -288,7 +304,7 @@ EOF_UNIT
       setcap cap_net_bind_service=+ep "$(readlink -f "$SBM_XRAY_BIN")" || {
         log_error '无法授予 Xray 低端口能力，未切换为 root 服务。'; return 1;
       }
-      write_openrc_supervised_service "$unit" 'xray-manager xray' 'xray-manager VLESS Xray-core service' "$SBM_XRAY_BIN" "run -config $SBM_XRAY_CONFIG" "$SBM_SERVICE_USER" "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" 'after firewall' || return 1 ;;
+      write_openrc_supervised_service "$unit" 'xray-manager xray' 'xray-manager Xray-core service' "$SBM_XRAY_BIN" "run -config $SBM_CONFIG" "$SBM_SERVICE_USER" "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" 'after firewall' || return 1 ;;
     *) log_error 'Xray 需要 systemd 或 OpenRC。'; return 1 ;;
   esac
 }

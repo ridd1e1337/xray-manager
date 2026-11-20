@@ -75,7 +75,7 @@ setup_rollback_on_error() {
       cp -a "$SETUP_ROLLBACK_DIR/periodic/xm-maintenance" "$SETUP_PERIODIC_DIR/15min/"
     fi
     if [[ -n "$SETUP_CORE_TARGET" && -x "$SETUP_CORE_TARGET" ]]; then
-      ln -sfn "$SETUP_CORE_TARGET" "$SBM_SING_BOX_BIN.new" && mv -Tf "$SBM_SING_BOX_BIN.new" "$SBM_SING_BOX_BIN" || restore_rc=1
+      ln -sfn "$SETUP_CORE_TARGET" "$SBM_XRAY_BIN.new" && mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN" || restore_rc=1
     fi
     if [[ -f "$SETUP_ROLLBACK_DIR/runtime/state.json" ]]; then
       cp -a "$SETUP_ROLLBACK_DIR/runtime/state.json" "$SBM_STATE" || restore_rc=1
@@ -132,8 +132,7 @@ prune_runtime_payload() {
   # run in-place.
   rm -rf \
     "$TARGET_LIB/.git" "$TARGET_LIB/.github" \
-    "$TARGET_LIB/docs" "$TARGET_LIB/sing-box-official-docs-cn" \
-    "$TARGET_LIB"/sing-box-official-docs-cn-*.zip \
+    "$TARGET_LIB/docs" \
     "$TARGET_LIB/libexec/__pycache__"
   rm -f "$TARGET_LIB/AGENTS.md" "$TARGET_LIB/README.md" "$TARGET_LIB/CHANGELOG.md"
 }
@@ -157,8 +156,8 @@ usage() {
 用法：sudo ./setup.sh [选项]
   --no-menu             安装后不打开交互面板
   --no-start            不启动/启用 systemd 或 OpenRC 服务和定时任务
-  --core-version VER    安装指定 sing-box 版本（默认 latest）
-  --keep-core           更新管理器脚本时保留当前 sing-box 核心
+  --core-version VER    安装指定 Xray 版本（默认 latest）
+  --keep-core           更新管理器脚本时保留当前 Xray 核心
   --profile PROFILE     安装依赖档位：minimal（默认）或 full
   --full                --profile full 的快捷方式（会预装高级功能依赖）
   --with-cloudflared    同时安装可选的 Cloudflare Tunnel 客户端
@@ -224,50 +223,11 @@ create_service_account() {
 
 write_systemd_runtime() {
   mkdir -p "$SBM_SYSTEMD_DIR"
-  cat >"$SBM_SYSTEMD_DIR/$SBM_SERVICE" <<EOF_UNIT
-[Unit]
-Description=xray-manager managed sing-box service
-Documentation=https://sing-box.sagernet.org/
-After=network-online.target
-Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
-
-[Service]
-Type=simple
-User=$SBM_SERVICE_USER
-Group=$SBM_SERVICE_USER
-ExecStart=$SBM_SING_BOX_BIN run -c $SBM_CONFIG
-Restart=on-failure
-RestartSec=3s
-LimitNOFILE=1048576
-TasksMax=1024
-MemoryAccounting=true
-TasksAccounting=true
-UMask=0027
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-LockPersonality=true
-RestrictSUIDSGID=true
-RestrictRealtime=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
-ReadOnlyPaths=$SBM_ETC $SBM_LIB
-ReadWritePaths=$SBM_VAR/dashboard
-
-[Install]
-WantedBy=multi-user.target
-EOF_UNIT
+  xray_write_service systemd || die '无法写入 Xray 服务。'
 
   cat >"$SBM_SYSTEMD_DIR/xm-core-update.service" <<EOF_UNIT
 [Unit]
-Description=xray-manager sing-box update policy check
+Description=xray-manager Xray-core update policy check
 After=network-online.target
 Wants=network-online.target
 
@@ -277,7 +237,7 @@ ExecStart=$SBM_BIN_DIR/xm core auto
 EOF_UNIT
   cat >"$SBM_SYSTEMD_DIR/xm-core-update.timer" <<'EOF_UNIT'
 [Unit]
-Description=Periodic xray-manager sing-box update check
+Description=Periodic xray-manager Xray-core update check
 
 [Timer]
 OnBootSec=15min
@@ -388,11 +348,7 @@ EOF_JOB
 
 write_openrc_runtime() {
   mkdir -p "$SBM_OPENRC_DIR" "$SBM_LOG_DIR"
-  write_openrc_supervised_service \
-    "$SBM_OPENRC_DIR/$(service_native_name "$SBM_SERVICE")" \
-    'xray-manager sing-box' 'xray-manager managed sing-box service' \
-    "$SBM_SING_BOX_BIN" "run -c $SBM_CONFIG" root \
-    "$SBM_SINGBOX_LOG" "$SBM_SINGBOX_ERROR_LOG" 'after firewall'
+  xray_write_service openrc || die '无法写入 Xray 服务。'
   write_periodic_job daily xm-core-update "$SBM_BIN_DIR/xm core auto"
   write_periodic_job daily xm-acme-renew "$SBM_BIN_DIR/xm cert renew --quiet"
   write_periodic_job 15min xm-traffic-sync "$SBM_BIN_DIR/xm traffic tick"
@@ -405,7 +361,7 @@ description="Restore and checkpoint xray-manager nftables traffic rules"
 depend() {
   need localmount
   after firewall
-  before xm-sing-box
+  before xm-xray
 }
 
 start() {
@@ -551,7 +507,7 @@ BACKEND=$(init_system 2>/dev/null || true)
 [[ "$BACKEND" != none && -n "$BACKEND" ]] || BACKEND=systemd
 
 printf '[3/7] 创建低权限服务用户和数据目录…\n'
-SETUP_CORE_TARGET=$(readlink -f "$SBM_SING_BOX_BIN" 2>/dev/null || true)
+SETUP_CORE_TARGET=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
 if [[ -z "$SETUP_ROLLBACK_DIR" && -s "$SBM_STATE" ]]; then
   mkdir -p "$PROGRAM_BACKUP_ROOT"
   SETUP_ROLLBACK_DIR=$(mktemp -d "$PROGRAM_BACKUP_ROOT/program-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
@@ -589,28 +545,29 @@ chown root:"$SBM_SERVICE_USER" "$SBM_SECRETS" 2>/dev/null || true
 chmod 0710 "$SBM_SECRETS"
 chmod 0700 "$SBM_SECRETS/nodes"
 
-printf '[4/7] 安装 sing-box 核心…\n'
+printf '[4/7] 安装 Xray-core…\n'
 current_core_version=$(core_current_version || true)
 if [[ "$KEEP_CORE" == 1 ]]; then
-  sb_binary=$(readlink -f "$SBM_SING_BOX_BIN" 2>/dev/null || true)
-  [[ -x "$sb_binary" ]] || die '--keep-core 需要已有 sing-box 核心；请重新运行普通安装。'
+  core_binary=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
+  [[ -x "$core_binary" ]] || die '--keep-core 需要已有 Xray 核心；请重新运行普通安装。'
 else
   if [[ "$CORE_VERSION" == latest ]]; then
-    CORE_VERSION=$(core_latest_version) || die '无法查询 sing-box 最新官方版本。'
+    CORE_VERSION=$(core_latest_version) || die '无法查询 Xray 最新官方版本。'
     if [[ -n "$current_core_version" && "$current_core_version" != "$CORE_VERSION" ]] && version_ge "$current_core_version" "$CORE_VERSION"; then
       log_warn "解析到的目标核心 $CORE_VERSION 不高于当前 $current_core_version，保留现有核心以避免意外降级。"
       CORE_VERSION=$current_core_version
     fi
   fi
-  sb_binary=$(core_download_version "$CORE_VERSION")
+  core_binary=$(core_download_version "$CORE_VERSION")
 fi
-validate_runtime_binary_path sing-box "$sb_binary"
+validate_runtime_binary_path xray "$core_binary"
 ensure_program_permissions
-prepare_singbox_binary_for_backend "$sb_binary" "$BACKEND"
+prepare_singbox_binary_for_backend "$core_binary" "$BACKEND"
 if [[ "$KEEP_CORE" != 1 ]]; then
-  ln -sfn "$sb_binary" "$SBM_SING_BOX_BIN.new"; mv -Tf "$SBM_SING_BOX_BIN.new" "$SBM_SING_BOX_BIN"
+  mkdir -p "$(dirname "$SBM_XRAY_BIN")"
+  ln -sfn "$core_binary" "$SBM_XRAY_BIN.new"; mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"
 fi
-prepare_singbox_binary_for_backend "$SBM_SING_BOX_BIN" "$BACKEND"
+prepare_singbox_binary_for_backend "$SBM_XRAY_BIN" "$BACKEND"
 
 if [[ "$INSTALL_CLOUDFLARED" == 1 ]]; then
   printf '[5/7] 安装可选 cloudflared…\n'
@@ -647,8 +604,8 @@ esac
 service_reload_manager
 service_reset_failed "$SBM_SERVICE"
 if ! service_user_can_execute_core; then
-  log_error "$SBM_SERVICE_USER 无法执行 sing-box 核心。"
-  runtime_exec_diagnostics "$SBM_SING_BOX_BIN"
+  log_error "$SBM_SERVICE_USER 无法执行 Xray 核心。"
+  runtime_exec_diagnostics "$SBM_XRAY_BIN"
   exit 1
 fi
 if ! service_user_can_read_config; then
@@ -658,18 +615,18 @@ if ! service_user_can_read_config; then
 fi
 if [[ "$BACKEND" == systemd && "$NO_START" == 0 ]]; then
   preflight_rc=0
-  systemd_exec_preflight "$SBM_SING_BOX_BIN" || preflight_rc=$?
+  systemd_exec_preflight "$SBM_XRAY_BIN" || preflight_rc=$?
   case "$preflight_rc" in
     0) ;;
     2) log_warn 'systemd-run 不可用，跳过沙箱执行预检。' ;;
-    *) runtime_exec_diagnostics "$SBM_SING_BOX_BIN"; exit 1 ;;
+    *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; exit 1 ;;
   esac
   runtime_preflight_rc=0
-  systemd_runtime_preflight "$SBM_SING_BOX_BIN" "$SBM_CONFIG" || runtime_preflight_rc=$?
+  systemd_runtime_preflight "$SBM_XRAY_BIN" "$SBM_CONFIG" || runtime_preflight_rc=$?
   case "$runtime_preflight_rc" in
     0) ;;
     2) log_warn 'systemd-run 不可用，跳过实际启动预检。' ;;
-    *) runtime_exec_diagnostics "$SBM_SING_BOX_BIN"; exit 1 ;;
+    *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; exit 1 ;;
   esac
 fi
 
@@ -677,11 +634,11 @@ printf '[7/7] 启动服务…\n'
 if [[ "$NO_START" == 0 ]]; then
   scheduler_reconcile
   if ! runtime_services_reconcile; then
-    runtime_exec_diagnostics "$SBM_SING_BOX_BIN"
+    runtime_exec_diagnostics "$SBM_XRAY_BIN"
     exit 1
   fi
   if ! nginx_stream_reconcile; then
-    runtime_exec_diagnostics "$SBM_SING_BOX_BIN"
+    runtime_exec_diagnostics "$SBM_XRAY_BIN"
     exit 1
   fi
   if ! traffic_reconcile; then
@@ -720,7 +677,7 @@ printf '  状态检查：xm status\n'
 printf '  诊断命令：xm doctor（自动修复：xm doctor --repair）\n'
 printf '  数据目录：%s\n' "$SBM_ETC"
 if ! state_runtime_required; then
-  printf '  sing-box：暂无分配到本核心的启用节点，服务保持待命。\n'
+  printf '  Xray：暂无启用节点，服务保持待命。\n'
 fi
 if [[ ! -x "$SBM_CLOUDFLARED_BIN" ]]; then
   printf '  cloudflared：未安装（Tunnel 功能启用前执行 xm cloudflared install）。\n'
@@ -735,7 +692,7 @@ trap - ERR
 setup_release_lock
 if [[ "$INIT_VPS" == 1 ]]; then
   if ! "$SBM_BIN_DIR/xm" vps init; then
-    printf 'sing-box 管理器已安装；VPS 初始化未完成，请按上方提示处理后运行 xm vps init。\n' >&2
+    printf 'xray-manager 已安装；VPS 初始化未完成，请按上方提示处理后运行 xm vps init。\n' >&2
     exit 1
   fi
 fi

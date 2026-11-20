@@ -146,7 +146,7 @@ uninstall_manager() {
     "$SBM_LOGROTATE_FILE"
   service_reload_manager || true
 
-  remove_manager_owned_link "$SBM_SING_BOX_BIN"
+  remove_manager_owned_link "$SBM_XRAY_BIN"
   remove_manager_owned_link "$SBM_OPENLIST_BIN"
   remove_manager_owned_link "$SBM_CLOUDFLARED_BIN"
   remove_manager_owned_link "$SBM_BIN_DIR/xm"

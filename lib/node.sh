@@ -235,8 +235,38 @@ _node_add() {
       [[ -n "$name" ]] || name='Shadowsocks 2022'
       [[ -n "$address" ]] || address=$default_address
       case "$method" in 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305) ;; *) die "仅支持 Shadowsocks 2022 方法。";; esac
-      [[ "$network" == tcp ]] || die "首个版本仅启用推荐的 Shadowsocks TCP + multiplex 模式。"
+      [[ "$network" == tcp || "$network" == udp ]] || die 'Shadowsocks network 必须是 tcp（TCP+UDP）或 udp。'
+      mux=false  # Xray does not implement sing-box multiplex
       secret=$(jq -n --arg password "$(ss2022_key "$method")" '{password:$password}')
+      ;;
+    hy2|hysteria2)
+      protocol=hysteria2; base=hy2; transport=udp
+      [[ -n "$port" ]] || port=443
+      [[ -n "$domain" ]] || die "Hysteria2 必须指定 --domain。"
+      validate_domain "$domain" || die "无效域名：$domain"
+      [[ -n "$name" ]] || name='Hysteria2'
+      [[ -n "$address" ]] || address=${default_address:-$domain}
+      if [[ -n "$obfs" && "$obfs" != salamander && "$obfs" != gecko ]]; then die "Hysteria2 混淆必须是 salamander 或 gecko。"; fi
+      if [[ "$obfs" == gecko ]]; then
+        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Gecko 混淆需要 sing-box 1.14+ 核心。'
+        [[ "$obfs_min_packet_size" =~ ^[0-9]+$ ]] && (( obfs_min_packet_size >= 64 && obfs_min_packet_size <= 1500 )) || die 'Gecko 最小包长必须是 64-1500 的整数。'
+        [[ "$obfs_max_packet_size" =~ ^[0-9]+$ ]] && (( obfs_max_packet_size >= 64 && obfs_max_packet_size <= 1500 )) || die 'Gecko 最大包长必须是 64-1500 的整数。'
+        (( obfs_min_packet_size <= obfs_max_packet_size )) || die 'Gecko 最小包长不能大于最大包长。'
+      fi
+      if [[ "$disable_chrome_parrot" == true ]]; then
+        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Chrome QUIC 指纹开关需要 sing-box 1.14+ 核心。'
+      fi
+      case "$bbr_profile" in ''|conservative|standard|aggressive) ;; *) die 'Hysteria2 BBR profile 必须是 conservative、standard 或 aggressive。';; esac
+      if [[ -n "$bbr_profile" || "$brutal_debug" == true ]]; then
+        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Hysteria2 BBR profile/debug 需要 sing-box 1.14+ 核心。'
+      fi
+      case "$realm_ip_version" in 0|4|6) ;; *) die 'Realm IP 版本必须是 0、4 或 6。';; esac
+      if [[ -n "$realm_id" ]]; then
+        [[ "$realm_id" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] || die "无效 Realm ID：$realm_id"
+        [[ $(jq -r '.realm.enabled // false' "$SBM_STATE") == true ]] || die '请先启用全局 Hysteria Realm，再为节点指定 --realm-id。'
+        version_ge "$(core_current_version)" 1.14.0-rc.1 || die 'Hysteria Realm 需要 sing-box 1.14+ 核心。'
+      fi
+      secret=$(jq -n --arg password "$(random_password 24)" --arg obfs_password "$([[ -n "$obfs" ]] && random_password 18 || true)" '{password:$password,obfs_password:$obfs_password}')
       ;;
     trojan)
       protocol=trojan; base=trojan; transport=tcp; port=${port:-443}; domain=${domain:?Trojan 必须指定 --domain。}; validate_domain "$domain" || die "无效域名：$domain"; name=${name:-Trojan}; address=${address:-${default_address:-$domain}}; secret=$(jq -n --arg password "$(random_password 24)" '{password:$password}')
@@ -261,6 +291,13 @@ _node_add() {
       if [[ $(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE") == xray && ! -x "$SBM_XRAY_BIN" ]]; then _xray_install >&2 || return 1; fi
       secret=$(jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}') || return 1
       [[ "$security" != reality ]] || reality_secret=$(protocol_vless_generate_reality_secret) || return 1
+      ;;
+    socks|socks5|http|mixed)
+      protocol=$type; [[ "$protocol" != socks5 ]] || protocol=socks
+      base=$protocol; transport=tcp; port=${port:-1080}; name=${name:-$protocol}
+      case "$proxy_listen" in 127.0.0.1|::1|0.0.0.0|::) ;; *) die '代理监听仅支持 127.0.0.1、::1、0.0.0.0、::。';; esac
+      secret=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}')
+      if [[ "$address_supplied" == 0 && ( "$proxy_listen" == 127.0.0.1 || "$proxy_listen" == ::1 ) ]]; then address=$proxy_listen; address_supplied=1; address_source=manual; fi
       ;;
     *) die "不支持的协议：$type";;
   esac
@@ -303,6 +340,10 @@ _node_add() {
     shadowsocks)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg network "$network" --arg method "$method" --arg address "$address" --arg address_source "$address_source" --arg now "$created_at" --argjson mux "$mux" --argjson enabled "$enabled" \
         '{id:$id,name:$name,protocol:"shadowsocks",enabled:$enabled,listen:"::",port:$port,network:$network,method:$method,multiplex:$mux,server_address:$address,server_address_source:$address_source,credential_mode:"legacy",created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
+      ;;
+    hysteria2)
+      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg obfs "$obfs" --argjson obfs_min "$obfs_min_packet_size" --argjson obfs_max "$obfs_max_packet_size" --argjson disable_chrome "$disable_chrome_parrot" --arg bbr "$bbr_profile" --argjson brutal "$brutal_debug" --argjson realm_enabled "$([[ -n "$realm_id" ]] && echo true || echo false)" --arg realm_id "$realm_id" --argjson realm_ip "$realm_ip_version" --argjson realm_map "$realm_port_mapping" --arg masquerade "$masquerade" --arg now "$created_at" --argjson enabled "$enabled" \
+        '{id:$id,name:$name,protocol:"hysteria2",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,obfs:(if $obfs=="" then {} elif $obfs=="gecko" then {type:$obfs,min_packet_size:$obfs_min,max_packet_size:$obfs_max} else {type:$obfs} end),disable_chrome_parrot:$disable_chrome,bbr_profile:$bbr,brutal_debug:$brutal,realm_enabled:$realm_enabled,realm_id:$realm_id,realm_ip_version:$realm_ip,realm_port_mapping:$realm_map,masquerade:$masquerade,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
     trojan)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:"trojan",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')

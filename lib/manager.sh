@@ -300,7 +300,7 @@ _manager_update() (
   fi
   printf '可更新至 commit：%s\n' "$latest"
   (( ! check_only )) || { printf '执行 xm update 更新脚本；当前核心和节点将保留。\n'; exit 0; }
-  [[ -x "$SBM_SING_BOX_BIN" ]] || die '未找到已安装核心；请重新运行安装器。'
+  [[ -x "$SBM_XRAY_BIN" ]] || die '未找到已安装核心；请重新运行安装器。'
   if [[ "$automatic" == 1 ]] && ! manager_auto_enabled; then
     log_info '自动更新已关闭，本次不安装。'; exit 0
   fi

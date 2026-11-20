@@ -14,13 +14,13 @@ config_render_validated() {
   local state=$1 output=$2 log_file=${3:-$SBM_RUN/config-validate.log}
   state_validate "$state"
   render_config_from_state "$state" "$output"
-  core_validate_config_with "$SBM_SING_BOX_BIN" "$output" "$log_file"
+  core_validate_config_with "$SBM_XRAY_BIN" "$output" "$log_file"
 }
 
 config_validate() {
   local json=${1:-0} tmp rc=0 message='配置有效'
   tmp=$(mktemp "$SBM_RUN/config-validate.XXXXXX")
-  if ! (config_render_validated "$SBM_STATE" "$tmp"); then rc=1; message='状态、渲染或 sing-box 校验失败'; fi
+  if ! (config_render_validated "$SBM_STATE" "$tmp"); then rc=1; message='状态、渲染或 Xray 校验失败'; fi
   if [[ "$json" == 1 ]]; then
     jq -n --argjson valid "$([[ "$rc" == 0 ]] && echo true || echo false)" --arg message "$message" \
       --arg checked_at "$(now_iso)" --arg log "$SBM_RUN/config-validate.log" \

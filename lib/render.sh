@@ -185,6 +185,10 @@ render_config_from_state() {
 }
 
 core_validate_config() { xray_validate_config "$SBM_XRAY_BIN" "$1"; }
+core_validate_config_with() {
+  local bin=$1 config=$2 log=${3:-$SBM_RUN/xray-config-check.log}
+  xray_test_config "$bin" "$config" "$log"
+}
 
 runtime_render_candidates() {
   local state=$1 config=$2

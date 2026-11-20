@@ -260,7 +260,11 @@ export_client_config() {
     outbounds:($outbounds + [{type:"direct",tag:"direct"}]),
     route:$route
   }' >"$tmp"; then rm -f "$tmp"; return 1; fi
-  if ! core_validate_config "$tmp"; then rm -f "$tmp"; return 1; fi
+  # Client profiles are sing-box JSON; check them only when a sing-box
+  # binary happens to be available (xray-manager itself never installs one).
+  if command_exists sing-box && ! sing-box check -c "$tmp" >"$SBM_RUN/client-check.log" 2>&1; then
+    log_error "sing-box 客户端配置检查失败；日志：$SBM_RUN/client-check.log"; rm -f "$tmp"; return 1
+  fi
   chmod 0600 "$tmp" && mv -f "$tmp" "$output" || { rm -f "$tmp"; return 1; }
   log_ok "已导出 $mode 模式 sing-box 客户端配置：$output"
 }

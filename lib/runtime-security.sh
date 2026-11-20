@@ -7,7 +7,7 @@
 # on the systemd backend can make execve fail under NoNewPrivileges/LSM rules.
 
 singbox_resolved_binary() {
-  local binary=${1:-$SBM_SING_BOX_BIN} target
+  local binary=${1:-$SBM_XRAY_BIN} target
   target=$(readlink -f "$binary" 2>/dev/null || true)
   [[ -n "$target" ]] || target=$binary
   printf '%s\n' "$target"
@@ -15,7 +15,7 @@ singbox_resolved_binary() {
 
 singbox_file_capabilities() {
   local target
-  target=$(singbox_resolved_binary "${1:-$SBM_SING_BOX_BIN}")
+  target=$(singbox_resolved_binary "${1:-$SBM_XRAY_BIN}")
   [[ -e "$target" ]] || return 0
   command_exists getcap || return 0
   getcap "$target" 2>/dev/null || true
@@ -23,7 +23,7 @@ singbox_file_capabilities() {
 
 clear_singbox_file_capabilities() {
   local target caps
-  target=$(singbox_resolved_binary "${1:-$SBM_SING_BOX_BIN}")
+  target=$(singbox_resolved_binary "${1:-$SBM_XRAY_BIN}")
   [[ -e "$target" ]] || return 0
   command_exists getcap || return 0
   caps=$(getcap "$target" 2>/dev/null || true)
@@ -35,13 +35,13 @@ clear_singbox_file_capabilities() {
 
 apply_singbox_bind_capability() {
   local target
-  target=$(singbox_resolved_binary "${1:-$SBM_SING_BOX_BIN}")
+  target=$(singbox_resolved_binary "${1:-$SBM_XRAY_BIN}")
   command_exists setcap || die 'OpenRC 低权限服务需要 setcap；请安装 Alpine 的 libcap 包。'
   setcap 'cap_net_bind_service=+ep' "$target" || die "无法为 sing-box 设置低端口能力：$target"
 }
 
 prepare_singbox_binary_for_backend() {
-  local binary=${1:-$SBM_SING_BOX_BIN} backend=${2:-} target
+  local binary=${1:-$SBM_XRAY_BIN} backend=${2:-} target
   target=$(singbox_resolved_binary "$binary")
   [[ -f "$target" && -x "$target" ]] || return 1
   ensure_program_permissions
@@ -66,7 +66,7 @@ prepare_singbox_binary_for_backend() {
 }
 
 systemd_exec_preflight() {
-  local binary=${1:-$SBM_SING_BOX_BIN} unit log rc
+  local binary=${1:-$SBM_XRAY_BIN} unit log rc
   [[ ${SBM_SKIP_INIT:-0} != 1 ]] || return 2
   [[ $(init_system 2>/dev/null || true) == systemd ]] || return 2
   command_exists systemd-run || return 2
@@ -112,7 +112,7 @@ systemd_exec_preflight() {
 
 
 systemd_runtime_preflight() {
-  local binary=${1:-$SBM_SING_BOX_BIN} config=${2:-$SBM_CONFIG} unit log state i stable=0 rc=0
+  local binary=${1:-$SBM_XRAY_BIN} config=${2:-$SBM_CONFIG} unit log state i stable=0 rc=0
   [[ ${SBM_SKIP_INIT:-0} != 1 ]] || return 2
   [[ $(init_system 2>/dev/null || true) == systemd ]] || return 2
   command_exists systemd-run || return 2
@@ -187,7 +187,7 @@ systemd_unit_allows_netlink() {
 }
 
 runtime_exec_diagnostics() {
-  local binary=${1:-$SBM_SING_BOX_BIN} target caps
+  local binary=${1:-$SBM_XRAY_BIN} target caps
   target=$(singbox_resolved_binary "$binary")
   printf '%s\n' '---- sing-box 执行诊断 ----' >&2
   printf '命令路径：%s\n真实路径：%s\n' "$binary" "$target" >&2

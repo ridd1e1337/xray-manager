@@ -108,7 +108,7 @@ _state_init() {
   fi
   state_migrate
   state_validate "$SBM_STATE" || return 1
-  if [[ "$upgrade_protocols" == 1 && -x "$SBM_SING_BOX_BIN" ]] && state_protocol_credentials_need_upgrade "$SBM_STATE"; then
+  if [[ "$upgrade_protocols" == 1 && -x "$SBM_XRAY_BIN" ]] && state_protocol_credentials_need_upgrade "$SBM_STATE"; then
     # state_init already holds the manager lock. Reuse the transactional
     # runner directly so no nested flock can deadlock this migration.
     _state_transaction_run protocol-credentials _state_upgrade_protocol_credentials || return 1

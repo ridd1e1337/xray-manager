@@ -21,12 +21,14 @@ protocol_vless_export_result() {
   outbound=$(vless_xray_client_outbound "$node" "$secret" "$node_secret") || return 1
   name=$(jq -r '.name' <<<"$node") || return 1
   packet=$(jq -r '.xray.packet_encoding // ""' <<<"$node") || return 1
+  local core_version
+  core_version=$(xray_current_version 2>/dev/null || true); core_version=${core_version:-0.0.0}
   local dir key file result
   if dir=$(vless_cache_dir); then
-    key=$(vless_cache_key export "$mode" "$name" "$packet" "$outbound" "$(cat "$SBM_LIB/libexec/vless_export.jq")") && file="$dir/$key.export.json"
+    key=$(vless_cache_key export "$mode" "$name" "$packet" "$core_version" "$outbound" "$(cat "$SBM_LIB/libexec/vless_export.jq")") && file="$dir/$key.export.json"
     if [[ -s "$file" ]]; then cat "$file"; return 0; fi
   fi
-  result=$(jq -c --arg mode "$mode" --arg name "$name" --arg packet_encoding "$packet" \
+  result=$(jq -c --arg mode "$mode" --arg name "$name" --arg packet_encoding "$packet" --arg core_version "$core_version" \
     -f "$SBM_LIB/libexec/vless_export.jq" <<<"$outbound") || return 1
   if [[ -n "${file:-}" ]]; then
     (umask 077; printf '%s\n' "$result" >"$file.$$" && mv -f "$file.$$" "$file") 2>/dev/null || rm -f "$file.$$"

@@ -40,17 +40,17 @@ doctor_repair_runtime() {
   require_root
   local candidate preflight_rc=0
   log_info "修复核心链接、路径权限、配置权限与 $(init_system_label) 运行状态…"
-  if [[ ! -x "$SBM_SING_BOX_BIN" ]]; then
+  if [[ ! -x "$SBM_XRAY_BIN" ]]; then
     candidate=$(find "$SBM_CORE_DIR/sing-box" -mindepth 2 -maxdepth 2 -type f -name sing-box -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')
     [[ -n "$candidate" ]] || die '未找到可用于修复的 sing-box 核心，请重新执行安装命令。'
-    ln -sfn "$candidate" "$SBM_SING_BOX_BIN"
+    ln -sfn "$candidate" "$SBM_XRAY_BIN"
   fi
   if [[ ! -x "$SBM_CLOUDFLARED_BIN" ]]; then
     candidate=$(find "$SBM_CORE_DIR/cloudflared" -mindepth 2 -maxdepth 2 -type f -name cloudflared -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR==1 {sub(/^[^ ]+ /, ""); print; exit}')
     [[ -z "$candidate" ]] || ln -sfn "$candidate" "$SBM_CLOUDFLARED_BIN"
   fi
   ensure_program_permissions
-  prepare_singbox_binary_for_backend "$(readlink -f "$SBM_SING_BOX_BIN")"
+  prepare_singbox_binary_for_backend "$(readlink -f "$SBM_XRAY_BIN")"
   if mux_uses_nginx && declare -F nginx_stream_prepare_binary_for_backend >/dev/null 2>&1; then
     nginx_stream_prepare_binary_for_backend "$SBM_NGINX_STREAM_BIN" "$(effective_init_system)"
   fi
@@ -80,18 +80,18 @@ doctor_repair_runtime() {
     service_reload_manager
     service_reset_failed "$SBM_SERVICE"
     if [[ $(init_system 2>/dev/null || true) == systemd ]]; then
-      systemd_exec_preflight "$SBM_SING_BOX_BIN" || preflight_rc=$?
+      systemd_exec_preflight "$SBM_XRAY_BIN" || preflight_rc=$?
       case "$preflight_rc" in
         0) ;;
         2) log_warn 'systemd-run 不可用，跳过沙箱执行预检。' ;;
-        *) runtime_exec_diagnostics "$SBM_SING_BOX_BIN"; die 'systemd 沙箱仍无法执行 sing-box。' ;;
+        *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; die 'systemd 沙箱仍无法执行 sing-box。' ;;
       esac
       preflight_rc=0
-      systemd_runtime_preflight "$SBM_SING_BOX_BIN" "$SBM_CONFIG" || preflight_rc=$?
+      systemd_runtime_preflight "$SBM_XRAY_BIN" "$SBM_CONFIG" || preflight_rc=$?
       case "$preflight_rc" in
         0) ;;
         2) log_warn 'systemd-run 不可用，跳过实际启动预检。' ;;
-        *) runtime_exec_diagnostics "$SBM_SING_BOX_BIN"; die 'sing-box 仍无法在 systemd 沙箱中完成实际启动。' ;;
+        *) runtime_exec_diagnostics "$SBM_XRAY_BIN"; die 'sing-box 仍无法在 systemd 沙箱中完成实际启动。' ;;
       esac
     fi
     runtime_services_reconcile
@@ -224,7 +224,7 @@ doctor_snell_handshake() (
   local origin_pid='' client_pid=''
   id=$(jq -r '.id' <<<"$node")
   user_id=$(jq -r 'first(.users[] | select(.enabled==true) | .id) // empty' <<<"$node")
-  [[ -n "$user_id" && -x "$SBM_SING_BOX_BIN" ]] || return 1
+  [[ -n "$user_id" && -x "$SBM_XRAY_BIN" ]] || return 1
   command_exists curl && command_exists openssl || return 1
   runtime_node=$node
   if declare -F nginx_stream_effective_node >/dev/null 2>&1; then
@@ -262,8 +262,8 @@ doctor_snell_handshake() (
     outbounds:[$outbound],
     route:{final:$outbound.tag}
   }' >"$client_config"
-  "$SBM_SING_BOX_BIN" check -c "$client_config" >/dev/null 2>"$stage/check.log"
-  "$SBM_SING_BOX_BIN" run -c "$client_config" >"$stage/client.log" 2>&1 &
+  "$SBM_XRAY_BIN" check -c "$client_config" >/dev/null 2>"$stage/check.log"
+  "$SBM_XRAY_BIN" run -c "$client_config" >"$stage/client.log" 2>&1 &
   client_pid=$!
   for _ in {1..30}; do
     kill -0 "$client_pid" 2>/dev/null || return 1
@@ -354,7 +354,7 @@ doctor_run() {
   if jq -e . "$SBM_STATE" >/dev/null 2>&1; then check_line PASS '状态文件 JSON 有效'; else check_line FAIL '状态文件损坏'; failures=$((failures + 1)); fi
 
   local sb_version cf_version core_usable=0
-  if [[ -x "$SBM_SING_BOX_BIN" ]]; then
+  if [[ -x "$SBM_XRAY_BIN" ]]; then
     sb_version=$(core_current_version || true)
     if [[ -n "$sb_version" ]]; then check_line PASS "sing-box $sb_version"; core_usable=1
     else check_line FAIL 'sing-box 文件可执行，但无法读取版本信息'; failures=$((failures + 1)); fi
@@ -363,7 +363,7 @@ doctor_run() {
     failures=$((failures + 1))
   fi
 
-  core_target=$(readlink -f "$SBM_SING_BOX_BIN" 2>/dev/null || true)
+  core_target=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
   if [[ -n "$core_target" && "$core_target" == "$SBM_CORE_DIR"/* && -x "$core_target" ]]; then
     check_line PASS "核心链接目标有效：$core_target"
   else
@@ -413,14 +413,14 @@ doctor_run() {
 
   if [[ "$backend" == systemd && "$SBM_SKIP_INIT" != 1 && "$core_usable" == 1 ]]; then
     preflight_rc=0
-    systemd_exec_preflight "$SBM_SING_BOX_BIN" || preflight_rc=$?
+    systemd_exec_preflight "$SBM_XRAY_BIN" || preflight_rc=$?
     case "$preflight_rc" in
       0) check_line PASS 'sing-box 通过 systemd 沙箱执行预检' ;;
       2) check_line WARN 'systemd-run 不可用，未执行沙箱预检'; warnings=$((warnings + 1)) ;;
       *)
         check_line FAIL 'sing-box 无法在与正式服务相同的 systemd 沙箱中执行'
         failures=$((failures + 1))
-        runtime_exec_diagnostics "$SBM_SING_BOX_BIN"
+        runtime_exec_diagnostics "$SBM_XRAY_BIN"
         ;;
     esac
   fi
@@ -439,7 +439,7 @@ doctor_run() {
   fi
 
   tmp=$(mktemp "$SBM_RUN/doctor-config.XXXXXX")
-  if (( core_usable == 1 )) && (render_config_from_state "$SBM_STATE" "$tmp" >/dev/null 2>&1 && core_validate_config_with "$SBM_SING_BOX_BIN" "$tmp" "$SBM_RUN/doctor-check.log"); then
+  if (( core_usable == 1 )) && (render_config_from_state "$SBM_STATE" "$tmp" >/dev/null 2>&1 && core_validate_config_with "$SBM_XRAY_BIN" "$tmp" "$SBM_RUN/doctor-check.log"); then
     check_line PASS 'sing-box 配置渲染与语法检查通过'
   else
     check_line FAIL "配置检查失败，详见 $SBM_RUN/doctor-check.log"
@@ -468,7 +468,7 @@ doctor_run() {
       check_line FAIL "$(service_native_name "$SBM_SERVICE") 未运行（$(doctor_service_failure_detail "$SBM_SERVICE")）"
       failures=$((failures + 1))
       service_failure_report "$SBM_SERVICE"
-      runtime_exec_diagnostics "$SBM_SING_BOX_BIN"
+      runtime_exec_diagnostics "$SBM_XRAY_BIN"
       check_line WARN '可运行：xm repair；仍失败时运行：xm logs singbox 100'
       warnings=$((warnings + 1))
     fi
@@ -528,7 +528,7 @@ doctor_run() {
   fi
 
   if [[ "$backend" == openrc && "$low_port_required" == 1 ]]; then
-    if singbox_has_bind_capability "${core_target:-$SBM_SING_BOX_BIN}"; then check_line PASS 'OpenRC sing-box 核心具备低端口绑定能力'
+    if singbox_has_bind_capability "${core_target:-$SBM_XRAY_BIN}"; then check_line PASS 'OpenRC sing-box 核心具备低端口绑定能力'
     else check_line FAIL 'OpenRC sing-box 核心缺少 cap_net_bind_service；运行 xm repair'; failures=$((failures + 1)); fi
   fi
   if [[ "$backend" == openrc ]] && mux_uses_nginx && (( $(jq -r '.nginx_stream.port' "$SBM_STATE") < 1024 )); then

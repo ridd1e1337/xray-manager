@@ -10,7 +10,7 @@ protocol_ss_render() {
     --argjson port "$(jq -r '.port' <<<"$node")" \
     --arg network "$(jq -r '.network // "tcp"' <<<"$node")" \
     --arg method "$(jq -r '.method' <<<"$node")" \
-    --argjson mux "$(jq -r '.multiplex // true' <<<"$node")" \
+    --argjson mux false \
     '{
       type:"shadowsocks", tag:$tag, listen:$listen, listen_port:$port,
       network:$network, method:$method,
@@ -53,6 +53,6 @@ protocol_ss_client_outbound() {
     --argjson port "$(jq -r '.port' <<<"$node")" \
     --arg method "$(jq -r '.method' <<<"$node")" \
     --arg password "$password" \
-    --argjson mux "$(jq -r '.multiplex // true' <<<"$node")" \
+    --argjson mux false \
     '{type:"shadowsocks",tag:$tag,server:$server,server_port:$port,method:$method,password:$password,multiplex:{enabled:$mux}}'
 }

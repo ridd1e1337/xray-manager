@@ -91,6 +91,10 @@ def singbox_tls($c):
       cipher_suites:(if ($t.cipherSuites // "")=="" then null else $t.cipherSuites|split(":") end),
       utls:(if ($t.fingerprint // "")|IN("","unsafe") then null else {enabled:true,fingerprint:$t.fingerprint} end)}|compact)}
   elif $c.security=="reality" then
+    # Xray >= 26.9.8 REALITY servers reject ClientHellos without an
+    # X25519MLKEM768 key share; sing-box does not send one (sing-box#4520).
+    (($core_version|split(".")|map(tonumber? // 0)) as $v | ($v[0]*10000+$v[1]*100+$v[2]) >= 260908) as $pq_required |
+    if $pq_required then unsupported("Xray " + $core_version + " 的 REALITY 要求客户端携带 X25519MLKEM768，sing-box 目前不支持（sing-box#4520）；请使用 Xray 内核客户端（v2rayN、v2rayNG 等）或 mihomo") else . end |
     ($c.stream.realitySettings // {} | only(["serverName","fingerprint","publicKey","password","shortId","spiderX","show"]; "sing-box Reality")) as $r |
     if ($r.spiderX // "")!="" and $r.spiderX!="/" then unsupported("sing-box 无法表达自定义 Reality spiderX；请使用原生 Xray JSON") else
     {tls:{enabled:true,server_name:($r.serverName // ""),utls:{enabled:true,fingerprint:($r.fingerprint // "chrome")},reality:{enabled:true,public_key:($r.password // $r.publicKey),short_id:($r.shortId // "")}}} end
