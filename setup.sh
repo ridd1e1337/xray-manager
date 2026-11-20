@@ -440,7 +440,9 @@ if [[ "$src_real" != "$target_real" ]]; then
     SETUP_MUTATED=1
     trap setup_rollback_on_error ERR
   fi
-  find "$TARGET_LIB" -mindepth 1 -maxdepth 1 ! -name cores -exec rm -rf {} + 2>/dev/null || true
+  # cores/ holds the downloaded binaries and bin/ the links to them; both
+  # survive a script update so --keep-core finds the running core.
+  find "$TARGET_LIB" -mindepth 1 -maxdepth 1 ! -name cores ! -name bin -exec rm -rf {} + 2>/dev/null || true
   cp -a "$SRC_DIR"/. "$TARGET_LIB"/
   prune_runtime_payload
 else
@@ -548,7 +550,13 @@ printf '[4/7] 安装 Xray-core…\n'
 current_core_version=$(core_current_version || true)
 if [[ "$KEEP_CORE" == 1 ]]; then
   core_binary=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
-  [[ -x "$core_binary" ]] || die '--keep-core 需要已有 Xray 核心；请重新运行普通安装。'
+  if [[ ! -x "$core_binary" ]]; then
+    # Older updates removed bin/; fall back to the newest downloaded core.
+    core_binary=$(find "$SBM_CORE_DIR/xray" -mindepth 2 -maxdepth 2 -type f -name xray 2>/dev/null | sort -V | tail -1)
+    [[ -x "$core_binary" ]] || die '--keep-core 需要已有 Xray 核心；请重新运行普通安装。'
+    mkdir -p -m 0755 "$(dirname "$SBM_XRAY_BIN")"
+    ln -sfn "$core_binary" "$SBM_XRAY_BIN.new"; mv -Tf "$SBM_XRAY_BIN.new" "$SBM_XRAY_BIN"
+  fi
 else
   if [[ "$CORE_VERSION" == latest ]]; then
     CORE_VERSION=$(core_latest_version) || die '无法查询 Xray 最新官方版本。'

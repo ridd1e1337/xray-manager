@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.18
+
+- 修复 `xm update` 失败（`--keep-core 需要已有 Xray 核心`）：更新脚本时连同 `bin/xray` 链接一起删除。现在保留 `bin/`，
+  链接已丢失时自动指向已下载的最新核心。
+
 ## 0.1.0-alpha.17
 
 - 修复 Xray 服务启动失败（`203/EXEC Permission denied`）：`/usr/local/lib/xray-manager/bin` 在 `umask 027` 下被创建为 0750，
