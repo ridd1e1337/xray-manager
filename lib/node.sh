@@ -4,6 +4,7 @@
 node_protocol_label() {
   case "$1" in
     vmess) printf 'VMess' ;;
+    tunnel) printf 'Tunnel' ;;
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
     shadowsocks) printf 'Shadowsocks 2022' ;;
     hysteria2) printf 'Hysteria2' ;;
@@ -168,7 +169,7 @@ _node_add() {
   local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' obfs_host='' obfs_min_packet_size=512 obfs_max_packet_size=1200 disable_chrome_parrot=false bbr_profile='' brutal_debug=false masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 congestion_control='cubic' strict_mode=true wildcard_sni='off' snell_version=5 snell_mode=default realm_id='' realm_ip_version=0 realm_port_mapping=false inbound_json='{}' outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
   local remark='' region='' purpose='' line='' tags='' proxy_listen='127.0.0.1' proxy_listen_supplied=0 vless_preview='' vless_network='' vless_listen='::'
   local -a vless_options=()
-  local security_supplied=0
+  local security_supplied=0 tunnel_target='' follow_redirect=false
   while (($#)); do
     case "$1" in
       --listen) proxy_listen=${2:?}; proxy_listen_supplied=1; shift 2;;
@@ -177,6 +178,7 @@ _node_add() {
       --method) method=${2:?}; shift 2;; --network) network=${2:?}; shift 2;; --no-mux) mux=false; shift;;
       --obfs) obfs=${2:?}; shift 2;; --obfs-host) obfs_host=${2:?}; shift 2;; --obfs-min-packet-size) obfs_min_packet_size=${2:?}; shift 2;; --obfs-max-packet-size) obfs_max_packet_size=${2:?}; shift 2;; --disable-chrome-parrot) disable_chrome_parrot=true; shift;; --bbr-profile) bbr_profile=${2:?}; shift 2;; --brutal-debug) brutal_debug=true; shift;; --masquerade) masquerade=${2:?}; shift 2;; --disabled) enabled=false; shift;;
       --security) security=${2:?}; security_supplied=1; shift 2;;
+      --target) tunnel_target=${2:?}; shift 2;; --follow-redirect) follow_redirect=true; shift;;
       --flow) (($# >= 2)) || usage_die '缺少 flow 值；可显式传空字符串。'; flow=$2; shift 2;;
       --transport|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol)
         (($# >= 2)) || usage_die "缺少参数值：$1"
@@ -294,6 +296,16 @@ _node_add() {
       secret=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}')
       if [[ "$address_supplied" == 0 && ( "$proxy_listen" == 127.0.0.1 || "$proxy_listen" == ::1 ) ]]; then address=$proxy_listen; address_supplied=1; address_source=manual; fi
       ;;
+    tunnel|dokodemo|dokodemo-door)
+      # Xray tunnel (dokodemo-door): forward a local port to one target.
+      protocol=tunnel; base=tunnel; port=${port:?端口转发必须指定 --port。}; name=${name:-Tunnel}
+      [[ "$tunnel_target" =~ ^(.+):([0-9]{1,5})$ ]] || die '请用 --target HOST:PORT 指定转发目标。'
+      validate_address "${BASH_REMATCH[1]#[}" >/dev/null 2>&1 || validate_address "${BASH_REMATCH[1]}" || die "无效转发目标：$tunnel_target"
+      validate_port "${BASH_REMATCH[2]}" || die "无效转发端口：$tunnel_target"
+      case "$network" in tcp|udp|tcp,udp) ;; *) die 'Tunnel network 必须是 tcp、udp 或 tcp,udp。';; esac
+      transport=${network%%,*}; address=${address:-127.0.0.1}; address_supplied=1
+      secret='{}'
+      ;;
     *) die "不支持的协议：$type";;
   esac
   if [[ "$address_supplied" == 0 ]]; then
@@ -353,6 +365,11 @@ _node_add() {
       ;;
     vless)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg security "$security" --arg flow "$flow" --arg hs "$handshake_server" --argjson hp "$handshake_port" --arg now "$created_at" --argjson enabled "$enabled" --arg listen "$vless_listen" '{id:$id,name:$name,protocol:"vless",enabled:$enabled,listen:$listen,port:$port,domain:$domain,server_address:$address,security:$security,flow:(if $flow=="" then null else $flow end),handshake_server:(if $hs=="" then null else $hs end),handshake_port:$hp,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
+      ;;
+    tunnel)
+      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg target "$tunnel_target" --arg network "$network" --argjson follow "$follow_redirect" --arg address "$address" --arg listen "$([[ $proxy_listen_supplied == 1 ]] && printf %s "$proxy_listen" || printf '::')" --arg now "$created_at" --argjson enabled "$enabled" \
+        '($target|capture("^\\[?(?<h>.+?)\\]?:(?<p>[0-9]+)$")) as $t |
+         {id:$id,name:$name,protocol:"tunnel",enabled:$enabled,listen:$listen,port:$port,server_address:$address,target_address:$t.h,target_port:($t.p|tonumber),network:$network,follow_redirect:$follow,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
     socks|http|mixed)
       node=$(jq -n --arg id "$id" --arg name "$name" --arg protocol "$protocol" --arg listen "$proxy_listen" --argjson port "$port" --arg address "$address" --arg now "$created_at" --argjson enabled "$enabled" '{id:$id,name:$name,protocol:$protocol,enabled:$enabled,listen:$listen,port:$port,server_address:$address,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')

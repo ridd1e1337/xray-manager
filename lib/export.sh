@@ -17,6 +17,7 @@ node_share_uri() {
     trojan) protocol_vless_share "$node" "$secret" "$node_secret" ;;
     vless) protocol_vless_share "$node" "$secret" "$node_secret" ;;
     socks|http|mixed) protocol_proxy_share "$node" "$secret" ;;
+    tunnel) return 1 ;;
   esac
 }
 
@@ -37,6 +38,7 @@ node_client_outbound() {
     trojan) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     vless) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     socks|http|mixed) outbound=$(protocol_proxy_client_outbound "$node" "$secret") ;;
+    tunnel|wireguard) return 1 ;;
     *) die "不支持导出的协议：$protocol" ;;
   esac
   [[ -n "$outbound" ]] || return 1
@@ -85,6 +87,11 @@ node_share() {
   [[ -n "$user_id" ]] || die "节点没有启用用户：$id"
   state_user_exists "$id" "$user_id" || die "用户不存在：$id/$user_id"
   protocol=$(jq -r '.protocol' <<<"$node")
+  if [[ "$protocol" == tunnel ]]; then
+    printf '\n%s端口转发%s %s：本机 %s/%s → %s\n' "$C_BOLD" "$C_RESET" "$id" "$(jq -r '.port' <<<"$node")" "$(jq -r '.network' <<<"$node")" \
+      "$(jq -r '"\(.target_address):\(.target_port)"' <<<"$node")"
+    return 0
+  fi
   user=$(state_get_user "$id" "$user_id")
   secret=$(jq -s '.[0]+.[1]' <(printf '%s\n' "$user") <(state_get_user_secret "$id" "$user_id"))
   node_secret='{}'; [[ ! -r $(state_secret_path "$id") ]] || node_secret=$(state_get_secret "$id")

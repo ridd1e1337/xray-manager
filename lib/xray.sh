@@ -167,6 +167,8 @@ xray_protocol_inbound() {
     http)
       clients=$(jq '[.[] | {user:.username,pass:.password}]' <<<"$credentials") || return 1
       jq --argjson a "$clients" '. + {protocol:"http",settings:{accounts:$a}}' <<<"$base";;
+    tunnel)
+      jq --argjson n "$node" '. + {protocol:"tunnel",settings:{address:$n.target_address,port:$n.target_port,network:$n.network,followRedirect:($n.follow_redirect // false)}}' <<<"$base";;
     *) log_error "Xray 不支持此协议：$protocol"; return 1;;
   esac
 }
