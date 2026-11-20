@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-protocol_proxy_render() {
-  jq -n --argjson node "$1" --argjson users "$2" '
-    {type:$node.protocol,tag:("in-"+$node.id),listen:$node.listen,listen_port:$node.port,
-     users:[$users[]|{username,password}]}'
-}
 
 protocol_proxy_share() {
   local node=$1 secret=$2 scheme hostport

@@ -752,29 +752,6 @@ _settings_set_outbound_ip_strategy() {
 }
 settings_set_outbound_ip_strategy() { with_state_transaction settings-outbound-ip _settings_set_outbound_ip_strategy "$@"; }
 
-_settings_set_dns() {
-  local field=$1 value=$2 candidate
-  case "$field" in
-    optimistic)
-      case "$value" in true|false) ;; *) die 'DNS optimistic 必须是 true 或 false。';; esac
-      candidate=$(state_candidate)
-      jq --argjson value "$value" '.settings.dns_optimistic=$value' "$SBM_STATE" >"$candidate"
-      ;;
-    timeout|optimistic-timeout)
-      [[ "$value" =~ ^[0-9]+(ms|s|m|h|d)$ ]] || die 'DNS 超时必须使用如 10s、3d 的格式。'
-      candidate=$(state_candidate)
-      if [[ "$field" == timeout ]]; then
-        jq --arg value "$value" '.settings.dns_timeout=$value' "$SBM_STATE" >"$candidate"
-      else
-        jq --arg value "$value" '.settings.dns_optimistic_timeout=$value' "$SBM_STATE" >"$candidate"
-      fi
-      ;;
-    *) die '未知 DNS 设置。';;
-  esac
-  if ! apply_candidate_state "$candidate" "settings-dns-$field"; then rm -f "$candidate"; return 1; fi
-  rm -f "$candidate"
-}
-settings_set_dns() { with_state_transaction settings-dns _settings_set_dns "$@"; }
 
 _settings_detect_public_ip() {
   local ipv4='' ipv6='' chosen candidate
@@ -793,17 +770,6 @@ _settings_detect_public_ip() {
 }
 settings_detect_public_ip() { with_state_transaction settings-detect-ip _settings_detect_public_ip; }
 
-settings_default_address() {
-  local address source
-  address=$(jq -r '.settings.default_server_address // ""' "$SBM_STATE")
-  source=$(jq -r '.settings.default_server_address_source // "manual"' "$SBM_STATE")
-  if [[ -z "$address" && "$source" == auto ]]; then
-    _settings_detect_public_ip
-    address=$(jq -r '.settings.default_server_address // ""' "$SBM_STATE")
-  fi
-  [[ -n "$address" ]] || die '未配置服务器地址；请使用 xm settings detect-ip 或 xm settings address HOST。'
-  printf '%s\n' "$address"
-}
 
 settings_show_addresses() {
   if [[ ${1:-0} == 1 ]]; then jq '.settings | {default_server_address,default_server_address_source,public_ipv4,public_ipv6,outbound_ip_strategy,dns_optimistic,dns_optimistic_timeout,dns_timeout,public_ip_detected_at}' "$SBM_STATE"; return; fi

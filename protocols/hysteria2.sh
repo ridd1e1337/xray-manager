@@ -1,54 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-protocol_hy2_render() {
-  local node=$1 credentials=$2 node_secret=$3 domain cert_dir base obfs_type obfs_password masquerade min_packet_size max_packet_size bbr_profile brutal_debug realm_enabled realm_url realm_token realm_id realm_ip realm_mapping
-  domain=$(jq -r '.domain' <<<"$node")
-  cert_dir="$SBM_CERTS/$domain"
-  obfs_type=$(jq -r '.obfs.type // ""' <<<"$node")
-  obfs_password=$(jq -r '.obfs_password // ""' <<<"$node_secret")
-  masquerade=$(jq -r '.masquerade // ""' <<<"$node")
-  base=$(jq -n \
-    --arg tag "in-$(jq -r '.id' <<<"$node")" \
-    --arg listen "$(jq -r '.listen // "::"' <<<"$node")" \
-    --argjson port "$(jq -r '.port' <<<"$node")" \
-    --argjson users "$(jq '[.[] | {name,password}]' <<<"$credentials")" \
-    --arg domain "$domain" \
-    --arg cert "$cert_dir/fullchain.pem" --arg key "$cert_dir/key.pem" \
-    '{
-      type:"hysteria2",tag:$tag,listen:$listen,listen_port:$port,
-      users:$users,
-      tls:{enabled:true,server_name:$domain,certificate_path:$cert,key_path:$key}
-    }')
-  if [[ -n "$obfs_type" ]]; then
-    if [[ "$obfs_type" == gecko ]]; then
-      min_packet_size=$(jq -r '.obfs.min_packet_size // 512' <<<"$node")
-      max_packet_size=$(jq -r '.obfs.max_packet_size // 1200' <<<"$node")
-      base=$(jq --arg t "$obfs_type" --arg p "$obfs_password" --argjson min "$min_packet_size" --argjson max "$max_packet_size" \
-        '. + {obfs:{type:$t,password:$p,min_packet_size:$min,max_packet_size:$max}}' <<<"$base")
-    else
-      base=$(jq --arg t "$obfs_type" --arg p "$obfs_password" '. + {obfs:{type:$t,password:$p}}' <<<"$base")
-    fi
-  fi
-  if [[ -n "$masquerade" ]]; then
-    base=$(jq --arg m "$masquerade" '. + {masquerade:$m}' <<<"$base")
-  fi
-  bbr_profile=$(jq -r '.bbr_profile // ""' <<<"$node")
-  brutal_debug=$(jq -r '.brutal_debug // false' <<<"$node")
-  [[ -z "$bbr_profile" ]] || base=$(jq --arg p "$bbr_profile" '. + {bbr_profile:$p}' <<<"$base")
-  [[ "$brutal_debug" != true ]] || base=$(jq '. + {brutal_debug:true}' <<<"$base")
-  realm_enabled=$(jq -r '.realm_enabled // false' <<<"$node")
-  if [[ "$realm_enabled" == true ]]; then
-    realm_url=$(jq -r '.realm.public_url' "$SBM_STATE")
-    realm_id=$(jq -r '.realm_id' <<<"$node")
-    realm_ip=$(jq -r '.realm_ip_version // 0' <<<"$node")
-    realm_mapping=$(jq -r '.realm_port_mapping // false' <<<"$node")
-    realm_token=$(realm_secret_token)
-    base=$(jq --arg url "$realm_url" --arg token "$realm_token" --arg id "$realm_id" --argjson ip "$realm_ip" --argjson mapping "$realm_mapping" \
-      '. + {realm:({server_url:$url,token:$token,realm_id:$id,stun_servers:["stun.cloudflare.com:3478","stun.l.google.com:19302"]} + (if $ip==0 then {} else {ip_version:$ip} end) + (if $mapping then {port_mapping:{enabled:true}} else {} end))}' <<<"$base")
-  fi
-  printf '%s\n' "$base"
-}
 
 protocol_hy2_share() {
   local node=$1 secret=$2 node_secret=${3:-'{}'} address domain port password name hp uri obfs_type obfs_password realm_enabled realm_url realm_token realm_id

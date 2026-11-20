@@ -419,7 +419,6 @@ _xray_install() {
   _xray_switch_to "$target"
 }
 xray_install() { require_root; with_lock _xray_install "${1:-latest}"; }
-xray_update() { xray_install "${1:-latest}"; }
 
 xray_latest_version() { xray_release_json latest | jq -r '.tag_name // empty | ltrimstr("v")'; }
 

@@ -230,30 +230,26 @@ ui_proxy_address_default() {
   esac
 }
 ui_header() {
-  local service_state enabled mux_state traffic_count notify_state health_state tunnel_state
+  local service_state enabled tunnel_state mux_state traffic_count notify_state health_state
   ui_clear
-  enabled=$(state_enabled_count)
-  if [[ "$SBM_SKIP_INIT" == 1 ]]; then
-    service_state='不接管服务'
-  elif ! state_runtime_required; then
-    service_state='待机'
-  elif service_active "$SBM_SERVICE"; then
-    service_state='运行中'
-  else
-    service_state='未运行'
-  fi
+  # The Xray version only changes through update/rollback, which reset this.
+  [[ -n "${SBM_UI_XRAY_VERSION:-}" ]] || SBM_UI_XRAY_VERSION=$(xray_current_version 2>/dev/null || echo 未安装)
+  IFS=$'\t' read -r enabled tunnel_state mux_state traffic_count notify_state health_state < <(jq -r '[
+    ([.nodes[]? | select(.enabled)] | length),
+    (.tunnel.mode | if .=="none" then "未启用" elif .=="quick" then "临时域名" elif .=="fixed" then "固定域名" else "多域名路由" end),
+    (if .nginx_stream.enabled then ((.nginx_stream.port|tostring) + "/TCP") else "未启用" end),
+    ([.nodes[]? | select(.traffic.enabled==true)] | length),
+    (if .notifications.enabled then .notifications.provider else "未启用" end),
+    (if .health.enabled then "已启用" else "未启用" end)] | @tsv' "$SBM_STATE")
+  if [[ "$SBM_SKIP_INIT" == 1 ]]; then service_state='不接管服务'
+  elif (( enabled == 0 )); then service_state='待机'
+  elif service_active "$SBM_SERVICE"; then service_state='运行中'
+  else service_state='未运行'; fi
   printf '%s╭──────────────────── xray-manager ────────────────────╮%s\n' "$C_CYAN" "$C_RESET"
-  printf '  版本 %-18s sing-box %-16s\n' "$SBM_VERSION" "$(core_current_version || echo '-')"
-  if [[ -x "$SBM_XRAY_BIN" ]]; then printf '  Xray %-16s VLESS %-16s\n' "$(xray_current_version || echo '-')" "$(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE")"; fi
-  printf '  服务管理 %-16s\n' "$(init_system_label)"
-  tunnel_state=$(jq -r '.tunnel.mode | if .=="none" then "未启用" elif .=="quick" then "临时域名" elif .=="fixed" then "固定域名" else "多域名路由" end' "$SBM_STATE")
-  printf '  sing-box %-14s CF Tunnel %-18s\n' "$service_state" "$tunnel_state"
-  mux_state=$(jq -r 'if .nginx_stream.enabled then ((.nginx_stream.port|tostring) + "/TCP") else "未启用" end' "$SBM_STATE")
-  printf '  TCP 端口共用 %-36s\n' "$mux_state"
-  traffic_count=$(jq '[.nodes[]? | select(.traffic.enabled==true)] | length' "$SBM_STATE")
-  printf '  流量控制 %-36s\n' "${traffic_count} 个节点"
-  notify_state=$(jq -r 'if .notifications.enabled then .notifications.provider else "未启用" end' "$SBM_STATE")
-  health_state=$(jq -r 'if .health.enabled then "已启用" else "未启用" end' "$SBM_STATE")
+  printf '  版本 %-18s Xray %-16s\n' "$SBM_VERSION" "$SBM_UI_XRAY_VERSION"
+  printf '  Xray 服务 %-13s 启用节点 %-16s\n' "$service_state" "$enabled"
+  printf '  服务管理 %-14s CF Tunnel %-18s\n' "$(init_system_label)" "$tunnel_state"
+  printf '  TCP 端口共用 %-10s 流量控制 %s 个节点\n' "$mux_state" "$traffic_count"
   printf '  通知 %-18s 健康检查 %-16s\n' "$notify_state" "$health_state"
   printf '%s╰─────────────────────────────────────────────────────╯%s\n\n' "$C_CYAN" "$C_RESET"
 }
@@ -667,13 +663,19 @@ ui_vless_edit() {
   local id=$1 node choice vless_domain vless_transport inbound outbound
   local -a vless_args=()
   node=$(state_get_node "$id") || return 1
-  [[ $(jq -r '.protocol' <<<"$node") == vless ]] || { log_error '此入口仅用于 VLESS 节点。'; return 1; }
+  local protocol; protocol=$(jq -r '.protocol' <<<"$node")
+  [[ "$protocol" =~ ^(vless|vmess|trojan|shadowsocks)$ ]] || { log_error '此入口仅用于 VLESS/VMess/Trojan/Shadowsocks 节点。'; return 1; }
   if jq -e --arg id "$id" '.reality_site.enabled==true and .reality_site.node_id==$id' "$SBM_STATE" >/dev/null; then
     log_info '共用 443 的节点采用固定 Vision Reality 参数；请通过 Reality 网站菜单管理。'
     return 0
   fi
   printf '1. 编辑传输、安全层与加密\n2. 更新原生 Xray JSON\n3. 回落（RAW + TLS）\n4. 流量嗅探\n5. Socket 选项\n0. 返回\n'
-  ui_menu_choice choice 'VLESS 参数' 5 || return 1
+  ui_menu_choice choice '传输参数' 5 || return 1
+  if [[ "$protocol" != vless && "$choice" == 1 ]]; then
+    log_info "更换传输或安全层：xm node set $id --transport ws|grpc|httpupgrade|xhttp|kcp|raw --security none|tls|reality …"
+    return 0
+  fi
+  if [[ "$choice" == 3 && ! "$protocol" =~ ^(vless|trojan)$ ]]; then log_error '回落仅支持 VLESS/Trojan。'; return 1; fi
   case "$choice" in
     3)
       printf '当前回落：%s\n' "$(jq -c '.xray.inbound.settings.fallbacks // []' <<<"$node")"
@@ -723,7 +725,8 @@ ui_user_menu() {
   protocol=$(state_get_node "$id" | jq -r '.protocol') || return 1
   user_stats "$id" || return 1
   printf '\n1. 添加用户\n2. 启用用户\n3. 停用用户\n4. 删除用户\n5. 轮换用户凭据\n6. 设置到期时间\n'
-  if [[ "$protocol" == vless ]]; then printf '7. 设置流量配额\n8. 设置在线 IP 上限\n9. 清零本周期流量\n'; fi
+  local limited=0; [[ "$protocol" =~ ^(socks|http|mixed|tunnel)$ ]] || limited=1
+  if (( limited )); then printf '7. 设置流量配额\n8. 设置在线 IP 上限\n9. 清零本周期流量\n'; fi
   printf '10. 清除全部限额\n11. 生成该用户的动态订阅（含用量与到期信息）\n0. 返回\n'
   ui_menu_choice choice '用户操作' 11 || return 0
   [[ "$choice" != 0 ]] || return 0
@@ -744,7 +747,7 @@ ui_user_menu() {
       if [[ "$value" == none ]]; then args=(--no-expiry); else args=(--days "$value"); fi
       user_limit_cli "$id" "$user_id" "${args[@]}";;
     7)
-      [[ "$protocol" == vless ]] || return 0
+      (( limited )) || return 0
       prompt_value value '流量配额，如 100G；unlimited 取消' 100G || return 1
       args=(--quota "$value")
       if [[ "$value" != unlimited ]]; then
@@ -753,16 +756,16 @@ ui_user_menu() {
       fi
       user_limit_cli "$id" "$user_id" "${args[@]}";;
     8)
-      [[ "$protocol" == vless ]] || return 0
+      (( limited )) || return 0
       printf '超出上限会暂停该用户 10 分钟后自动重试；检查随流量周期任务运行。\n'
       prompt_value value '同时在线 IP 数；unlimited 取消' 2 || return 1
       user_limit_cli "$id" "$user_id" --ip-limit "$value";;
-    9) [[ "$protocol" == vless ]] && user_usage_reset "$id" "$user_id";;
+    9) (( limited )) && user_usage_reset "$id" "$user_id";;
     10) user_limit_cli "$id" "$user_id" --clear;;
     11)
-      printf '1. sing-box\n2. Xray\n3. mihomo\n'
+      printf '1. Xray（v2rayN/v2rayNG 等）\n2. mihomo（Clash Verge/FlClash 等）\n3. sing-box\n'
       ui_menu_choice value '订阅格式' 3 || return 0
-      case "$value" in 1) value=mixed;; 2) value=xray;; 3) value=mihomo;; *) return 0;; esac
+      case "$value" in 1) value=xray;; 2) value=mihomo;; 3) value=mixed;; *) return 0;; esac
       subscription_create_cli never "$value" --live --user "$id:$user_id";;
   esac
 }
@@ -881,17 +884,6 @@ ui_add_node() {
       [[ -n "$address" ]] && args+=(--address "$address")
       ui_add_node_and_deliver "${args[@]}"
       ;;
-    2)
-      prompt_value name '节点名称' 'Shadowsocks 2022'; prompt_value address '客户端连接地址（域名或 IP）' "$(ui_client_address_default '')"; ui_prompt_port port tcp 'TCP 端口' 8388 8389 8390 8443
-      if ui_use_recommended; then method=2
-      else printf '1. 2022-blake3-aes-128-gcm\n2. 2022-blake3-aes-256-gcm\n3. 2022-blake3-chacha20-poly1305\n'; ui_menu_choice method '选择方法' 3; fi
-      case "$method" in 1) method=2022-blake3-aes-128-gcm;; 2) method=2022-blake3-aes-256-gcm;; 3) method=2022-blake3-chacha20-poly1305;; *) log_error '选择无效'; return;; esac
-      ui_add_node_and_deliver ss --name "$name" --address "$address" --port "$port" --method "$method"
-      ;;
-    3)
-      prompt_value name '节点名称' 'AnyTLS'; ui_select_certificate_domain domain || { ui_cancel; return; }; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port tcp 'TCP 端口' 443 8443 9443 10443
-      ui_add_node_and_deliver anytls --name "$name" --domain "$domain" --address "$address" --port "$port"
-      ;;
     4)
       prompt_value name '节点名称' 'Hysteria2'; ui_select_certificate_domain domain || { ui_cancel; return; }; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port udp 'UDP 端口' 443 8443 9443 10443
       local -a hy2_args=(hy2 --name "$name" --domain "$domain" --address "$address" --port "$port")
@@ -907,61 +899,7 @@ ui_add_node() {
       fi
       ui_add_node_and_deliver "${hy2_args[@]}"
       ;;
-    5)
-      prompt_value name '节点名称' 'Trojan'; ui_select_certificate_domain domain || { ui_cancel; return; }
-      prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port tcp 'TCP 端口' 443 8443 9443 10443
-      ui_add_node_and_deliver trojan --name "$name" --domain "$domain" --address "$address" --port "$port"
-      ;;
-    6)
-      prompt_value name '节点名称' 'TUIC'; ui_select_certificate_domain domain || { ui_cancel; return; }
-      prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port udp 'UDP 端口' 443 8443 9443 10443
-      if ui_use_recommended; then congestion_control=1
-      else printf '1. cubic\n2. new_reno\n3. bbr\n'; ui_menu_choice congestion_control '拥塞控制' 3; fi
-      case "$congestion_control" in 1) congestion_control=cubic;; 2) congestion_control=new_reno;; 3) congestion_control=bbr;; *) log_error '选择无效'; return;; esac
-      ui_add_node_and_deliver tuic --name "$name" --domain "$domain" --address "$address" --port "$port" --congestion-control "$congestion_control"
-      ;;
     7) ui_vless_add;;
-    8)
-      prompt_value name '节点名称' 'NaiveProxy'; ui_select_certificate_domain domain || { ui_cancel; return; }
-      prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"
-      if ui_use_recommended; then security_choice=1
-      else printf '1. HTTPS/TCP\n2. QUIC/UDP\n'; ui_menu_choice security_choice '选择传输' 2; fi
-      case "$security_choice" in 1) network=tcp;; 2) network=udp;; *) log_error '选择无效'; return;; esac
-      ui_prompt_port port "$network" '端口' 443 8443 9443 10443
-      ui_add_node_and_deliver naive --name "$name" --domain "$domain" --address "$address" --port "$port" --network "$network"
-      ;;
-    9)
-      prompt_value name '节点名称' 'ShadowTLS'; prompt_value handshake_server '握手目标域名' "$SBM_RECOMMENDED_REALITY_SNI"; prompt_value handshake_port '握手目标端口' '443'
-      printf '节点包含 Shadowsocks 2022 加密内层；客户端须导入完整 sing-box 配置，或支持 shadow-tls 插件的分享链接。\n'
-      prompt_value address '客户端连接地址' "$(ui_client_address_default '')"; ui_prompt_port port tcp 'TCP 端口' 443 8443 9443 10443
-      strict_mode=true; wildcard_sni=off
-      if ! ui_use_recommended; then prompt_value strict_mode '严格模式（true/false）' 'true'; prompt_value wildcard_sni '通配 SNI（off/authed/all）' 'off'; fi
-      ui_add_node_and_deliver shadowtls --name "$name" --address "$address" --port "$port" --handshake-server "$handshake_server" --handshake-port "$handshake_port" --strict-mode "$strict_mode" --wildcard-sni "$wildcard_sni"
-      ;;
-    10)
-      prompt_value name '节点名称' 'Snell'; prompt_value address '客户端连接地址（域名或 IP）' "$(ui_client_address_default '')"; ui_prompt_port port tcp 'TCP 端口' 6160 443 8443 9443 10443
-      if ui_use_recommended; then
-        ui_add_node_and_deliver snell --name "$name" --address "$address" --port "$port" --snell-version 5 --obfs none
-        return
-      fi
-      printf '1. Snell v5\n2. Snell v6\n'; ui_menu_choice snell_version_choice '选择 Snell 版本' 2
-      case "$snell_version_choice" in
-        1)
-          printf '1. 不启用 HTTP 混淆\n2. HTTP 混淆\n'; ui_menu_choice snell_obfs_choice '选择混淆' 2
-          case "$snell_obfs_choice" in
-            1) obfs=none; ui_add_node_and_deliver snell --name "$name" --address "$address" --port "$port" --snell-version 5 --obfs none ;;
-            2) prompt_value snell_obfs_host 'HTTP 混淆 Host' 'bing.com'; ui_add_node_and_deliver snell --name "$name" --address "$address" --port "$port" --snell-version 5 --obfs http --obfs-host "$snell_obfs_host" ;;
-            *) log_error '选择无效';;
-          esac
-          ;;
-        2)
-          printf '1. default\n2. unshaped\n3. unsafe-raw\n'; ui_menu_choice snell_mode_choice 'Snell v6 traffic shaping mode' 3
-          case "$snell_mode_choice" in 1) snell_mode_choice=default;; 2) snell_mode_choice=unshaped;; 3) snell_mode_choice=unsafe-raw;; *) log_error '选择无效'; return;; esac
-          ui_add_node_and_deliver snell --name "$name" --address "$address" --port "$port" --snell-version 6 --snell-mode "$snell_mode_choice"
-          ;;
-        *) log_error '选择无效';;
-      esac
-      ;;
     11)
       local proxy_type proxy_listen
       prompt_value proxy_type '代理类型（socks/http/mixed）' 'mixed'
@@ -986,7 +924,7 @@ ui_manage_nodes() {
   node_show "$id"
   printf '\n1. 显示导入内容\n2. 启用节点\n3. 停用节点\n4. 修改端口\n5. 修改客户端地址\n6. 修改名称\n7. 修改备注、地区与标签\n8. 轮换凭据\n9. 删除节点\n10. 设置/延长节点有效期\n11. 清除节点到期策略\n'
   printf '12. 用户、流量与限额\n'
-  if [[ $(jq -r '.protocol' <<<"$node") == vless ]]; then printf '13. VLESS 传输、回落与加密参数\n'; else max_action=12; fi
+  if [[ $(jq -r '.protocol' <<<"$node") =~ ^(vless|vmess|trojan|shadowsocks)$ ]]; then printf '13. 传输、回落、嗅探与 Socket 参数\n'; else max_action=12; fi
   printf '0. 返回\n'
   ui_menu_choice action '选择操作' "$max_action"
   case "$action" in
@@ -1007,7 +945,7 @@ ui_manage_nodes() {
     10) prompt_value value '续期天数（从当前到期日或今天起算）' '30'; node_expiry_cli "$id" --days "$value";;
     11) node_expiry_cli "$id" --clear;;
     12) ui_open_submenu ui_user_menu "$id";;
-    13) [[ $(jq -r '.protocol' <<<"$node") != vless ]] || ui_open_submenu ui_vless_edit "$id";;
+    13) [[ ! $(jq -r '.protocol' <<<"$node") =~ ^(vless|vmess|trojan|shadowsocks)$ ]] || ui_open_submenu ui_vless_edit "$id";;
   esac
 }
 
@@ -1086,18 +1024,16 @@ ui_tunnel_menu() {
 }
 
 ui_update_menu() {
-  local c p v path
-  printf '1. 检查 sing-box 更新\n2. 更新 sing-box 最新版\n3. 指定 sing-box 版本\n4. 回滚 sing-box\n5. 设置 sing-box 核心自动更新策略\n6. 安装/更新 cloudflared\n7. 更新 acme.sh\n8. 导出 sing-box 1.14 JSON Schema\n9. 查看核心 build tags 与能力\n10. 检查脚本与 Caddy 更新\n11. 更新脚本与 Caddy\n12. 每日自动更新\n13. Xray-core 管理\n0. 返回\n'
-  ui_menu_choice c '选择操作' 13
+  local c
+  printf '1. 检查 Xray 更新\n2. Xray 管理（更新/指定版本/回滚/策略）\n3. 安装/更新 cloudflared\n4. 更新 acme.sh\n5. 检查脚本与 Caddy 更新\n6. 更新脚本与 Caddy\n7. 每日自动更新\n0. 返回\n'
+  ui_menu_choice c '选择操作' 7
   case "$c" in
-    1) core_check_update || true;; 2) core_update latest;; 3) prompt_value v '版本号，如 1.14.0-rc.1' ''; core_update "$v";; 4) core_rollback;;
-    5) printf 'manual / notify / patch / stable\n'; prompt_value p '策略' "$(jq -r '.settings.core_update_policy' "$SBM_STATE")"; core_set_policy "$p";; 6) cloudflared_update;; 7) acme_update;;
-    8) prompt_value path 'Schema 输出文件' "$SBM_EXPORTS/sing-box-schema.json"; core_schema "$path";;
-    9) core_capabilities;;
-    10) manager_update --check;;
-    11) manager_update; if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/xm"; fi;;
-    12) ui_open_submenu ui_manager_auto_menu;;
-    13) ui_open_submenu ui_xray_menu;;
+    1) core_check_update || true;;
+    2) ui_open_submenu ui_xray_menu;;
+    3) cloudflared_update;; 4) acme_update;;
+    5) manager_update --check;;
+    6) manager_update; if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/xm"; fi;;
+    7) ui_open_submenu ui_manager_auto_menu;;
   esac
 }
 
@@ -1187,14 +1123,14 @@ ui_manager_auto_menu() {
 
 ui_doctor_menu() {
   local c host count family
-  printf '1. 运行完整诊断\n2. 自动修复权限、配置与服务\n3. 低风险自动修复\n4. 协调/重启 sing-box 服务\n5. 查看 sing-box 最近日志\n6. 网络延迟、丢包与抖动检测\n7. 吞吐测速与前后对比\n0. 返回\n'
+  printf '1. 运行完整诊断\n2. 自动修复权限、配置与服务\n3. 低风险自动修复\n4. 协调/重启 Xray 服务\n5. 查看 Xray 最近日志\n6. 网络延迟、丢包与抖动检测\n7. 吞吐测速与前后对比\n0. 返回\n'
   ui_menu_choice c '选择操作' 7
   case "$c" in
     1) doctor_run || true;;
     2) doctor_run 1 || true;;
     3) doctor_run 0 0 1 || true;;
-    4) singbox_service_reconcile && status_summary || true;;
-    5) show_logs singbox 100;;
+    4) with_lock xray_service_reconcile && status_summary || true;;
+    5) show_logs core 100;;
     6)
       prompt_value host '目标主机名或 IP' ''
       prompt_value count '探测次数（1–30）' '10'
@@ -1287,9 +1223,9 @@ ui_nginx_stream_menu() {
     8) website_mux_setup;;
     9) website_mux_detach;;
     7)
-      printf '1. sing-box 内置\n2. Nginx Stream\n3. 现有 Caddy L4\n0. 返回\n'
-      ui_menu_choice engine_choice '选择复用方式' 3
-      case "$engine_choice" in 1) mux_set_backend sing-box;; 2) mux_set_backend nginx;; 3) mux_set_backend caddy;; esac;;
+      printf '1. Nginx Stream\n2. 现有 Caddy L4\n0. 返回\n'
+      ui_menu_choice engine_choice '选择复用方式' 2
+      case "$engine_choice" in 1) mux_set_backend nginx;; 2) mux_set_backend caddy;; esac;;
   esac
 }
 
@@ -1802,8 +1738,8 @@ ui_main() {
     ui_header
     printf 'Enter 返回；输入 r 留在当前页。\n'
     printf '填写时 Enter 保留当前值；q 取消；主菜单 0 / q 退出。\n'
-    if [[ $(jq '.nodes|length' "$SBM_STATE") == 0 ]]; then
-      printf '还没有节点：输入 2 添加节点。\n'
+    if ! jq -e '.nodes|length>0' "$SBM_STATE" >/dev/null; then
+      printf '还没有节点：输入 2 添加节点（新手直接选 1 VLESS Reality，全部回车即可）。\n'
     fi
     ui_main_options
     # Stay at the root on empty input without reopening a page or redrawing
@@ -1828,6 +1764,7 @@ ui_main() {
       0|q) return 0;; *) log_error '选择无效'; continue;;
     esac
     ui_menu_loop "$page" "${page_args[@]}"
+    [[ "$choice" != 8 ]] || SBM_UI_XRAY_VERSION=''  # core may have changed
     case "$SBM_UI_RESULT" in
       201|202) return 0;;
       203) ui_reload;;

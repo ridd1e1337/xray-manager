@@ -1,23 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-protocol_vmess_render() {
-  local node=$1 credentials=$2
-  jq -n \
-    --arg tag "in-$(jq -r '.id' <<<"$node")" \
-    --arg listen "$(jq -r '.listen // "127.0.0.1"' <<<"$node")" \
-    --argjson port "$(jq -r '.port' <<<"$node")" \
-    --argjson users "$(jq '[.[] | {name,uuid}]' <<<"$credentials")" \
-    --arg path "$(jq -r '.ws_path' <<<"$node")" \
-    '{
-      type: "vmess",
-      tag: $tag,
-      listen: $listen,
-      listen_port: $port,
-      users: $users,
-      transport: {type: "ws", path: $path}
-    }'
-}
 
 protocol_vmess_share() {
   local node=$1 secret=$2 domain address name uuid path payload

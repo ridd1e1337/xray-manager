@@ -124,31 +124,6 @@ _mux_auto_configure() {
 
 mux_auto_configure() { with_state_transaction mux-auto _mux_auto_configure "$@"; }
 
-mux_builtin_config() {
-  local state=$1
-  if ! nginx_stream_state_enabled "$state" || [[ $(mux_backend "$state") != sing-box ]]; then
-    printf '{"inbounds":[],"rules":[]}\n'
-    return 0
-  fi
-  # Only the frontend is sniffed. Backend inbounds re-enter routing after
-  # authentication and must never match these forwarding rules a second time.
-  # The final reject is mandatory: the public direct inbound is not an open
-  # forward proxy, and no domain is ever used as a network destination.
-  jq '{
-    inbounds:[{
-      type:"direct",tag:"sbm-mux-tcp",listen:.nginx_stream.listen,
-      listen_port:.nginx_stream.port,network:"tcp",
-      override_address:"127.0.0.1",override_port:1
-    }],
-    rules:([
-      {inbound:["sbm-mux-tcp"],action:"sniff",sniffer:["tls"],timeout:"300ms"}
-    ] + [.nginx_stream.routes[] | {
-      inbound:["sbm-mux-tcp"],protocol:["tls"],domain:[(.sni|ascii_downcase)],
-      action:"route",outbound:"direct",override_address:"127.0.0.1",
-      override_port:.backend_port
-    }] + [{inbound:["sbm-mux-tcp"],action:"reject"}])
-  }' "$state"
-}
 
 _mux_set_backend() {
   local backend=$1 candidate

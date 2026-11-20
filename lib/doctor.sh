@@ -602,7 +602,6 @@ doctor_run() {
   (( failures == 0 ))
 }
 
-doctor_repair() { doctor_run 1; }
 
 show_logs() {
   local target=${1:-all} lines=${2:-100}

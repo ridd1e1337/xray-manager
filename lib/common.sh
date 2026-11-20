@@ -129,17 +129,7 @@ with_lock() {
 now_iso() { date -u +'%Y-%m-%dT%H:%M:%SZ'; }
 now_stamp() { date -u +'%Y%m%dT%H%M%SZ'; }
 
-json_compact() { jq -c .; }
-json_pretty() { jq .; }
 
-extract_semver() {
-  local text=$1
-  if [[ $text =~ ([0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?) ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-  else
-    return 1
-  fi
-}
 
 random_hex() {
   local bytes=${1:-16}
@@ -293,13 +283,6 @@ must_install() {
 must_mv() {
   mv "$@" || { log_error "文件替换失败：$*"; return 1; }
 }
-must_cp() {
-  cp "$@" || { log_error "文件复制失败：$*"; return 1; }
-}
-must_write() {
-  local target=$1; shift
-  cat >"$target" || { log_error "文件写入失败：$target"; return 1; };
-}
 
 group_exists() {
   local group=$1
@@ -329,10 +312,6 @@ x509_days_remaining() {
   printf '%s\n' "$(( (epoch-now)/86400 ))"
 }
 
-set_owner_if_exists() {
-  local owner=$1 path=$2
-  if id "$owner" >/dev/null 2>&1; then chown "$owner" "$path" 2>/dev/null || true; fi
-}
 set_group_if_exists() {
   local group=$1 path=$2
   if group_exists "$group"; then chgrp "$group" "$path" 2>/dev/null || true; fi
@@ -393,7 +372,3 @@ prompt_secret() {
   printf -v "$__var" '%s' "$value"
 }
 
-mask_secret() {
-  local s=$1
-  if ((${#s} <= 10)); then printf '********'; else printf '%s****%s' "${s:0:4}" "${s: -4}"; fi
-}

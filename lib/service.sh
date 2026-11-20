@@ -65,7 +65,6 @@ require_init_system() {
 }
 
 # Backward-compatible name retained for third-party callers.
-require_systemd() { require_init_system; }
 
 service_native_name() {
   local name=$1
@@ -95,7 +94,6 @@ service_manager_present() {
 }
 
 # Legacy helper retained for modules/tests which still call it.
-is_systemd_present() { [[ $(init_system 2>/dev/null || true) == systemd ]] && service_manager_present; }
 
 service_exists() {
   local unit=$1 native path
@@ -282,12 +280,6 @@ service_failure_report() {
   }
 }
 
-ensure_singbox_bind_capability() {
-  local binary=${1:-$SBM_XRAY_BIN}
-  [[ $(init_system 2>/dev/null || true) == openrc ]] || return 0
-  command_exists setcap || die 'OpenRC 低权限服务需要 setcap；请安装 Alpine 的 libcap 包。'
-  setcap 'cap_net_bind_service=+ep' "$binary" || die "无法为 Xray 设置低端口能力：$binary"
-}
 
 singbox_has_bind_capability() {
   local binary=${1:-$SBM_XRAY_BIN}
