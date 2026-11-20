@@ -78,11 +78,41 @@ xm help [命令]                     # 完整用法
 `--xray-inbound-json` 可写入 3x-ui 中任何高级字段（sniffing、sockopt、finalmask、xhttp extra、
 TLS 证书选项等）；协议、标签、端口、用户和凭据由管理器保护。
 
-## 用户限制
+## 用户
 
-流量配额、重置日、到期和在线 IP 上限适用于除 SOCKS/HTTP/mixed/Tunnel 外的所有协议，
-数据来自仅监听 `127.0.0.1` 的 Xray Stats API。超限用户暂停但保留凭据，续期或到重置日后自动恢复。
-用户订阅返回 `Subscription-Userinfo`（用量、配额、到期）。
+```bash
+xm user add NODE --count 20 --prefix vip --quota 50G --days 30   # 批量添加
+xm user limit NODE alice --expire-after-first-use 30             # 首次使用后开始计时
+xm user limit NODE alice --reset-period week --reset-day 1       # 每周一重置流量（day/week/month）
+xm user online                                                  # 在线用户与 IP
+xm user set-usage NODE alice 0 | purge-depleted                 # 修改已用流量 / 删除耗尽用户
+xm user export NODE alice f.json && xm user import NODE2 f.json # 迁移用户，凭据不变
+xm user tg NODE alice 123456789                                 # 绑定 Telegram：/me /link 与到期提醒
+```
+
+流量配额、重置周期、到期和在线 IP 上限适用于除 SOCKS/HTTP/mixed/Tunnel 外的所有协议，
+数据来自仅监听 `127.0.0.1` 的 Xray Stats API。超限用户暂停但保留凭据，续期或到重置日后自动恢复；
+到期前 3 天、流量达 80% 时提醒一次。
+
+## 订阅
+
+用户订阅返回 `Subscription-Userinfo`。订阅地址不带 `?format` 时按客户端自动选择格式
+（Clash/mihomo、sing-box、v2rayN/Shadowrocket 的 base64 链接）；停用或到期的用户收到说明原因的占位节点。
+`xm subscription remark set '{name} | 剩余 {remaining} | {days}天'` 设置节点名模板。
+
+## 出站与分流
+
+```bash
+xm xray geo update                               # 按需下载 geoip/geosite（约 28 MiB）
+xm xray route add --domain geosite:openai --to warp
+xm xray route add --ip geoip:private --to block
+xm xray outbound sub add air https://example.com/sub   # 导入机场订阅为出站 + 负载均衡 air
+xm xray route add --domain geosite:netflix --to balancer:air
+xm xray route test www.netflix.com               # 某个域名会走哪个出口
+xm xray outbound test                            # 各出站连通性与延迟
+xm xray dns set 1.1.1.1,https://dns.google/dns-query
+xm tools reality-check www.apple.com             # REALITY 目标是否合适；另有 uuid/x25519/mlkem768/ech 等
+```
 
 ## 运维
 

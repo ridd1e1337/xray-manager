@@ -4,7 +4,7 @@
 xray-manager 只使用 Xray-core，因此 3x-ui 中**不由 Xray 运行**的 MTProto（mtg sidecar）、
 AmneziaWG（amneziawg-go）、TUIC（内置 Go 服务）不在范围内；TUIC 等可使用 sb-manager。
 
-状态：✅ 已支持并用真实流量实测　🟡 可通过原生 JSON 设置（`--xray-inbound-json` / `--transport-json` / `--tls-json` / `--sockopt-json`）　⬜ 待做
+状态：✅ 已支持并用真实流量实测　🟡 可通过原生 JSON 设置（`--xray-inbound-json` / `--transport-json` / `--tls-json` / `--sockopt-json`，与 3x-ui 的 JSON 编辑等价）　➖ 不适用
 
 ## 协议
 
@@ -20,7 +20,7 @@ AmneziaWG（amneziawg-go）、TUIC（内置 Go 服务）不在范围内；TUIC �
 | Mixed/SOCKS | socks | ✅ | auth、accounts、udp、ip |
 | Tunnel（dokodemo-door） | tunnel | ✅ | 目标地址/端口、network、followRedirect、`--port-map` |
 | MASQUE | masque | ✅ | address、mtu、users(pass)、masqueSettings.path，TLS h3 |
-| TUN | tun | ⬜ | 主机网络入口，默认不提供（会改动主机路由） |
+| TUN | tun | ➖ | 服务端 TUN 会接管主机路由，违背“普通操作不改动主机网络”的原则；需要时可手写 Xray 配置 |
 
 ## 传输（vmess/vless/trojan/shadowsocks 可选）
 
