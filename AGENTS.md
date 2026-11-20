@@ -4,7 +4,7 @@
 
 `sb` is the CLI entry point and loads modules from `lib/`. State, rendering, services, certificates, backups, diagnostics, and tunnels have separate modules. Protocol renderers live in `protocols/`; installation uses `install.sh`/`setup.sh`; architecture notes are in `docs/`.
 
-The source of truth is `/etc/sb-manager/state.json` plus protected secret and certificate files. Never edit generated `config.json` as persistent state.
+The source of truth is `/etc/xray-manager/state.json` plus protected secret and certificate files. Never edit generated `config.json` as persistent state.
 
 ## Development Policy
 
@@ -25,4 +25,4 @@ For every completed change, increment `VERSION`, synchronize the fallback and cu
 
 ## Security & Configuration Tips
 
-Treat backups, exports, API tokens, node credentials, and private keys as secrets. Never commit generated configs or runtime data. Verify downloaded artifacts and retain least-privilege service settings. Ordinary installation and node operations must not automatically alter host firewalls. Explicit VPS initialization (`sb vps init` or installer `--init-vps`) installs Caddy/UFW/Fail2ban and opens 22/TCP, 80/TCP, 443/TCP and 443/UDP while preserving the current SSH port and existing rules.
+Treat backups, exports, API tokens, node credentials, and private keys as secrets. Never commit generated configs or runtime data. Verify downloaded artifacts and retain least-privilege service settings. Ordinary installation and node operations must not automatically alter host firewalls. Explicit VPS initialization (`xm vps init` or installer `--init-vps`) installs Caddy/UFW/Fail2ban and opens 22/TCP, 80/TCP, 443/TCP and 443/UDP while preserving the current SSH port and existing rules.

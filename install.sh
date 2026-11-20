@@ -14,7 +14,7 @@ fi
 # Remote source bootstrap. The default "latest" mode resolves main to its
 # current immutable commit before downloading; explicit refs may pin a tag or
 # commit. Mutable branch refs require an explicit development opt-in.
-REPOSITORY=${SBM_INSTALL_REPOSITORY:-ridd1e1337/sb-manager}
+REPOSITORY=${SBM_INSTALL_REPOSITORY:-ridd1e1337/xray-manager}
 [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo '无效的 GitHub 仓库名。' >&2; exit 1; }
 DEFAULT_INSTALL_REF=latest
 REF=${SBM_INSTALL_REF:-$DEFAULT_INSTALL_REF}
@@ -24,7 +24,7 @@ if [[ "$REF" == latest ]]; then
   printf '正在解析 GitHub main 的最新 commit…\n' >&2
   latest_json=$(curl --fail --location --silent --show-error \
     --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github+json' \
-    -H 'User-Agent: sb-manager' "https://api.github.com/repos/${REPOSITORY}/commits/main") \
+    -H 'User-Agent: xray-manager' "https://api.github.com/repos/${REPOSITORY}/commits/main") \
     || { echo '无法解析仓库最新 commit。' >&2; exit 1; }
   # Do not use `head` here.  BusyBox grep may receive SIGPIPE when head
   # exits after the first match; with pipefail that aborts the installer
@@ -50,7 +50,7 @@ cleanup() { rm -rf "$TMPDIR_INSTALL"; }
 trap cleanup EXIT INT TERM
 
 ARCHIVE="$TMPDIR_INSTALL/source.tar.gz"
-printf '正在下载 sb-manager（%s@%s）…\n' "$REPOSITORY" "$REF"
+printf '正在下载 xray-manager（%s@%s）…\n' "$REPOSITORY" "$REF"
 curl --fail --location --silent --show-error \
   --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 600 \
   --proto '=https' --tlsv1.2 \

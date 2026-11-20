@@ -23,7 +23,7 @@ network_speed() {
   [[ "$streams" =~ ^[1-9][0-9]?$ ]] && (( streams <= 16 )) || usage_die '连接数必须为 1–16。'
   case "$direction" in up|down) ;; *) usage_die '测速方向必须是 up 或 down。';; esac
   [[ ${SBM_DRY_RUN:-0} == 0 ]] || usage_die 'speed 不接受 --dry-run。'
-  command_exists "$SBM_NETWORK_IPERF_CMD" || { log_error '缺少 iperf3；运行 sb deps install benchmark。'; return 1; }
+  command_exists "$SBM_NETWORK_IPERF_CMD" || { log_error '缺少 iperf3；运行 xm deps install benchmark。'; return 1; }
   require_command "$SBM_NETWORK_TIMEOUT_CMD"; require_command flock
   args=(-c "$host" -p "$port" -t "$seconds" -P "$streams" --connect-timeout 5000 -J)
   [[ "$direction" != down ]] || args+=(-R)
@@ -76,12 +76,12 @@ network_benchmark_cli() {
   local action=$1 host='' port=5201 seconds=10 streams=1 direction=up json=${SBM_OUTPUT_JSON:-0}
   shift
   case "$action" in
-    history) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：sb network history [--json]'; network_history; return;;
+    history) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：xm network history [--json]'; network_history; return;;
     compare)
-      [[ $# == 2 || ( $# == 3 && "$3" == --json ) ]] || usage_die '用法：sb network compare BEFORE AFTER [--json]'
+      [[ $# == 2 || ( $# == 3 && "$3" == --json ) ]] || usage_die '用法：xm network compare BEFORE AFTER [--json]'
       [[ $# != 3 ]] || json=1
       network_compare "$1" "$2" "$json"; return;;
-    speed) [[ $# -ge 1 ]] || usage_die '用法：sb network speed HOST [--port N] [--seconds 1-30] [--streams 1-16] [--direction up|down] [--json]'; host=$1; shift;;
+    speed) [[ $# -ge 1 ]] || usage_die '用法：xm network speed HOST [--port N] [--seconds 1-30] [--streams 1-16] [--direction up|down] [--json]'; host=$1; shift;;
     *) return 2;;
   esac
   while (($#)); do

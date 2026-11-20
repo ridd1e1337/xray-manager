@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-SBM_BBR_SYSCTL_CONFIG="${SBM_BBR_SYSCTL_CONFIG:-/etc/sysctl.d/99-sb-manager-bbr.conf}"
+SBM_BBR_SYSCTL_CONFIG="${SBM_BBR_SYSCTL_CONFIG:-/etc/sysctl.d/99-xray-manager-bbr.conf}"
 SBM_BBR_BACKUP_DIR="${SBM_BBR_BACKUP_DIR:-$SBM_VAR/bbr}"
 SBM_BBR_BACKUP_META="${SBM_BBR_BACKUP_META:-$SBM_BBR_BACKUP_DIR/previous.json}"
 SBM_BBR_BACKUP_CONFIG="${SBM_BBR_BACKUP_CONFIG:-$SBM_BBR_BACKUP_DIR/previous.conf}"
 SBM_BBR_SYSCTL_CMD="${SBM_BBR_SYSCTL_CMD:-sysctl}"
 SBM_BBR_MODPROBE_CMD="${SBM_BBR_MODPROBE_CMD:-modprobe}"
-SBM_BBR_MARKER='# Managed by sb-manager; use sb bbr disable to restore previous values.'
+SBM_BBR_MARKER='# Managed by xray-manager; use xm bbr disable to restore previous values.'
 
 bbr_sysctl_get() { "$SBM_BBR_SYSCTL_CMD" -n "$1" 2>/dev/null; }
 bbr_config_managed() { grep -Fqx "$SBM_BBR_MARKER" "$SBM_BBR_SYSCTL_CONFIG" 2>/dev/null; }
@@ -68,7 +68,7 @@ bbr_apply_config() {
 _bbr_enable() {
   local qdisc cc tmp
   if ! command_exists "$SBM_BBR_MODPROBE_CMD" && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature bbr || die 'BBR 调优需要 kmod/modprobe；请运行 sb deps install bbr。'
+    dependency_require_feature bbr || die 'BBR 调优需要 kmod/modprobe；请运行 xm deps install bbr。'
   fi
   bbr_available || {
     command_exists "$SBM_BBR_MODPROBE_CMD" || die '内核未提供 BBR，且系统缺少 modprobe。'
@@ -82,7 +82,7 @@ _bbr_enable() {
   fi
   if [[ ! -s "$SBM_BBR_BACKUP_META" ]]; then bbr_save_previous "$qdisc" "$cc"; fi
   mkdir -p "$(dirname "$SBM_BBR_SYSCTL_CONFIG")" "$SBM_RUN"
-  tmp=$(mktemp "$(dirname "$SBM_BBR_SYSCTL_CONFIG")/.sb-manager-bbr.XXXXXX")
+  tmp=$(mktemp "$(dirname "$SBM_BBR_SYSCTL_CONFIG")/.xray-manager-bbr.XXXXXX")
   printf '%s\n' "$SBM_BBR_MARKER" \
     'net.core.default_qdisc=fq' 'net.ipv4.tcp_congestion_control=bbr' >"$tmp"
   chmod 0644 "$tmp"
@@ -121,7 +121,7 @@ bbr_restore_previous() {
 
 _bbr_disable() {
   if [[ ! -s "$SBM_BBR_BACKUP_META" ]] && ! bbr_config_managed; then
-    log_warn 'BBR 未由 sb-manager 管理，无需停用。'
+    log_warn 'BBR 未由 xray-manager 管理，无需停用。'
     return 0
   fi
   bbr_restore_previous || die '恢复 BBR 启用前配置失败；已保留备份，请检查 sysctl 日志后重试。'

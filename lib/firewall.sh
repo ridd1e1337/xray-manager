@@ -177,7 +177,7 @@ firewall_setup_fail2ban() {
   if [[ "$(effective_init_system 2>/dev/null || true)" == systemd && -x $(command -v journalctl 2>/dev/null || true) ]]; then backend=systemd; fi
   mkdir -p "$(dirname "$SBM_FAIL2BAN_CONFIG")"
   ssh_ports=$(firewall_ssh_ports_csv)
-  tmp=$(mktemp "$(dirname "$SBM_FAIL2BAN_CONFIG")/.sb-manager-sshd.XXXXXX")
+  tmp=$(mktemp "$(dirname "$SBM_FAIL2BAN_CONFIG")/.xray-manager-sshd.XXXXXX")
   {
     printf '%s\n' '[sshd]' 'enabled = true' "port = $ssh_ports" 'filter = sshd'
     firewall_fail2ban_log_config "$backend"

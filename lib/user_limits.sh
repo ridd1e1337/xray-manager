@@ -28,7 +28,7 @@ user_limits_validate_state() {
         and ((.suspended_until // null)|int_or_null(1;253402300799))
         and ((.resume_enabled // false)|type=="boolean")
         and (((.quota_bytes==null and .ip_limit==null)) or $node.protocol=="vless"))))
-  ' "$1" >/dev/null || { log_error '用户限额状态无效：流量配额与在线 IP 限制仅支持 VLESS（Xray），且节点端口不能与 Xray 统计 API 端口相同（sb xray api-port）。'; return 1; }
+  ' "$1" >/dev/null || { log_error '用户限额状态无效：流量配额与在线 IP 限制仅支持 VLESS（Xray），且节点端口不能与 Xray 统计 API 端口相同（xm xray api-port）。'; return 1; }
 }
 
 user_usage_validate() {
@@ -257,11 +257,11 @@ _user_limit_set() {
     esac
   done
   if [[ "$protocol" != vless ]] && { [[ ${set[quota_bytes]:-null} != null ]] || [[ ${set[ip_limit]:-null} != null ]]; }; then
-    die '流量配额与在线 IP 限制需要 Xray 统计，仅支持 VLESS；其他协议可使用到期时间或节点级流量控制（sb traffic set）。'
+    die '流量配额与在线 IP 限制需要 Xray 统计，仅支持 VLESS；其他协议可使用到期时间或节点级流量控制（xm traffic set）。'
   fi
   if [[ "$protocol" == vless && $(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE") != xray ]] \
     && { [[ ${set[quota_bytes]:-null} != null ]] || [[ ${set[ip_limit]:-null} != null ]]; }; then
-    die '请先运行 sb xray enable，用户流量统计由 Xray 提供。'
+    die '请先运行 xm xray enable，用户流量统计由 Xray 提供。'
   fi
   if [[ ${set[ip_limit]:-null} != null ]] && jq -e '
       ((.listen // "::")|IN("127.0.0.1","::1","localhost"))
@@ -299,7 +299,7 @@ _user_limit_set() {
 
 user_limit_cli() {
   local node_id=${1:-} user_id=${2:-}
-  [[ -n "$node_id" && -n "$user_id" ]] || usage_die '用法：sb user limit NODE_ID USER_ID [--quota SIZE|unlimited] [--reset-day 1-28|none] [--days N|--expire-at UTC|--no-expiry] [--ip-limit N|unlimited] [--clear]'
+  [[ -n "$node_id" && -n "$user_id" ]] || usage_die '用法：xm user limit NODE_ID USER_ID [--quota SIZE|unlimited] [--reset-day 1-28|none] [--days N|--expire-at UTC|--no-expiry] [--ip-limit N|unlimited] [--clear]'
   if (($# == 2)); then user_stats_json "$node_id" | jq --arg u "$user_id" '.[] | select(.user==$u)'; return; fi
   require_root
   if [[ ${SBM_DRY_RUN:-0} == 1 ]]; then with_lock _user_limit_set "$@"

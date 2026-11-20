@@ -139,7 +139,7 @@ def caddy_plan(binary, main, port, log):
         if redirect_domains:
             redirects = ', '.join('http://' + domain for domain in redirect_domains)
             changes.append((len(text), len(text),
-                            '\n# sb-manager REALITY public HTTPS redirects\n' + redirects
+                            '\n# xray-manager REALITY public HTTPS redirects\n' + redirects
                             + ' {\n  redir https://{host}{uri} 308\n}\n'))
     return {str(main): edits(text, changes)}, {str(main): text}, sorted(domains), False
 

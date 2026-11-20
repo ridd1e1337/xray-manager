@@ -145,7 +145,7 @@ subscription_refresh_live() {
 subscription_write_service() {
   local python unit backend
   if ! command_exists python3 && ! command_exists python && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature subscription || die '订阅服务需要 python3；请运行 sb deps install subscription。'
+    dependency_require_feature subscription || die '订阅服务需要 python3；请运行 xm deps install subscription。'
   fi
   python=$(command -v python3 || command -v python || true)
   [[ -n "$python" ]] || die '订阅服务需要 python3。'
@@ -159,7 +159,7 @@ subscription_write_service() {
       mkdir -p "$SBM_SYSTEMD_DIR"
       cat >"$unit" <<EOF_UNIT
 [Unit]
-Description=sb-manager loopback subscription service
+Description=xray-manager loopback subscription service
 After=network.target
 
 [Service]
@@ -189,7 +189,7 @@ EOF_UNIT
       ;;
     openrc)
       write_openrc_supervised_service "$SBM_OPENRC_DIR/$(service_native_name "$SBM_SUBSCRIPTION_SERVICE")" \
-        'sb-manager subscription' 'sb-manager loopback subscription service' "$python" \
+        'xray-manager subscription' 'xray-manager loopback subscription service' "$python" \
         "$SBM_LIB/libexec/subscription_server.py --root $SBM_SUBSCRIPTIONS --listen 127.0.0.1 --port $SBM_SUBSCRIPTION_PORT" \
         "$SBM_SERVICE_USER" "$SBM_LOG_DIR/subscription.log" "$SBM_LOG_DIR/subscription.err.log" 'after firewall'
       ;;
@@ -267,7 +267,7 @@ subscription_create_cli() {
         [[ $# -ge 2 && "$2" == *:* ]] || usage_die '--user 格式为 NODE_ID:USER_ID'
         node_id=${2%%:*}; user_id=${2#*:}; shift 2;;
       --base-url) [[ $# -ge 2 ]] || usage_die '--base-url 缺少地址'; base=$2; shift 2;;
-      --*) usage_die '用法：sb subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL]';;
+      --*) usage_die '用法：xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL]';;
       *)
         case "$positional" in 0) duration=$1;; 1) mode=$1;; *) usage_die '订阅参数过多。';; esac
         positional=$((positional+1)); shift;;

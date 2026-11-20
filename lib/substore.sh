@@ -3,11 +3,11 @@
 
 SBM_SUBSTORE_DIR="${SBM_SUBSTORE_DIR:-$SBM_VAR/substore}"
 SBM_SUBSTORE_SECRET="${SBM_SUBSTORE_SECRET:-$SBM_SECRETS/substore.json}"
-SBM_SUBSTORE_SERVICE="${SBM_SUBSTORE_SERVICE:-sb-substore.service}"
+SBM_SUBSTORE_SERVICE="${SBM_SUBSTORE_SERVICE:-xm-substore.service}"
 SBM_SUBSTORE_NODE="${SBM_SUBSTORE_NODE:-/usr/bin/node}"
 
 substore_validate_state() {
-  jq -e '(.substore // {enabled:false,port:3001,version:"",frontend_version:""}) |
+  jq -e '(.substore // {enabled:false,port:3002,version:"",frontend_version:""}) |
     (.enabled|type=="boolean") and (.port|type=="number" and floor==. and .>=1024 and .<=65535) and
     (.version|type=="string" and test("^[0-9A-Za-z._-]*$")) and (.frontend_version|type=="string" and test("^[0-9A-Za-z._-]*$"))' "$1" >/dev/null
 }
@@ -56,7 +56,7 @@ EOF_LAUNCH
     unit="$SBM_SYSTEMD_DIR/$SBM_SUBSTORE_SERVICE"
     cat >"$unit" <<EOF_UNIT
 [Unit]
-Description=sb-manager Sub-Store
+Description=xray-manager Sub-Store
 After=network-online.target
 Wants=network-online.target
 
@@ -80,7 +80,7 @@ EOF_UNIT
     chmod 0644 "$unit"
   else
     write_openrc_supervised_service "$SBM_OPENRC_DIR/${SBM_SUBSTORE_SERVICE%.service}" \
-      'sb-manager Sub-Store' 'sb-manager Sub-Store' "$launcher" '' "$SBM_SERVICE_USER" \
+      'xray-manager Sub-Store' 'xray-manager Sub-Store' "$launcher" '' "$SBM_SERVICE_USER" \
       "$SBM_LOG_DIR/substore.log" "$SBM_LOG_DIR/substore.err.log" 'after firewall'
   fi
 }
@@ -108,7 +108,7 @@ substore_health() {
 
 substore_reconcile() {
   local start=${1:-1} enabled port
-  enabled=$(jq -r '.substore.enabled // false' "$SBM_STATE"); port=$(jq -r '.substore.port // 3001' "$SBM_STATE")
+  enabled=$(jq -r '.substore.enabled // false' "$SBM_STATE"); port=$(jq -r '.substore.port // 3002' "$SBM_STATE")
   if [[ "$enabled" == false ]]; then
     if [[ "$SBM_SKIP_INIT" != 1 && "$start" == 1 ]] && service_exists "$SBM_SUBSTORE_SERVICE"; then
       service_disable "$SBM_SUBSTORE_SERVICE" && service_stop "$SBM_SUBSTORE_SERVICE" || return 1
@@ -200,7 +200,7 @@ substore_install() {
   jq -n --argjson backend "$backend_meta" --argjson frontend "$frontend_meta" '{backend:$backend,frontend:$frontend}' >"$stage/manifest.json" || return 1
   with_lock _substore_transaction _substore_install_candidate "$stage" "$port" || rc=$?
   rm -rf "$stage"
-  (( rc == 0 )) && log_ok 'Sub-Store 已安装；运行 sb substore access 查看本机访问地址。'
+  (( rc == 0 )) && log_ok 'Sub-Store 已安装；运行 xm substore access 查看本机访问地址。'
   return "$rc"
 }
 
@@ -312,7 +312,7 @@ except ValueError:
 }
 
 _substore_source_set() {
-  local name=$1 url=$2 collection=${3:-sb-manager-all} subs collections stage existed col_existed rollback=0
+  local name=$1 url=$2 collection=${3:-xray-manager-all} subs collections stage existed col_existed rollback=0
   validate_node_id "$name" && validate_node_id "$collection" || usage_die '来源和组合名称须为有效 ID。'
   [[ $(jq -r '.substore.enabled // false' "$SBM_STATE") == true ]] || usage_die '请先启用 Sub-Store。'
   substore_validate_source_url "$url" || usage_die '请使用 HTTPS 订阅 URL（SSH 转发可用本机 HTTP），不带用户名、密码或 # 片段。'
@@ -365,7 +365,7 @@ substore_source_check() {
 }
 
 _substore_sync() {
-  local name=${1:-sb-manager} subs url token='' digest created='' meta
+  local name=${1:-xray-manager} subs url token='' digest created='' meta
   validate_node_id "$name" || usage_die 'Sub-Store 订阅名称无效。'
   [[ $(jq -r '.substore.enabled // false' "$SBM_STATE") == true ]] || usage_die '请先启用 Sub-Store。'
   subs=$(substore_resource_list sub) || return 1
@@ -394,7 +394,7 @@ _substore_sync() {
 substore_cli() {
   local action=${1:-status} version=latest frontend=latest port path
   (($# == 0)) || shift
-  port=$(jq -r '.substore.port // 3001' "$SBM_STATE")
+  port=$(jq -r '.substore.port // 3002' "$SBM_STATE")
   [[ ${SBM_DRY_RUN:-0} == 0 ]] || usage_die 'Sub-Store 命令不接受 --dry-run。'
   case "$action" in
     install|update)
@@ -405,19 +405,19 @@ substore_cli() {
       done
       substore_install "$version" "$frontend" "$port";;
     enable|disable) [[ $# == 0 ]] || usage_die '参数过多'; [[ "$action" == enable ]] && action=true || action=false; with_lock _substore_transaction _substore_enable "$action";;
-    status) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：sb substore status [--json]'; jq '.substore // {enabled:false,port:3001,version:"",frontend_version:""}' "$SBM_STATE";;
+    status) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：xm substore status [--json]'; jq '.substore // {enabled:false,port:3002,version:"",frontend_version:""}' "$SBM_STATE";;
     access) [[ $# == 0 ]] || usage_die '参数过多'; path=$(substore_access_path) || return 1; printf '前端：http://127.0.0.1:%s/\n后端：http://127.0.0.1:%s%s\n' "$port" "$port" "$path";;
-    backup) [[ $# == 1 ]] || usage_die '用法：sb substore backup FILE'; with_lock _substore_backup "$1";;
-    restore) [[ $# == 1 ]] || usage_die '用法：sb substore restore FILE'; substore_restore "$1";;
-    sync) [[ $# -le 1 ]] || usage_die '用法：sb substore sync [NAME]'; with_lock _substore_sync "${1:-sb-manager}";;
+    backup) [[ $# == 1 ]] || usage_die '用法：xm substore backup FILE'; with_lock _substore_backup "$1";;
+    restore) [[ $# == 1 ]] || usage_die '用法：xm substore restore FILE'; substore_restore "$1";;
+    sync) [[ $# -le 1 ]] || usage_die '用法：xm substore sync [NAME]'; with_lock _substore_sync "${1:-xray-manager}";;
     source)
       case "${1:-list}" in
-        list) [[ $# -le 2 && ${2:---json} == --json ]] || usage_die '用法：sb substore source list [--json]'; substore_source_list "$([[ ${2:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
-        add) [[ $# == 3 || $# == 4 ]] || usage_die '用法：sb substore source add NAME URL [COLLECTION]'; with_lock _substore_source_set "$2" "$3" "${4:-sb-manager-all}";;
-        remove) [[ $# == 2 ]] || usage_die '用法：sb substore source remove NAME'; with_lock _substore_source_remove "$2";;
-        check) [[ $# == 2 ]] || usage_die '用法：sb substore source check NAME'; substore_source_check "$2";;
-        *) usage_die '用法：sb substore source list|add|remove|check';;
+        list) [[ $# -le 2 && ${2:---json} == --json ]] || usage_die '用法：xm substore source list [--json]'; substore_source_list "$([[ ${2:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
+        add) [[ $# == 3 || $# == 4 ]] || usage_die '用法：xm substore source add NAME URL [COLLECTION]'; with_lock _substore_source_set "$2" "$3" "${4:-xray-manager-all}";;
+        remove) [[ $# == 2 ]] || usage_die '用法：xm substore source remove NAME'; with_lock _substore_source_remove "$2";;
+        check) [[ $# == 2 ]] || usage_die '用法：xm substore source check NAME'; substore_source_check "$2";;
+        *) usage_die '用法：xm substore source list|add|remove|check';;
       esac;;
-    *) usage_die '用法：sb substore install|update|enable|disable|status|access|backup|restore|sync|source';;
+    *) usage_die '用法：xm substore install|update|enable|disable|status|access|backup|restore|sync|source';;
   esac
 }

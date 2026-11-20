@@ -61,7 +61,7 @@ notification_configure_cli() {
       --token-file|--url-file|--secret-file) credential_file=${2:?缺少凭据文件}; shift 2 ;;
       --chat-id) destination=${2:?缺少 chat ID}; shift 2 ;;
       --thresholds) thresholds=${2:?缺少阈值}; shift 2 ;;
-      *) die '用法：sb notify configure telegram --token-file FILE --chat-id ID [--thresholds 80,90,100]；或 wecom|webhook --url-file FILE' ;;
+      *) die '用法：xm notify configure telegram --token-file FILE --chat-id ID [--thresholds 80,90,100]；或 wecom|webhook --url-file FILE' ;;
     esac
   done
   if [[ -n "$credential_file" ]]; then
@@ -125,7 +125,7 @@ notification_send() {
       ;;
     webhook)
       curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
-        -H 'Content-Type: application/json' --data "$(jq -n --arg event "$event" --arg message "$message" --arg now "$(now_iso)" '{source:"sb-manager",event:$event,message:$message,timestamp:$now}')" \
+        -H 'Content-Type: application/json' --data "$(jq -n --arg event "$event" --arg message "$message" --arg now "$(now_iso)" '{source:"xray-manager",event:$event,message:$message,timestamp:$now}')" \
         "$(jq -r '.webhook_url' <<<"$secret")" >/dev/null
       ;;
     *) return 1 ;;
@@ -133,7 +133,7 @@ notification_send() {
 }
 
 notification_test() {
-  notification_send test "sb-manager 测试通知：$(hostname 2>/dev/null || printf unknown) $(now_iso)" \
+  notification_send test "xray-manager 测试通知：$(hostname 2>/dev/null || printf unknown) $(now_iso)" \
     || die '测试通知发送失败，请检查凭据、目标和网络。'
   log_ok '测试通知发送成功。'
 }
@@ -171,7 +171,7 @@ notification_traffic_check_unlocked() {
       (( percent >= threshold )) || continue
       key="traffic:${id}:${cycle}:${threshold}"
       jq -e --arg key "$key" '.sent[$key] != null' "$SBM_NOTIFICATION_EVENTS" >/dev/null && continue
-      message="sb-manager 流量提醒：节点 ${name} (${id}) 本周期已使用 ${percent}%，达到 ${threshold}% 阈值。"
+      message="xray-manager 流量提醒：节点 ${name} (${id}) 本周期已使用 ${percent}%，达到 ${threshold}% 阈值。"
       if notification_send traffic_threshold "$message"; then
         notification_event_record_unlocked "$key"
       else

@@ -56,7 +56,7 @@ the node ID across export failures, so retries cannot create duplicate nodes.
 
 The panel keeps common labels short while the single node wizard retains the
 complete protocol options behind a single "use recommended values" prompt.
-`sb quick` opens that wizard; node creation goes through the explicit protocol
+`xm quick` opens that wizard; node creation goes through the explicit protocol
 and parameter flow.
 Full per-user client profiles include every required outbound and are validated
 before an atomic file replacement; the existing full-subscription export remains
@@ -65,14 +65,14 @@ available. Advanced protocol parameters use the original creation wizard.
 ## Traffic control plane
 
 ```text
-state.json: nodes[].traffic                 /var/lib/sb-manager/traffic-usage.json
+state.json: nodes[].traffic                 /var/lib/xray-manager/traffic-usage.json
               │                                           │
               └──────────────┬────────────────────────────┘
                              ▼
                  candidate nftables transaction
                              │
                              ▼
-                inet sb_manager_traffic (owned table)
+                inet xm_manager_traffic (owned table)
                   ├─ input:  client → listener (upload)
                   └─ output: listener → client (download)
 ```
@@ -85,17 +85,17 @@ The implementation deliberately does not install `tc` qdiscs. Rate enforcement u
 
 ## Explicit host-firewall setup
 
-The firewall panel keeps host-security changes separate from proxy state. `sb firewall fail2ban` installs (when needed) and writes the manager-owned SSH jail at `SBM_FAIL2BAN_CONFIG`, with `findtime=180`, `maxretry=5`, and `bantime=-1`; it discovers effective SSH ports from the current connection, `sshd -T`, and listening sockets before validating and enabling/restarting Fail2ban. The action snapshots current iptables and the prior jail before replacement. `sb firewall ufw` first displays a dry-run plan, then snapshots current iptables and UFW status, idempotently allows detected SSH ports, TCP `22`, `80`, `443`, and every enabled protocol listener before enabling UFW. Neither action runs during ordinary installation, and neither removes unrelated rules or packages. Package installation uses the detected apk/apt/dnf/yum/pacman/zypper backend.
+The firewall panel keeps host-security changes separate from proxy state. `xm firewall fail2ban` installs (when needed) and writes the manager-owned SSH jail at `SBM_FAIL2BAN_CONFIG`, with `findtime=180`, `maxretry=5`, and `bantime=-1`; it discovers effective SSH ports from the current connection, `sshd -T`, and listening sockets before validating and enabling/restarting Fail2ban. The action snapshots current iptables and the prior jail before replacement. `xm firewall ufw` first displays a dry-run plan, then snapshots current iptables and UFW status, idempotently allows detected SSH ports, TCP `22`, `80`, `443`, and every enabled protocol listener before enabling UFW. Neither action runs during ordinary installation, and neither removes unrelated rules or packages. Package installation uses the detected apk/apt/dnf/yum/pacman/zypper backend.
 
 ## Status, notification, and health control plane
 
-`sb status --json` composes one machine-readable view from state, protected traffic usage, service-manager status, live listeners, certificate validity, firewall components, and health findings. It never parses generated sing-box configuration back into state. Human `sb status` renders the same object, keeping CLI and panel results consistent.
+`xm status --json` composes one machine-readable view from state, protected traffic usage, service-manager status, live listeners, certificate validity, firewall components, and health findings. It never parses generated sing-box configuration back into state. Human `xm status` renders the same object, keeping CLI and panel results consistent.
 
 Traffic checkpoints evaluate configured percentage thresholds and write successful-delivery keys to `notification-events.json`, so retries occur after failures but delivered alerts are not repeated within a billing cycle. The notification provider secret is isolated in `secrets/notifications.json`; state contains only the provider name, enabled bit, and thresholds. Telegram, WeCom, and generic JSON Webhooks share this delivery layer.
 
 The optional health timer runs every 15 minutes on systemd/OpenRC and no-ops while `health.enabled` is false. It checks expected service/listener state, certificate expiry, UFW, Fail2ban, and the owned nftables traffic table. `health-events.json` tracks active issue codes so only changes and recoveries trigger notifications; `health-report.json` stores the latest protected report.
 
-Resource health metrics use portable `/proc`, `df`, systemd, and Fail2ban interfaces. Thresholds live in `health.resources`; metrics are informational warnings and never trigger firewall, SSH, sysctl, or routing changes. `sb doctor --repair-safe` performs only permission/configuration/owned-rule recovery and a controlled restart of a service that is expected to be active but is stopped.
+Resource health metrics use portable `/proc`, `df`, systemd, and Fail2ban interfaces. Thresholds live in `health.resources`; metrics are informational warnings and never trigger firewall, SSH, sysctl, or routing changes. `xm doctor --repair-safe` performs only permission/configuration/owned-rule recovery and a controlled restart of a service that is expected to be active but is stopped.
 
 Configuration previews render a candidate state and compare both state and generated config after redacting secret-shaped keys. Dry-run paths do not call `state_install_candidate`, do not write credentials or traffic journals, and do not reconcile services.
 
@@ -103,15 +103,15 @@ Configuration previews render a candidate state and compare both state and gener
 
 ```text
                     ┌─ systemd units + timers + journald
-sb service API ─────┤
+xm service API ─────┤
                     └─ OpenRC supervise-daemon + optional dcron periodic jobs + files
 ```
 
-All lifecycle operations use a shared service abstraction: existence, enable/disable, start/stop/restart, active-state checks, logs, repair, and failure reporting. Logical names retain their systemd suffix for state compatibility; the OpenRC backend maps `sb-sing-box.service` to `/etc/init.d/sb-sing-box` and `sb-cloudflared.service` to `/etc/init.d/sb-cloudflared`.
+All lifecycle operations use a shared service abstraction: existence, enable/disable, start/stop/restart, active-state checks, logs, repair, and failure reporting. Logical names retain their systemd suffix for state compatibility; the OpenRC backend maps `xm-sing-box.service` to `/etc/init.d/xm-sing-box` and `xm-cloudflared.service` to `/etc/init.d/xm-cloudflared`.
 
-On OpenRC, sing-box runs through `supervise-daemon` as root so low ports remain usable on VPS/container kernels that do not apply file capabilities to unprivileged users. OpenRC logs are stored under `/var/log/sb-manager/`; the Cloudflared directory and logs are created only when the optional component is installed.
+On OpenRC, sing-box runs through `supervise-daemon` as root so low ports remain usable on VPS/container kernels that do not apply file capabilities to unprivileged users. OpenRC logs are stored under `/var/log/xray-manager/`; the Cloudflared directory and logs are created only when the optional component is installed.
 
-From alpha.59, owned service units on systemd 245+ use a dedicated `sb-manager`
+From alpha.59, owned service units on systemd 245+ use a dedicated `xray-manager`
 journal namespace with a 23-hour retention window and a 16 MiB disk budget.
 Older shared journals retain the host policy. A 15-minute maintenance task also
 bounds OpenRC file logs and known temporary build/download directories while
@@ -174,7 +174,7 @@ backends, nodes and enabled API/Realm/Sub-Store listeners plus subscriptions.
 UDP stays independent. Sniffing and connection buffers still consume resources;
 no fixed memory ceiling is promised.
 
-The panel and `sb mux auto all --port 443` batch eligible TLS/SNI nodes in one
+The panel and `xm mux auto all --port 443` batch eligible TLS/SNI nodes in one
 candidate transaction, allocating loopback ports and enabling the saved backend.
 Before a new frontend bind, the manager checks the actual TCP listener. A Caddy,
 Nginx, or other non-manager listener causes a clean refusal; the manager never
@@ -221,14 +221,14 @@ replacement and roll back their setting/definitions if reconciliation fails.
 Each sing-box version is kept under `cores/sing-box/<version>/`. `/usr/local/bin/sing-box` is an atomic symlink. A candidate binary must validate the current configuration before the symlink is switched. Service failure restores the previous target.
 
 Every switch records a known-good core/config/secret/certificate snapshot in
-`/var/lib/sb-manager/backups/snapshots/` and appends a paired entry to
+`/var/lib/xray-manager/backups/snapshots/` and appends a paired entry to
 `core-history/sing-box.tsv`. If an older core rejects the current configuration,
 rollback restores that paired snapshot before switching, so the binary and
 configuration remain compatible.
 
 ## Protected control plane
 
-Subscription profiles are materialized under `/var/lib/sb-manager/subscriptions`
+Subscription profiles are materialized under `/var/lib/xray-manager/subscriptions`
 with SHA-256 token filenames. The Python service runs as `sbmanager`, binds only
 to loopback, refuses expired/revoked tokens, and never logs bearer paths. The
 optional sing-box 1.14 API/Dashboard is version-gated, loopback-only, and uses a

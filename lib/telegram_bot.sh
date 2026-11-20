@@ -3,10 +3,10 @@
 
 # Telegram command bot. It reuses the Telegram notification credentials,
 # accepts messages only from the configured chat and an explicit admin user
-# allowlist, and maps a fixed command set onto `sb` subcommands with
+# allowlist, and maps a fixed command set onto `xm` subcommands with
 # validated arguments. No message text ever reaches a shell.
 
-SBM_TELEGRAM_BOT_SERVICE="${SBM_TELEGRAM_BOT_SERVICE:-sb-telegram-bot.service}"
+SBM_TELEGRAM_BOT_SERVICE="${SBM_TELEGRAM_BOT_SERVICE:-xm-telegram-bot.service}"
 SBM_TELEGRAM_OFFSET="${SBM_TELEGRAM_OFFSET:-$SBM_VAR/telegram-bot.offset}"
 
 telegram_bot_validate_state() {
@@ -21,7 +21,7 @@ telegram_bot_validate_state() {
 telegram_bot_secret() {
   [[ -s "$SBM_NOTIFICATION_SECRET" ]] || { log_error 'Telegram 通知凭据缺失。'; return 1; }
   jq -ce 'select(.provider=="telegram" and (.bot_token|length)>0 and (.chat_id|tostring|length)>0)' "$SBM_NOTIFICATION_SECRET" \
-    || { log_error '请先运行 sb notify configure telegram。'; return 1; }
+    || { log_error '请先运行 xm notify configure telegram。'; return 1; }
 }
 
 # The bot token is passed through a curl config on stdin, never argv.
@@ -41,7 +41,7 @@ telegram_bot_reply() {
 
 telegram_bot_help() {
   cat <<'EOF'
-sb-manager 机器人命令：
+xray-manager 机器人命令：
 /status 服务器与服务状态
 /nodes 节点列表
 /users [节点] 用户流量、限额与在线 IP
@@ -55,7 +55,7 @@ sb-manager 机器人命令：
 EOF
 }
 
-# Map a command line to an argv for sb; prints NUL-separated argv.
+# Map a command line to an argv for xm; prints NUL-separated argv.
 telegram_bot_argv() {
   local text=$1 cmd arg id='^[a-z0-9][a-z0-9._-]{0,47}$'
   local -a w=()
@@ -99,7 +99,7 @@ telegram_bot_handle() {
   case "${text%%[ @]*}" in /start|/help) telegram_bot_reply "$token" "$chat" "$(telegram_bot_help)"; return;; esac
   mapfile -d '' -t argv < <(telegram_bot_argv "$text") || true
   if ((${#argv[@]} == 0)); then telegram_bot_reply "$token" "$chat" "无法识别或参数无效。发送 /help 查看命令。"; return; fi
-  output=$(NO_COLOR=1 SBM_ASSUME_YES=1 timeout 120 "$SBM_BIN_DIR/sb" "${argv[@]}" </dev/null 2>&1) || rc=$?
+  output=$(NO_COLOR=1 SBM_ASSUME_YES=1 timeout 120 "$SBM_BIN_DIR/xm" "${argv[@]}" </dev/null 2>&1) || rc=$?
   output=$(sed 's/\x1b\[[0-9;]*m//g' <<<"$output")
   telegram_bot_reply "$token" "$chat" "$( ((rc == 0)) && printf '✅' || printf '❌（%s）' "$rc") ${output:-完成}"
 }
@@ -138,13 +138,13 @@ telegram_bot_write_service() {
       mkdir -p "$SBM_SYSTEMD_DIR"
       cat >"$unit" <<EOF_UNIT
 [Unit]
-Description=sb-manager Telegram command bot
+Description=xray-manager Telegram command bot
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=$SBM_BIN_DIR/sb notify bot run
+ExecStart=$SBM_BIN_DIR/xm notify bot run
 Restart=always
 RestartSec=10s
 NoNewPrivileges=true
@@ -158,7 +158,7 @@ EOF_UNIT
       chmod 0644 "$unit";;
     openrc)
       write_openrc_supervised_service "$SBM_OPENRC_DIR/$(service_native_name "$SBM_TELEGRAM_BOT_SERVICE")" \
-        'sb-manager telegram bot' 'sb-manager Telegram command bot' "$SBM_BIN_DIR/sb" 'notify bot run' root \
+        'xray-manager telegram bot' 'xray-manager Telegram command bot' "$SBM_BIN_DIR/xm" 'notify bot run' root \
         "$SBM_LOG_DIR/telegram-bot.log" "$SBM_LOG_DIR/telegram-bot.err.log" net;;
     *) log_error '机器人服务需要 systemd 或 OpenRC。'; return 1;;
   esac
@@ -195,11 +195,11 @@ telegram_bot_cli() {
   local action=${1:-status}
   case "$action" in
     enable)
-      [[ "${2:-}" == --admin && -n "${3:-}" ]] || usage_die '用法：sb notify bot enable --admin USER_ID[,USER_ID]'
+      [[ "${2:-}" == --admin && -n "${3:-}" ]] || usage_die '用法：xm notify bot enable --admin USER_ID[,USER_ID]'
       require_root; with_state_transaction telegram-bot _telegram_bot_set true "$3";;
     disable) require_root; with_state_transaction telegram-bot _telegram_bot_set false;;
     run) telegram_bot_run;;
     status) jq '.notifications.bot // {enabled:false,admins:[]}' "$SBM_STATE";;
-    *) usage_die '用法：sb notify bot enable --admin ID[,ID]|disable|status|run';;
+    *) usage_die '用法：xm notify bot enable --admin ID[,ID]|disable|status|run';;
   esac
 }

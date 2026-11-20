@@ -142,7 +142,7 @@ health_collect_json() {
       if ! command_exists nft; then
         health_issue error traffic_nft_missing traffic '流量控制已启用，但系统缺少 nft。'
       elif ! traffic_runtime_complete; then
-        health_issue error traffic_rules_missing traffic '流量控制规则不完整，请运行 sb traffic reconcile。'
+        health_issue error traffic_rules_missing traffic '流量控制规则不完整，请运行 xm traffic reconcile。'
       fi
     fi
     health_resource_issues "$SBM_STATE"
@@ -243,7 +243,7 @@ health_tick_unlocked() {
   if [[ "$old_active" != "$new_active" && $(jq -r '.notifications.enabled // false' "$SBM_STATE") == true ]]; then
     new_codes=$(jq -r --argjson old "$old_active" '[.issues[] | select((.code as $c | $old | index($c)) == null) | .message] | join("；")' <<<"$result")
     resolved_codes=$(jq -rn --argjson old "$old_active" --argjson new "$new_active" '$old | map(select(. as $c | $new | index($c) == null)) | join("、")')
-    message='sb-manager 健康检查状态变化。'
+    message='xray-manager 健康检查状态变化。'
     [[ -z "$new_codes" ]] || message+=" 新异常：$new_codes。"
     [[ -z "$resolved_codes" ]] || message+=" 已恢复：$resolved_codes。"
     if notification_send health "$message"; then sent=1; else log_warn '健康检查通知发送失败，下一轮将重试。'; fi

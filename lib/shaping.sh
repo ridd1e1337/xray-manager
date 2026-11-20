@@ -172,14 +172,14 @@ shaping_cli() {
   (($# == 0)) || shift
   case "$action" in
     plan|enable)
-      [[ $# == 3 && "$2" == --capacity ]] || usage_die '用法：sb traffic shaping plan|enable IFACE --capacity 1G'
+      [[ $# == 3 && "$2" == --capacity ]] || usage_die '用法：xm traffic shaping plan|enable IFACE --capacity 1G'
       interface=$1; rate=$3
       plan=$(shaping_plan "$interface" "$rate") || return 1
       if [[ "$action" == plan || ${SBM_DRY_RUN:-0} == 1 ]]; then printf '%s\n' "$plan"; return; fi
-      command_exists "$SBM_TC_CMD" || { log_error '缺少 tc；运行 sb deps install shaping。'; return 1; }
+      command_exists "$SBM_TC_CMD" || { log_error '缺少 tc；运行 xm deps install shaping。'; return 1; }
       with_state_transaction shaping-enable _shaping_set true "$interface" "$rate";;
-    disable) [[ $# == 0 && ${SBM_DRY_RUN:-0} == 0 ]] || usage_die '用法：sb traffic shaping disable'; with_state_transaction shaping-disable _shaping_set false;;
-    status) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：sb traffic shaping status [--json]'; jq '.shaping // {enabled:false,interface:"",capacity_bps:1000000000}' "$SBM_STATE";;
-    *) usage_die '用法：sb traffic shaping plan|enable|disable|status';;
+    disable) [[ $# == 0 && ${SBM_DRY_RUN:-0} == 0 ]] || usage_die '用法：xm traffic shaping disable'; with_state_transaction shaping-disable _shaping_set false;;
+    status) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：xm traffic shaping status [--json]'; jq '.shaping // {enabled:false,interface:"",capacity_bps:1000000000}' "$SBM_STATE";;
+    *) usage_die '用法：xm traffic shaping plan|enable|disable|status';;
   esac
 }

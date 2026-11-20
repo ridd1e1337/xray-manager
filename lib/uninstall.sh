@@ -32,7 +32,7 @@ uninstall_manager() {
   if [[ "$purge" == 1 ]]; then
     message='确认彻底卸载并删除全部配置、证书、密钥、核心和备份？'
   else
-    message='确认卸载 sb-manager 程序？配置、证书、密钥和备份将保留'
+    message='确认卸载 xray-manager 程序？配置、证书、密钥和备份将保留'
   fi
   if [[ "$assume_yes" != 1 ]]; then confirm "$message" N || return 0; fi
   manager_update_lock || die '脚本更新正在进行，暂不能卸载；请等待更新完成。'
@@ -91,13 +91,13 @@ uninstall_manager() {
     service_stop "$SBM_NGINX_STREAM_SERVICE" || true
     service_disable "$SBM_SUBSCRIPTION_SERVICE" || true
     service_stop "$SBM_SUBSCRIPTION_SERVICE" || true
-    service_disable "${SBM_TELEGRAM_BOT_SERVICE:-sb-telegram-bot.service}" || true
-    service_stop "${SBM_TELEGRAM_BOT_SERVICE:-sb-telegram-bot.service}" || true
+    service_disable "${SBM_TELEGRAM_BOT_SERVICE:-xm-telegram-bot.service}" || true
+    service_stop "${SBM_TELEGRAM_BOT_SERVICE:-xm-telegram-bot.service}" || true
     service_disable "$SBM_TRAFFIC_SERVICE" || true
     service_stop "$SBM_TRAFFIC_SERVICE" || true
     if [[ "$backend" == systemd ]]; then
-      systemctl disable --now sb-manager-update.timer sb-core-update.timer sb-acme-renew.timer sb-quick-tunnel-refresh.timer sb-traffic-sync.timer sb-health-check.timer >/dev/null 2>&1 || true
-      systemctl disable --now sb-maintenance.timer >/dev/null 2>&1 || true
+      systemctl disable --now xm-manager-update.timer xm-core-update.timer xm-acme-renew.timer xm-quick-tunnel-refresh.timer xm-traffic-sync.timer xm-health-check.timer >/dev/null 2>&1 || true
+      systemctl disable --now xm-maintenance.timer >/dev/null 2>&1 || true
       systemctl reset-failed "$SBM_SERVICE" "$SBM_XRAY_SERVICE" "$SBM_OPENLIST_SERVICE" "$SBM_TUNNEL_SERVICE" "$SBM_NGINX_STREAM_SERVICE" "$SBM_TRAFFIC_SERVICE" >/dev/null 2>&1 || true
     fi
   fi
@@ -110,38 +110,38 @@ uninstall_manager() {
     "$SBM_SYSTEMD_DIR/$SBM_OPENLIST_SERVICE" \
     "$SBM_SYSTEMD_DIR/$SBM_TUNNEL_SERVICE" \
     "$SBM_SYSTEMD_DIR/$SBM_NGINX_STREAM_SERVICE" \
-    "$SBM_SYSTEMD_DIR/sb-core-update.service" \
-    "$SBM_SYSTEMD_DIR/sb-core-update.timer" \
-    "$SBM_SYSTEMD_DIR/sb-manager-update.service" \
-    "$SBM_SYSTEMD_DIR/sb-manager-update.timer" \
-    "$SBM_SYSTEMD_DIR/sb-acme-renew.service" \
-    "$SBM_SYSTEMD_DIR/sb-acme-renew.timer" \
-    "$SBM_SYSTEMD_DIR/sb-quick-tunnel-refresh.service" \
-    "$SBM_SYSTEMD_DIR/sb-quick-tunnel-refresh.timer" \
+    "$SBM_SYSTEMD_DIR/xm-core-update.service" \
+    "$SBM_SYSTEMD_DIR/xm-core-update.timer" \
+    "$SBM_SYSTEMD_DIR/xm-manager-update.service" \
+    "$SBM_SYSTEMD_DIR/xm-manager-update.timer" \
+    "$SBM_SYSTEMD_DIR/xm-acme-renew.service" \
+    "$SBM_SYSTEMD_DIR/xm-acme-renew.timer" \
+    "$SBM_SYSTEMD_DIR/xm-quick-tunnel-refresh.service" \
+    "$SBM_SYSTEMD_DIR/xm-quick-tunnel-refresh.timer" \
     "$SBM_SYSTEMD_DIR/$SBM_SUBSCRIPTION_SERVICE" \
-    "$SBM_SYSTEMD_DIR/${SBM_TELEGRAM_BOT_SERVICE:-sb-telegram-bot.service}" \
+    "$SBM_SYSTEMD_DIR/${SBM_TELEGRAM_BOT_SERVICE:-xm-telegram-bot.service}" \
     "$SBM_SYSTEMD_DIR/$SBM_TRAFFIC_SERVICE" \
-    "$SBM_SYSTEMD_DIR/sb-traffic-sync.service" \
-    "$SBM_SYSTEMD_DIR/sb-traffic-sync.timer" \
+    "$SBM_SYSTEMD_DIR/xm-traffic-sync.service" \
+    "$SBM_SYSTEMD_DIR/xm-traffic-sync.timer" \
     "$SBM_SYSTEMD_DIR/$SBM_HEALTH_SERVICE" \
-    "$SBM_SYSTEMD_DIR/sb-health-check.timer" \
-    "$SBM_SYSTEMD_DIR/sb-maintenance.service" \
-    "$SBM_SYSTEMD_DIR/sb-maintenance.timer" \
-    "$SBM_OPENRC_DIR/sb-sing-box" \
-    "$SBM_OPENRC_DIR/sb-xray" \
-    "$SBM_OPENRC_DIR/sb-openlist" \
-    "$SBM_OPENRC_DIR/sb-cloudflared" \
+    "$SBM_SYSTEMD_DIR/xm-health-check.timer" \
+    "$SBM_SYSTEMD_DIR/xm-maintenance.service" \
+    "$SBM_SYSTEMD_DIR/xm-maintenance.timer" \
+    "$SBM_OPENRC_DIR/xm-sing-box" \
+    "$SBM_OPENRC_DIR/xm-xray" \
+    "$SBM_OPENRC_DIR/xm-openlist" \
+    "$SBM_OPENRC_DIR/xm-cloudflared" \
     "$SBM_OPENRC_DIR/$(service_native_name "$SBM_NGINX_STREAM_SERVICE")" \
     "$SBM_OPENRC_DIR/$(service_native_name "$SBM_SUBSCRIPTION_SERVICE")" \
-    "$SBM_OPENRC_DIR/$(service_native_name "${SBM_TELEGRAM_BOT_SERVICE:-sb-telegram-bot.service}")" \
+    "$SBM_OPENRC_DIR/$(service_native_name "${SBM_TELEGRAM_BOT_SERVICE:-xm-telegram-bot.service}")" \
     "$SBM_OPENRC_DIR/$(service_native_name "$SBM_TRAFFIC_SERVICE")" \
-    "$SBM_PERIODIC_DIR/daily/sb-core-update" \
-    "$SBM_PERIODIC_DIR/daily/sb-acme-renew" \
-    "$SBM_PERIODIC_DIR/15min/sb-quick-tunnel-refresh" \
-    "$SBM_PERIODIC_DIR/15min/sb-traffic-sync" \
-    "$SBM_PERIODIC_DIR/15min/sb-health-check" \
-    "$SBM_PERIODIC_DIR/15min/sb-manager-update" \
-    "$SBM_PERIODIC_DIR/15min/sb-maintenance" \
+    "$SBM_PERIODIC_DIR/daily/xm-core-update" \
+    "$SBM_PERIODIC_DIR/daily/xm-acme-renew" \
+    "$SBM_PERIODIC_DIR/15min/xm-quick-tunnel-refresh" \
+    "$SBM_PERIODIC_DIR/15min/xm-traffic-sync" \
+    "$SBM_PERIODIC_DIR/15min/xm-health-check" \
+    "$SBM_PERIODIC_DIR/15min/xm-manager-update" \
+    "$SBM_PERIODIC_DIR/15min/xm-maintenance" \
     "$SBM_JOURNAL_CONFIG" \
     "$SBM_LOGROTATE_FILE"
   service_reload_manager || true
@@ -149,18 +149,18 @@ uninstall_manager() {
   remove_manager_owned_link "$SBM_SING_BOX_BIN"
   remove_manager_owned_link "$SBM_OPENLIST_BIN"
   remove_manager_owned_link "$SBM_CLOUDFLARED_BIN"
-  remove_manager_owned_link "$SBM_BIN_DIR/sb"
+  remove_manager_owned_link "$SBM_BIN_DIR/xm"
   rm -f -- "$SBM_NGINX_STREAM_OPENRC_BIN"
   rmdir -- "$(dirname "$SBM_NGINX_STREAM_OPENRC_BIN")" 2>/dev/null || true
   rm -rf -- "$SBM_LIB" "$SBM_RUN"
 
   if [[ "$purge" == 1 ]]; then
-    if [[ "$openlist_owned" == true && "$SBM_OPENLIST_DATA" == /var/lib/sb-openlist && "$SBM_OPENLIST_LOG_DIR" == /var/log/sb-openlist ]]; then
+    if [[ "$openlist_owned" == true && "$SBM_OPENLIST_DATA" == /var/lib/xm-openlist && "$SBM_OPENLIST_LOG_DIR" == /var/log/xm-openlist ]]; then
       rm -rf -- "$SBM_OPENLIST_DATA" "$SBM_OPENLIST_LOG_DIR"
     fi
     rm -rf -- "$SBM_ETC" "$SBM_VAR" "$SBM_LOG_DIR"
     delete_service_account
-    log_ok 'sb-manager、全部配置、证书、密钥、核心、日志和备份已彻底删除。'
+    log_ok 'xray-manager、全部配置、证书、密钥、核心、日志和备份已彻底删除。'
   else
     log_ok "程序已卸载；数据保留在 $SBM_ETC 和 $SBM_VAR。"
     [[ ! -d "$SBM_OPENLIST_DATA" ]] || log_info "OpenList 数据保留在 $SBM_OPENLIST_DATA。"

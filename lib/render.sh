@@ -155,7 +155,7 @@ validate_state_semantics() {
         vless_profile_validate "$node" "$vless_secret" "$state" || return 1
       fi
       if [[ "$protocol" == snell || "$protocol" == shadowtls ]]; then
-        [[ $(jq -r '.credential_revision // 0' <<<"$node") == 1 ]] || die "节点 $id 的安全凭据尚未迁移，请通过 sb 命令初始化状态。"
+        [[ $(jq -r '.credential_revision // 0' <<<"$node") == 1 ]] || die "节点 $id 的安全凭据尚未迁移，请通过 xm 命令初始化状态。"
       fi
     fi
   done < <(jq -c '.nodes[]?' "$state")

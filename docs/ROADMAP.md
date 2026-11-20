@@ -1,4 +1,4 @@
-# sb-manager Improvement Roadmap
+# xray-manager Improvement Roadmap
 
 ## Goal and Standards Baseline
 
@@ -28,7 +28,7 @@ Opaque generated patches are not accepted as source changes. Work must be review
 
 ## Phase 3 — Operations and Diagnostics
 
-- [x] Add `sb probe NODE_ID` and `sb doctor --network` for DNS, listeners, TLS, UDP/QUIC, IPv4/IPv6 exposure, and firewall guidance.
+- [x] Add `xm probe NODE_ID` and `xm doctor --network` for DNS, listeners, TLS, UDP/QUIC, IPv4/IPv6 exposure, and firewall guidance.
 - [x] Add log retention, disk usage checks, resource limits, and secret-safe diagnostics.
 
 ## Phase 4 — Protocol and User Model
@@ -69,7 +69,7 @@ Opaque generated patches are not accepted as source changes. Work must be review
 
 ## Unified Operations and Alerting
 
-- [x] Add a unified human status dashboard and stable `sb status --json` output.
+- [x] Add a unified human status dashboard and stable `xm status --json` output.
 - [x] Add protected Telegram, WeCom, and generic Webhook delivery with per-cycle traffic threshold deduplication.
 - [x] Add node remarks, region, purpose, line, tags, and CLI filtering without affecting generated configuration.
 - [x] Add optional systemd/OpenRC health checks for services, listeners, certificates, firewall components, and traffic rules.

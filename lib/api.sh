@@ -16,7 +16,7 @@ _api_enable() {
   if ! apply_candidate_state "$candidate" api-enable; then rm -f "$candidate"; return 1; fi
   rm -f "$candidate"
   log_ok "API 已启用，仅监听 127.0.0.1:$port。"
-  log_warn '使用 sb api show-token 查看令牌；远程访问请使用 SSH 转发，不要直接暴露公网。'
+  log_warn '使用 xm api show-token 查看令牌；远程访问请使用 SSH 转发，不要直接暴露公网。'
 }
 api_enable() { with_state_transaction api-enable _api_enable "$@"; }
 

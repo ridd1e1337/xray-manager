@@ -26,7 +26,7 @@ status_summary() {
   if [[ "$SBM_SKIP_INIT" == 1 ]]; then service_state='不接管服务'
   elif ! state_runtime_required; then service_state='待机（无启用节点）'
   elif service_active "$SBM_SERVICE"; then service_state='运行中'; else service_state='未运行'; fi
-  printf '%sSB Manager %s%s\n' "$C_BOLD" "$SBM_VERSION" "$C_RESET"
+  printf '%sXray Manager %s%s\n' "$C_BOLD" "$SBM_VERSION" "$C_RESET"
   printf '服务管理      : %s\n' "$backend"
   printf 'sing-box     : %s (%s)\n' "${sb_ver:-未安装}" "$service_state"
   printf 'cloudflared  : %s (Tunnel: %s)\n' "${cf_ver:-未安装}" "$mode"
@@ -281,11 +281,11 @@ doctor_snell_handshake() (
 
 doctor_probe() {
   local id=${1:-} node failures=0 warnings=0
-  [[ -n "$id" ]] || die '用法：sb probe NODE_ID'
+  [[ -n "$id" ]] || die '用法：xm probe NODE_ID'
   node=$(state_get_node "$id")
   [[ -n "$node" ]] || die "节点不存在：$id"
   if ! command_exists ss && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature probe || die '节点探测需要 iproute2/ss；请运行 sb deps install probe。'
+    dependency_require_feature probe || die '节点探测需要 iproute2/ss；请运行 xm deps install probe。'
   fi
   printf '%s\n' "---- 节点探测：$id ----"
   doctor_network_probe "$node"
@@ -340,7 +340,7 @@ doctor_run() {
     if ! (doctor_repair_runtime); then log_error '自动修复未完成，继续输出诊断结果。'; fi
   fi
 
-  printf '%s\n' '---- sb doctor ----'
+  printf '%s\n' '---- xm doctor ----'
   backend=$(init_system 2>/dev/null || true)
   if [[ "$SBM_SKIP_INIT" == 1 ]]; then
     check_line PASS '未接管服务管理器，跳过服务状态检查'
@@ -378,7 +378,7 @@ doctor_run() {
     else
       check_line FAIL "systemd 核心残留 file capabilities，可能触发 203/EXEC：$caps"
       failures=$((failures + 1))
-      check_line WARN '运行 sb repair 可安全清除；不会影响节点、证书或密钥'
+      check_line WARN '运行 xm repair 可安全清除；不会影响节点、证书或密钥'
       warnings=$((warnings + 1))
     fi
   fi
@@ -432,7 +432,7 @@ doctor_run() {
     if [[ -n "$cf_version" ]]; then check_line PASS "cloudflared $cf_version"
     else check_line WARN 'cloudflared 文件存在，但无法读取版本信息'; warnings=$((warnings + 1)); fi
   elif [[ "$tunnel_mode" != none ]]; then
-    check_line FAIL 'Cloudflare Tunnel 已配置，但 cloudflared 未安装；运行 sb cloudflared install'
+    check_line FAIL 'Cloudflare Tunnel 已配置，但 cloudflared 未安装；运行 xm cloudflared install'
     failures=$((failures + 1))
   else
     check_line PASS 'cloudflared 未安装（按需组件，Tunnel 未启用）'
@@ -454,10 +454,10 @@ doctor_run() {
       failures=$((failures + 1))
     elif ! state_runtime_required; then
       if service_active "$SBM_SERVICE"; then
-        check_line WARN "$(service_native_name "$SBM_SERVICE") 在无启用节点时仍运行；执行 sb repair 可切换到待机"
+        check_line WARN "$(service_native_name "$SBM_SERVICE") 在无启用节点时仍运行；执行 xm repair 可切换到待机"
         warnings=$((warnings + 1))
       elif service_enabled "$SBM_SERVICE"; then
-        check_line WARN "$(service_native_name "$SBM_SERVICE") 当前虽已停止，但仍设置为开机启动；执行 sb repair 可彻底切换到待机"
+        check_line WARN "$(service_native_name "$SBM_SERVICE") 当前虽已停止，但仍设置为开机启动；执行 xm repair 可彻底切换到待机"
         warnings=$((warnings + 1))
       else
         check_line PASS "暂无启用节点；$(service_native_name "$SBM_SERVICE") 已禁用并保持停止待机"
@@ -469,7 +469,7 @@ doctor_run() {
       failures=$((failures + 1))
       service_failure_report "$SBM_SERVICE"
       runtime_exec_diagnostics "$SBM_SING_BOX_BIN"
-      check_line WARN '可运行：sb repair；仍失败时运行：sb logs singbox 100'
+      check_line WARN '可运行：xm repair；仍失败时运行：xm logs singbox 100'
       warnings=$((warnings + 1))
     fi
   fi
@@ -529,13 +529,13 @@ doctor_run() {
 
   if [[ "$backend" == openrc && "$low_port_required" == 1 ]]; then
     if singbox_has_bind_capability "${core_target:-$SBM_SING_BOX_BIN}"; then check_line PASS 'OpenRC sing-box 核心具备低端口绑定能力'
-    else check_line FAIL 'OpenRC sing-box 核心缺少 cap_net_bind_service；运行 sb repair'; failures=$((failures + 1)); fi
+    else check_line FAIL 'OpenRC sing-box 核心缺少 cap_net_bind_service；运行 xm repair'; failures=$((failures + 1)); fi
   fi
   if [[ "$backend" == openrc ]] && mux_uses_nginx && (( $(jq -r '.nginx_stream.port' "$SBM_STATE") < 1024 )); then
     if nginx_stream_file_capabilities "$SBM_NGINX_STREAM_OPENRC_BIN" | grep -q cap_net_bind_service; then
       check_line PASS 'OpenRC Nginx 核心具备低端口绑定能力'
     else
-      check_line FAIL 'OpenRC Nginx 核心缺少 cap_net_bind_service；运行 sb repair'; failures=$((failures + 1))
+      check_line FAIL 'OpenRC Nginx 核心缺少 cap_net_bind_service；运行 xm repair'; failures=$((failures + 1))
     fi
   fi
 

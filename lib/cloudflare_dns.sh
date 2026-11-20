@@ -107,7 +107,7 @@ cloudflare_dns_prepare() {
       log_info "复用 DNS：$domain $type $content（DNS only）"
       continue
     fi
-    marker="sb-manager:$(random_hex 16)" || return 1
+    marker="xray-manager:$(random_hex 16)" || return 1
     payload=$(jq -cn --arg type "$type" --arg domain "$domain" --arg content "$content" --arg marker "$marker" \
       '{type:$type,name:$domain,content:$content,ttl:1,proxied:false,comment:$marker}') || return 1
     record=$(jq -cn --arg zone "$zone" --argjson payload "$payload" '{zone:$zone,record:$payload}') || return 1

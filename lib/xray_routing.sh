@@ -189,7 +189,7 @@ xray_warp_cli() {
       --endpoint) endpoint=${2:?}; shift 2;;
       --reserved) reserved=${2:?}; shift 2;;
       --via) via=${2:?}; shift 2;;
-      *) usage_die '用法：sb xray warp [--tag TAG] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c] [--peer-public-key KEY] [--endpoint HOST:PORT]';;
+      *) usage_die '用法：xm xray warp [--tag TAG] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c] [--peer-public-key KEY] [--endpoint HOST:PORT]';;
     esac
   done
   require_root
@@ -293,31 +293,31 @@ xray_routing_cli() {
       case "$action" in
         add)
           local tag=${3:-} json='' via=''
-          shift 3 || usage_die '用法：sb xray outbound add TAG --json JSON|@FILE [--via TAG]'
+          shift 3 || usage_die '用法：xm xray outbound add TAG --json JSON|@FILE [--via TAG]'
           while (($#)); do case "$1" in --json) json=${2:?}; shift 2;; --via) via=${2:?}; shift 2;; *) usage_die "未知参数：$1";; esac; done
-          [[ -n "$tag" && -n "$json" ]] || usage_die '用法：sb xray outbound add TAG --json JSON|@FILE [--via TAG]'
+          [[ -n "$tag" && -n "$json" ]] || usage_die '用法：xm xray outbound add TAG --json JSON|@FILE [--via TAG]'
           require_root; with_state_transaction xray-outbound _xray_outbound_add "$tag" "$json" "$via";;
-        remove) [[ -n "${3:-}" ]] || usage_die '用法：sb xray outbound remove TAG'; require_root; with_state_transaction xray-outbound _xray_outbound_remove "$3";;
-        *) usage_die '用法：sb xray outbound add|remove ...';;
+        remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray outbound remove TAG'; require_root; with_state_transaction xray-outbound _xray_outbound_remove "$3";;
+        *) usage_die '用法：xm xray outbound add|remove ...';;
       esac;;
     balancer)
       case "$action" in
         set)
           local tag=${3:-} selectors='' strategy=random fallback=''
-          shift 3 || usage_die '用法：sb xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG]'
+          shift 3 || usage_die '用法：xm xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG]'
           while (($#)); do case "$1" in --selectors) selectors=${2:?}; shift 2;; --strategy) strategy=${2:?}; shift 2;; --fallback) fallback=${2:?}; shift 2;; *) usage_die "未知参数：$1";; esac; done
           [[ -n "$tag" && -n "$selectors" ]] || usage_die '缺少 TAG 或 --selectors。'
           require_root; with_state_transaction xray-balancer _xray_balancer_set "$tag" "$selectors" "$strategy" "$fallback";;
-        remove) [[ -n "${3:-}" ]] || usage_die '用法：sb xray balancer remove TAG'; require_root; with_state_transaction xray-balancer _xray_balancer_remove "$3";;
-        *) usage_die '用法：sb xray balancer set|remove ...';;
+        remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray balancer remove TAG'; require_root; with_state_transaction xray-balancer _xray_balancer_remove "$3";;
+        *) usage_die '用法：xm xray balancer set|remove ...';;
       esac;;
     route)
       case "$action" in
         add) shift 2; require_root; with_state_transaction xray-route _xray_route_add "$@";;
-        remove) [[ -n "${3:-}" ]] || usage_die '用法：sb xray route remove INDEX'; require_root; with_state_transaction xray-route _xray_route_remove "$3";;
-        default) [[ -n "${3:-}" ]] || usage_die '用法：sb xray route default direct|OUTBOUND|balancer:TAG'; require_root; with_state_transaction xray-route _xray_route_default "$3";;
-        *) usage_die '用法：sb xray route add|remove|default ...';;
+        remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray route remove INDEX'; require_root; with_state_transaction xray-route _xray_route_remove "$3";;
+        default) [[ -n "${3:-}" ]] || usage_die '用法：xm xray route default direct|OUTBOUND|balancer:TAG'; require_root; with_state_transaction xray-route _xray_route_default "$3";;
+        *) usage_die '用法：xm xray route add|remove|default ...';;
       esac;;
-    *) usage_die '用法：sb xray routing|outbound|balancer|route ...';;
+    *) usage_die '用法：xm xray routing|outbound|balancer|route ...';;
   esac
 }

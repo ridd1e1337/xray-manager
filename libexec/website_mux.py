@@ -312,7 +312,7 @@ def nginx_plan(main, snippet, routes, website_port, relay_port):
             first_words = options
         node = site['node']
         changes[site['path']].append((node['open'], node['open'],
-            '\n    # sb-manager: original client address from local stream frontend\n'
+            '\n    # xray-manager: original client address from local stream frontend\n'
             '    set_real_ip_from 127.0.0.1;\n    real_ip_header proxy_protocol;\n    port_in_redirect off;\n'))
     if not found:
         fail('没有找到可共享的 Nginx HTTPS 网站')
@@ -325,7 +325,7 @@ def nginx_plan(main, snippet, routes, website_port, relay_port):
         changes[str(main)].append((len(files[str(main)]), len(files[str(main)]), f'\ninclude {snippet};\n'))
     mapping = '\n'.join(f'        {r["sni"]} 127.0.0.1:{relay_port};' for r in routes)
     nodes = '\n'.join(f'        {r["sni"]} 127.0.0.1:{r["backend_port"]};' for r in routes)
-    stream = f'''# Generated from sb-manager state. Do not edit.
+    stream = f'''# Generated from xray-manager state. Do not edit.
 stream {{
     map $ssl_preread_server_name $sbm_web_upstream {{
         default 127.0.0.1:{website_port};
@@ -362,9 +362,9 @@ def validate_plan(server, binary, main_path, snippet, planned, files, before, ro
     # Keep the candidate main beside the real main so nginx's relative
     # certificate/config prefix remains unchanged. Includes point at frozen,
     # private candidates; nothing live is installed before validation.
-    with tempfile.TemporaryDirectory(prefix='.sb-manager-', dir=main_path.parent) as temp:
+    with tempfile.TemporaryDirectory(prefix='.xray-manager-', dir=main_path.parent) as temp:
         stage = Path(temp)
-        fd, main_name = tempfile.mkstemp(prefix='.sb-manager-main-', dir=main_path.parent)
+        fd, main_name = tempfile.mkstemp(prefix='.xray-manager-main-', dir=main_path.parent)
         os.close(fd)
         candidate_main = Path(main_name)
         try:
@@ -482,7 +482,7 @@ def main():
     server = config['server']
     binary = config['binary']
     main_path = Path(config['config']).resolve()
-    snippet = main_path.parent / ('sb-manager-stream.conf' if server == 'nginx' else 'sb-manager-listeners.caddy')
+    snippet = main_path.parent / ('xray-manager-stream.conf' if server == 'nginx' else 'xray-manager-listeners.caddy')
     routes = state['nginx_stream']['routes']
     legacy = bool(manifest)
     expected = {str(main_path): digest(main_path), str(snippet): digest(snippet)}
@@ -490,7 +490,7 @@ def main():
         before = json.loads(run([binary, 'adapt', '--adapter', 'caddyfile', '--config', str(main_path)]))
         # Adopt alpha.53's separately installed, manager-generated wrapper only
         # if it exactly matches the enrolled routes; never adopt arbitrary L4.
-        old_snippet = main_path.parent / 'sb-manager-layer4.caddy'
+        old_snippet = main_path.parent / 'xray-manager-layer4.caddy'
         if not legacy and f'import {old_snippet}' in main_path.read_text():
             if old_snippet.read_text() != caddy_wrapper(routes):
                 fail('旧 Caddy 分流与节点状态不一致，拒绝自动接管')

@@ -2,14 +2,14 @@
 # shellcheck shell=bash
 
 # BDP-based TCP autotuning, independent of BBR and UDP socket limits.
-SBM_TCP_SYSCTL_CONFIG="${SBM_TCP_SYSCTL_CONFIG:-/etc/sysctl.d/99-sb-manager-tcp.conf}"
+SBM_TCP_SYSCTL_CONFIG="${SBM_TCP_SYSCTL_CONFIG:-/etc/sysctl.d/99-xray-manager-tcp.conf}"
 SBM_TCP_BACKUP_DIR="${SBM_TCP_BACKUP_DIR:-$SBM_VAR/tcp-tuning}"
 SBM_TCP_SYSCTL_CMD="${SBM_TCP_SYSCTL_CMD:-sysctl}"
 SBM_TCP_MEMINFO="${SBM_TCP_MEMINFO:-/proc/meminfo}"
 SBM_TCP_CGROUP_MEMORY_FILES="${SBM_TCP_CGROUP_MEMORY_FILES:-/sys/fs/cgroup/memory.max:/sys/fs/cgroup/memory/memory.limit_in_bytes}"
 SBM_TCP_SYSCTL_DIRS="${SBM_TCP_SYSCTL_DIRS:-/etc/sysctl.d:/run/sysctl.d:/usr/local/lib/sysctl.d:/usr/lib/sysctl.d:/lib/sysctl.d}"
 SBM_TCP_SYSCTL_MAIN="${SBM_TCP_SYSCTL_MAIN:-/etc/sysctl.conf}"
-SBM_TCP_MARKER='# Managed by sb-manager; use sb tcp disable to restore previous values.'
+SBM_TCP_MARKER='# Managed by xray-manager; use xm tcp disable to restore previous values.'
 
 tcp_tuning_keys() {
   printf '%s\n' net.ipv4.tcp_rmem net.ipv4.tcp_wmem net.ipv4.tcp_moderate_rcvbuf net.ipv4.tcp_mtu_probing
@@ -193,7 +193,7 @@ _tcp_tuning_enable() {
   fi
   rm -rf "$SBM_TCP_BACKUP_DIR/pending" || return 1
   tcp_tuning_show_plan "$plan"
-  log_ok 'TCP 调优已生效；sb tcp disable 可恢复首次启用前的设置。'
+  log_ok 'TCP 调优已生效；xm tcp disable 可恢复首次启用前的设置。'
 }
 
 tcp_tuning_enable() { with_lock _tcp_tuning_enable "$@"; }
@@ -202,7 +202,7 @@ _tcp_tuning_disable() {
   tcp_tuning_recover || return 1
   if [[ ! -e "$SBM_TCP_BACKUP_DIR/original" ]]; then
     if tcp_tuning_managed; then log_error 'TCP 原始备份缺失，保留托管配置。'; return 1; fi
-    log_warn 'TCP 调优未由 sb-manager 管理，无需恢复。'; return 0
+    log_warn 'TCP 调优未由 xray-manager 管理，无需恢复。'; return 0
   fi
   tcp_tuning_restore_snapshot "$SBM_TCP_BACKUP_DIR/original" || { log_error 'TCP 恢复失败，已保留备份，请重试。'; return 1; }
   rm -rf "$SBM_TCP_BACKUP_DIR/original" || return 1
@@ -245,7 +245,7 @@ tcp_tuning_cli() {
   done
   case "$action" in
     plan|enable)
-      [[ -n "$bandwidth" && -n "$rtt" ]] || usage_die '用法：sb tcp plan|enable --bandwidth Mbps --rtt MS [--dry-run] [--json]'
+      [[ -n "$bandwidth" && -n "$rtt" ]] || usage_die '用法：xm tcp plan|enable --bandwidth Mbps --rtt MS [--dry-run] [--json]'
       if [[ "$action" == plan || "$dry_run" == 1 ]]; then
         plan=$(tcp_tuning_plan "$bandwidth" "$rtt") || return $?
         tcp_tuning_show_plan "$plan" "$json"
@@ -266,6 +266,6 @@ tcp_tuning_cli() {
         else tcp_tuning_disable; fi
       fi
       ;;
-    *) usage_die '用法：sb tcp plan|enable --bandwidth Mbps --rtt MS | status [--json] | disable';;
+    *) usage_die '用法：xm tcp plan|enable --bandwidth Mbps --rtt MS | status [--json] | disable';;
   esac
 }

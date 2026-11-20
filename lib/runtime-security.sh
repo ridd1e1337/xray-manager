@@ -73,7 +73,7 @@ systemd_exec_preflight() {
   command_exists systemctl || return 2
   systemctl show-environment >/dev/null 2>&1 || return 2
 
-  unit="sb-manager-exec-preflight-${BASHPID:-$$}-${RANDOM}"
+  unit="xray-manager-exec-preflight-${BASHPID:-$$}-${RANDOM}"
   ensure_runtime_dirs
   log="$SBM_RUN/${unit}.log"
   rc=0
@@ -120,7 +120,7 @@ systemd_runtime_preflight() {
   systemctl show-environment >/dev/null 2>&1 || return 2
   [[ -r "$config" ]] || { log_error "systemd 运行预检无法读取配置：$config"; return 1; }
 
-  unit="sb-manager-runtime-preflight-${BASHPID:-$$}-${RANDOM}"
+  unit="xray-manager-runtime-preflight-${BASHPID:-$$}-${RANDOM}"
   ensure_runtime_dirs
   log="$SBM_RUN/${unit}.log"
 

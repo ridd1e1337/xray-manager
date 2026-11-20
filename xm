@@ -75,21 +75,21 @@ source "$SBM_LIB/lib/template.sh"
 sb_help_full() {
   cat <<'EOF_HELP'
 用法：
-  sb                              打开交互面板
-  sb [--json] [--yes] [--dry-run] [--quiet] <命令>  通用选项可放在命令前
-  sb status [--json]              查看统一状态
-  sb vps init [--dry-run]         新 VPS 一键安装 Caddy、UFW、Fail2ban 并放行基础端口
-  sb vps status [--json]          查看 VPS 基础环境状态
-  sb vps systems                 查看各功能支持的 Linux 系统与当前环境
-  sb node list [--json] [--tag TAG] [--region REGION] 列出节点
-  sb quick                       添加节点向导
-  sb node add <vmess|ss|anytls|hy2|trojan|tuic|vless|naive|shadowtls|snell|socks|http|mixed> [参数]
-  sb node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
-  sb node show <ID>
-  sb node enable|disable|delete|rotate <ID>
-  sb node enable-all|disable-all --tag TAG|--region REGION
-  sb node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]
-  sb node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH
+  xm                              打开交互面板
+  xm [--json] [--yes] [--dry-run] [--quiet] <命令>  通用选项可放在命令前
+  xm status [--json]              查看统一状态
+  xm vps init [--dry-run]         新 VPS 一键安装 Caddy、UFW、Fail2ban 并放行基础端口
+  xm vps status [--json]          查看 VPS 基础环境状态
+  xm vps systems                 查看各功能支持的 Linux 系统与当前环境
+  xm node list [--json] [--tag TAG] [--region REGION] 列出节点
+  xm quick                       添加节点向导
+  xm node add <vmess|ss|anytls|hy2|trojan|tuic|vless|naive|shadowtls|snell|socks|http|mixed> [参数]
+  xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
+  xm node show <ID>
+  xm node enable|disable|delete|rotate <ID>
+  xm node enable-all|disable-all --tag TAG|--region REGION
+  xm node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]
+  xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH
                  [--remark TEXT] [--region REGION] [--purpose PURPOSE] [--line LINE] [--tags a,b]
                  [--method METHOD] [--network tcp|udp] [--obfs TYPE] [--obfs-host DOMAIN]
                  [--obfs-min-packet-size N] [--obfs-max-packet-size N]
@@ -109,100 +109,100 @@ sb_help_full() {
                  [--tcp-fast-open true|false] [--accept-proxy-protocol true|false] [--sockopt-json JSON|@FILE]
                  [--transport-json JSON|@FILE] [--tls-json JSON|@FILE]
                  [--realm-id ID] [--realm-ip-version 0|4|6] [--realm-port-mapping|--no-realm-port-mapping]
-  sb user list <NODE_ID>
-  sb user add <NODE_ID> <USER_ID> [NAME]
-  sb user enable|disable|delete|rotate <NODE_ID> <USER_ID>
-  sb user limit <NODE_ID> <USER_ID> [--quota SIZE|unlimited] [--reset-day 1-28|none]
+  xm user list <NODE_ID>
+  xm user add <NODE_ID> <USER_ID> [NAME]
+  xm user enable|disable|delete|rotate <NODE_ID> <USER_ID>
+  xm user limit <NODE_ID> <USER_ID> [--quota SIZE|unlimited] [--reset-day 1-28|none]
                  [--days N|--expire-at UTC|--no-expiry] [--ip-limit N|unlimited] [--clear]
-  sb user stats [NODE_ID] [--json] | reset-usage <NODE_ID> <USER_ID> | tick
-  sb share <ID> [--user USER_ID] [--qr]
-  sb share all
-  sb export outbounds
-  sb export config [文件] [--mode mixed|tun] [--tun-dns-mode disabled|native|hijack] [--tun-dns-address IP]
-  sb subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL]
-  sb subscription list|status|revoke <ID_OR_TOKEN>
-  sb api enable [PORT] [--dashboard]|disable|status [--json]|show-token|cli <COMMAND> [ARGS]
-  sb realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N]
-  sb realm disable|status [--json]|show-token
-  sb bbr enable|disable|status [--json]
-  sb tcp plan|enable --bandwidth Mbps --rtt MS [--dry-run] [--json]
-  sb tcp status [--json]|disable   TCP 自适应缓冲区、MTU 黑洞探测与恢复
-  sb network ping HOST [--count 1-30] [--ipv4|--ipv6] [--json]
-  sb network speed HOST [--port N] [--seconds 1-30] [--streams 1-16] [--direction up|down] [--json]
-  sb network history [--json]|compare BEFORE AFTER [--json]
-  sb hy2 buffer enable|disable|status [--json]
-  sb mux status [--json]|enable [PORT] [--backend sing-box|nginx|caddy]|disable|backend sing-box|nginx|caddy|auto [NODE_IDS]
-  sb mux route list|add NODE_ID SNI [BACKEND_PORT]|remove NODE_ID
-  sb mux caddy                   导出现有 Caddy L4 的 HTTPS listener_wrappers 配置
-  sb mux setup [--server auto|nginx|caddy] [--config FILE] [--binary FILE] [--build-caddy]
+  xm user stats [NODE_ID] [--json] | reset-usage <NODE_ID> <USER_ID> | tick
+  xm share <ID> [--user USER_ID] [--qr]
+  xm share all
+  xm export outbounds
+  xm export config [文件] [--mode mixed|tun] [--tun-dns-mode disabled|native|hijack] [--tun-dns-address IP]
+  xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL]
+  xm subscription list|status|revoke <ID_OR_TOKEN>
+  xm api enable [PORT] [--dashboard]|disable|status [--json]|show-token|cli <COMMAND> [ARGS]
+  xm realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N]
+  xm realm disable|status [--json]|show-token
+  xm bbr enable|disable|status [--json]
+  xm tcp plan|enable --bandwidth Mbps --rtt MS [--dry-run] [--json]
+  xm tcp status [--json]|disable   TCP 自适应缓冲区、MTU 黑洞探测与恢复
+  xm network ping HOST [--count 1-30] [--ipv4|--ipv6] [--json]
+  xm network speed HOST [--port N] [--seconds 1-30] [--streams 1-16] [--direction up|down] [--json]
+  xm network history [--json]|compare BEFORE AFTER [--json]
+  xm hy2 buffer enable|disable|status [--json]
+  xm mux status [--json]|enable [PORT] [--backend sing-box|nginx|caddy]|disable|backend sing-box|nginx|caddy|auto [NODE_IDS]
+  xm mux route list|add NODE_ID SNI [BACKEND_PORT]|remove NODE_ID
+  xm mux caddy                   导出现有 Caddy L4 的 HTTPS listener_wrappers 配置
+  xm mux setup [--server auto|nginx|caddy] [--config FILE] [--binary FILE] [--build-caddy]
                                  一键接入现有网站，共用 443 并自动同步节点
-  sb mux detach                  恢复接入前的网站配置，节点恢复独立端口
-  sb caddy status|apt|manage|update [--check]|rollback
+  xm mux detach                  恢复接入前的网站配置，节点恢复独立端口
+  xm caddy status|apt|manage|update [--check]|rollback
                                  Caddy 官方包接入、定制版升级与回滚
-  sb maintenance status|run       查看/执行项目缓存与一天日志保留策略
-  sb traffic group set ID --nodes NODE1,NODE2 --quota 500G [--reset-day 1] [--quota-mode total|download]
-  sb traffic group status [--json]|remove ID|reset ID
-  sb traffic shaping plan|enable IFACE --capacity 1G | disable | status [--json]
-  sb traffic status [NODE_ID] [--json]
-  sb traffic set NODE_ID [--quota 100G|unlimited] [--reset-day 1-28]
+  xm maintenance status|run       查看/执行项目缓存与一天日志保留策略
+  xm traffic group set ID --nodes NODE1,NODE2 --quota 500G [--reset-day 1] [--quota-mode total|download]
+  xm traffic group status [--json]|remove ID|reset ID
+  xm traffic shaping plan|enable IFACE --capacity 1G | disable | status [--json]
+  xm traffic status [NODE_ID] [--json]
+  xm traffic set NODE_ID [--quota 100G|unlimited] [--reset-day 1-28]
                  [--rate 50M|unlimited] [--upload-rate RATE] [--download-rate RATE]
                  [--quota-mode total|download]
-  sb traffic disable|remove NODE_ID
-  sb traffic reset NODE_ID|all [--yes]
-  sb notify status|configure|disable|test|check
-  sb notify bot enable --admin TG_USER_ID[,ID] | disable | status   Telegram 命令机器人
-  sb health status|check|enable|disable [WARN_DAYS]
-  sb health configure --disk-free N --memory-max N [...]
-  sb config validate|diff [--json]
+  xm traffic disable|remove NODE_ID
+  xm traffic reset NODE_ID|all [--yes]
+  xm notify status|configure|disable|test|check
+  xm notify bot enable --admin TG_USER_ID[,ID] | disable | status   Telegram 命令机器人
+  xm health status|check|enable|disable [WARN_DAYS]
+  xm health configure --disk-free N --memory-max N [...]
+  xm config validate|diff [--json]
 
-  sb cert setup-cloudflare [TOKEN] [ZONE_ID] [EMAIL]
-  sb cert issue <DOMAIN> [EMAIL]
-  sb cert list [--json]|renew|inspect <DOMAIN>
+  xm cert setup-cloudflare [TOKEN] [ZONE_ID] [EMAIL]
+  xm cert issue <DOMAIN> [EMAIL]
+  xm cert list [--json]|renew|inspect <DOMAIN>
 
-  sb substore install|update [--version VERSION] [--frontend-version VERSION] [--port PORT]
-  sb substore enable|disable|status [--json]|access|sync [NAME]|backup FILE|restore FILE
-  sb substore source add NAME URL [COLLECTION]|list [--json]|remove NAME|check NAME
-  sb tunnel managed UUID CREDENTIALS_JSON
-  sb tunnel route list|add ID DOMAIN LOCAL_URL [PATH_REGEX]|remove ID
-  sb tunnel fixed <NODE_ID> <DOMAIN> [TOKEN] [CLIENT_ADDRESS]
-  sb tunnel quick <NODE_ID>
-  sb tunnel refresh|set-token|status [--json]|stop
+  xm substore install|update [--version VERSION] [--frontend-version VERSION] [--port PORT]
+  xm substore enable|disable|status [--json]|access|sync [NAME]|backup FILE|restore FILE
+  xm substore source add NAME URL [COLLECTION]|list [--json]|remove NAME|check NAME
+  xm tunnel managed UUID CREDENTIALS_JSON
+  xm tunnel route list|add ID DOMAIN LOCAL_URL [PATH_REGEX]|remove ID
+  xm tunnel fixed <NODE_ID> <DOMAIN> [TOKEN] [CLIENT_ADDRESS]
+  xm tunnel quick <NODE_ID>
+  xm tunnel refresh|set-token|status [--json]|stop
 
-  sb settings show|detect-ip|address <auto|HOST>|dns <optimistic|timeout> VALUE
-  sb settings outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>
-  sb firewall status|ports|clear-iptables|ufw-allow [--yes]
-  sb firewall fail2ban|ufw [--yes] [--dry-run]
-  sb probe NODE_ID                探测节点 DNS、监听和 TLS/UDP 可达性
+  xm settings show|detect-ip|address <auto|HOST>|dns <optimistic|timeout> VALUE
+  xm settings outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>
+  xm firewall status|ports|clear-iptables|ufw-allow [--yes]
+  xm firewall fail2ban|ufw [--yes] [--dry-run]
+  xm probe NODE_ID                探测节点 DNS、监听和 TLS/UDP 可达性
 
-  sb core check|update [VERSION]|rollback|schema [文件]|capabilities [--json]|policy <manual|notify|patch|stable>|channel <stable|preview>|auto
-  sb xray status|install|update|config|enable|disable|policy <manual|notify|patch|stable>|api-port PORT
-  sb xray traffic [--json|reset]  Xray 入站/出站累计流量
-  sb xray routing [--json]         查看 Xray 出站、负载均衡与路由
-  sb xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG
-  sb xray warp [--tag warp] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c]
-  sb xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG] | remove TAG
-  sb xray route add [--node ID] [--user NODE:USER] [--domain domain:x] [--ip CIDR] [--network tcp|udp] [--port P] --to TAG|balancer:TAG
-  sb xray route remove INDEX | default direct|TAG|balancer:TAG
-  sb openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN
-  sb reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach
-  sb vps reality DOMAIN [nginx|caddy] [--node ID]  一键部署 OpenList、Reality 与基础防护
-  sb update [--check]             更新管理脚本与受管 Caddy
-  sb update auto enable|disable|status [--json]|run  每日更新脚本与受管 Caddy
-  sb cloudflared status|install|update|policy <manual|notify|patch|stable>
-  sb deps status [--json]|install <low-port|traffic|subscription|bbr|probe|scheduler|logrotate|benchmark|shaping|substore>
-  sb acme update
-  sb doctor [--repair|--network]
-  sb repair                      修复权限、配置与服务状态
-  sb logs [all|singbox|tunnel|mux|nginx|follow] [行数]
-  sb backup [文件] [--recipient AGE_RECIPIENT]
-  sb restore <文件> [--identity AGE_PRIVATE_KEY] [--yes]
-  sb restart
-  sb uninstall [--purge] [--yes]
+  xm core check|update [VERSION]|rollback|schema [文件]|capabilities [--json]|policy <manual|notify|patch|stable>|channel <stable|preview>|auto
+  xm xray status|install|update|config|enable|disable|policy <manual|notify|patch|stable>|api-port PORT
+  xm xray traffic [--json|reset]  Xray 入站/出站累计流量
+  xm xray routing [--json]         查看 Xray 出站、负载均衡与路由
+  xm xray outbound add TAG --json JSON|@FILE [--via TAG] | remove TAG
+  xm xray warp [--tag warp] --register | --private-key KEY --address-v4 IP [--address-v6 IP] [--reserved a,b,c]
+  xm xray balancer set TAG --selectors a,b [--strategy random|roundRobin|leastPing|leastLoad] [--fallback TAG] | remove TAG
+  xm xray route add [--node ID] [--user NODE:USER] [--domain domain:x] [--ip CIDR] [--network tcp|udp] [--port P] --to TAG|balancer:TAG
+  xm xray route remove INDEX | default direct|TAG|balancer:TAG
+  xm openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN
+  xm reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach
+  xm vps reality DOMAIN [nginx|caddy] [--node ID]  一键部署 OpenList、Reality 与基础防护
+  xm update [--check]             更新管理脚本与受管 Caddy
+  xm update auto enable|disable|status [--json]|run  每日更新脚本与受管 Caddy
+  xm cloudflared status|install|update|policy <manual|notify|patch|stable>
+  xm deps status [--json]|install <low-port|traffic|subscription|bbr|probe|scheduler|logrotate|benchmark|shaping|substore>
+  xm acme update
+  xm doctor [--repair|--network]
+  xm repair                      修复权限、配置与服务状态
+  xm logs [all|singbox|tunnel|mux|nginx|follow] [行数]
+  xm backup [文件] [--recipient AGE_RECIPIENT]
+  xm restore <文件> [--identity AGE_PRIVATE_KEY] [--yes]
+  xm restart
+  xm uninstall [--purge] [--yes]
 
 节点添加常用参数：
   --id ID --name NAME --port PORT --domain DOMAIN --address HOST
   TLS:   没有可用证书时自动创建 Cloudflare DNS only 记录并签发证书。
-         CLI 请先执行 sb cert setup-cloudflare；已有冲突 DNS 会被拒绝，--disabled 不申请证书。
+         CLI 请先执行 xm cert setup-cloudflare；已有冲突 DNS 会被拒绝，--disabled 不申请证书。
   VMess: --path PATH
   SS:    --method 2022-blake3-aes-128-gcm|... --network tcp
   HY2:   --obfs salamander|gecko --obfs-min-packet-size N --obfs-max-packet-size N
@@ -222,10 +222,10 @@ SBM_HELP_TOPICS='status node quick user share export subscription substore tunne
 
 sb_help_overview() {
   cat <<EOF_OVERVIEW
-sb-manager ${SBM_VERSION}：状态驱动的 sing-box 多协议管理器
+xray-manager ${SBM_VERSION}：状态驱动的 sing-box 多协议管理器
 
-用法：sb [通用选项] <命令> [参数]
-直接运行 sb 打开交互面板，新手推荐从面板开始。
+用法：xm [通用选项] <命令> [参数]
+直接运行 xm 打开交互面板，新手推荐从面板开始。
 
 常用：
   status        查看服务和节点状态
@@ -234,7 +234,7 @@ sb-manager ${SBM_VERSION}：状态驱动的 sing-box 多协议管理器
   share         显示节点分享链接、二维码或客户端配置
   user          管理多用户节点的用户
   update        更新管理脚本与受管 Caddy
-  doctor        诊断问题；sb repair 尝试自动修复
+  doctor        诊断问题；xm repair 尝试自动修复
   logs          查看运行日志
 
 节点与客户端：export  subscription  substore  tunnel  cert
@@ -246,8 +246,8 @@ sb-manager ${SBM_VERSION}：状态驱动的 sing-box 多协议管理器
 
 通用选项：--json  --yes|-y  --dry-run  --quiet|-q  --no-color  --version
 
-查看某个命令的完整用法：sb help <命令>（或 sb <命令> --help）
-查看全部命令：          sb help all
+查看某个命令的完整用法：xm help <命令>（或 xm <命令> --help）
+查看全部命令：          xm help all
 EOF_OVERVIEW
 }
 
@@ -267,11 +267,11 @@ sb_help_is_topic() {
 sb_help_topic() {
   local topic
   topic=$(sb_help_canonical_topic "$1")
-  printf 'sb %s 用法：\n' "$topic"
+  printf 'xm %s 用法：\n' "$topic"
   sb_help_full | awk -v topic="$topic" '
     /^用法：/ { in_usage=1; next }
     /^节点添加常用参数：/ { in_usage=0; in_params=1 }
-    in_usage && /^  sb / {
+    in_usage && /^  xm / {
       split($0, words, " "); cmd=words[2]
       current = (cmd == topic || (topic == "node" && (cmd == "quick" || cmd == "user")) || (topic == "doctor" && (cmd == "repair" || cmd == "probe")) || (topic == "backup" && cmd == "restore"))
       if (current) print
@@ -309,11 +309,11 @@ sb_help() {
   local topic=${1:-}
   case "$topic" in
     '') sb_help_overview ;;
-    all) printf 'sb-manager %s：状态驱动的 sing-box 多协议管理器\n\n' "$SBM_VERSION"; sb_help_full ;;
+    all) printf 'xray-manager %s：状态驱动的 sing-box 多协议管理器\n\n' "$SBM_VERSION"; sb_help_full ;;
     *)
       if sb_help_is_topic "$topic"; then sb_help_topic "$topic"; return 0; fi
       local guess; guess=$(sb_suggest_command "$topic")
-      usage_die "没有 $topic 的帮助${guess:+；您是否想查看：sb help $guess}。运行 sb help 查看命令列表。"
+      usage_die "没有 $topic 的帮助${guess:+；您是否想查看：xm help $guess}。运行 xm help 查看命令列表。"
       ;;
   esac
 }
@@ -337,14 +337,14 @@ main() {
       -h|--help|help|-V|--version|version|uninstall) ;;
       *)
         local guess; guess=$(sb_suggest_command "$cmd")
-        usage_die "未知命令：$cmd${guess:+；您是否想输入：sb $guess}。运行 sb help 查看命令列表。"
+        usage_die "未知命令：$cmd${guess:+；您是否想输入：xm $guess}。运行 xm help 查看命令列表。"
         ;;
     esac
   fi
   if sb_help_is_topic "$cmd"; then SBM_HELP_CONTEXT=$(sb_help_canonical_topic "$cmd"); fi
   case "$cmd" in
     -h|--help|help) shift || true; sb_help "${1:-}"; return 0;;
-    -V|--version|version) printf 'sb-manager %s\n' "$SBM_VERSION"; return 0;;
+    -V|--version|version) printf 'xray-manager %s\n' "$SBM_VERSION"; return 0;;
     tcp) shift; require_command jq; tcp_tuning_cli "$@"; return $?;;
     network) shift; require_command jq; network_cli "$@"; return $?;;
     update) shift; manager_update_cli "$@"; return $? ;;
@@ -379,7 +379,7 @@ main() {
     status)
       local json=${SBM_OUTPUT_JSON:-0} arg
       shift
-      while (($#)); do case "$1" in --json) json=1; shift;; *) usage_die '用法：sb status [--json]';; esac; done
+      while (($#)); do case "$1" in --json) json=1; shift;; *) usage_die '用法：xm status [--json]';; esac; done
       if (( json )); then
         local status_data
         status_data=$(status_json); printf '%s\n' "$status_data"; status_exit_code "$status_data"
@@ -393,13 +393,13 @@ main() {
         list)
           local json=${SBM_OUTPUT_JSON:-0} tag='' region='' arg
           while (($#)); do
-            case "$1" in --json) json=1; shift;; --tag) tag=${2:?缺少标签}; shift 2;; --region) region=${2:?缺少地区}; shift 2;; *) usage_die '用法：sb node list [--json] [--tag TAG] [--region REGION]';; esac
+            case "$1" in --json) json=1; shift;; --tag) tag=${2:?缺少标签}; shift 2;; --region) region=${2:?缺少地区}; shift 2;; *) usage_die '用法：xm node list [--json] [--tag TAG] [--region REGION]';; esac
           done
           node_list "$json" "$tag" "$region"
           ;;
         expiry) node_expiry_cli "$@" ;;
         add) (($# >= 1)) || die '缺少协议'; node_add "$@" ;;
-        show) [[ $# == 1 || ( $# == 2 && $2 == --json ) ]] || usage_die '用法：sb node show ID [--json]'; node_show "$1" "$([[ ${2:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
+        show) [[ $# == 1 || ( $# == 2 && $2 == --json ) ]] || usage_die '用法：xm node show ID [--json]'; node_show "$1" "$([[ ${2:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         enable) node_enable "${1:?缺少节点 ID}" ;;
         disable) node_disable "${1:?缺少节点 ID}" ;;
         delete) node_delete "${1:?缺少节点 ID}" ;;
@@ -411,20 +411,20 @@ main() {
           ;;
         enable-all|disable-all)
           local tag='' region=''
-          while (($#)); do case "$1" in --tag) tag=${2:?缺少标签}; shift 2;; --region) region=${2:?缺少地区}; shift 2;; *) usage_die '用法：sb node enable-all|disable-all --tag TAG|--region REGION';; esac; done
+          while (($#)); do case "$1" in --tag) tag=${2:?缺少标签}; shift 2;; --region) region=${2:?缺少地区}; shift 2;; *) usage_die '用法：xm node enable-all|disable-all --tag TAG|--region REGION';; esac; done
           [[ "$action" == enable-all ]] && node_batch_enable "$tag" "$region" || node_batch_disable "$tag" "$region"
           ;;
         template)
           local template_action=${1:-list}; shift || true
           case "$template_action" in
             list)
-              if ! [[ $# == 0 || ( $# == 1 && $1 == --json ) ]]; then usage_die '用法：sb node template list [--json]'; fi
+              if ! [[ $# == 0 || ( $# == 1 && $1 == --json ) ]]; then usage_die '用法：xm node template list [--json]'; fi
               node_template_list "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
               ;;
-            save) (($# == 2)) || usage_die '用法：sb node template save NAME NODE_ID'; node_template_save "$1" "$2" ;;
-            delete) (($# == 1)) || usage_die '用法：sb node template delete NAME'; node_template_delete "$1" ;;
-            add) (($# >= 2)) || usage_die '用法：sb node template add NAME ID [参数]'; node_template_add "$@" ;;
-            *) usage_die '用法：sb node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]' ;;
+            save) (($# == 2)) || usage_die '用法：xm node template save NAME NODE_ID'; node_template_save "$1" "$2" ;;
+            delete) (($# == 1)) || usage_die '用法：xm node template delete NAME'; node_template_delete "$1" ;;
+            add) (($# >= 2)) || usage_die '用法：xm node template add NAME ID [参数]'; node_template_add "$@" ;;
+            *) usage_die '用法：xm node template list|save NAME NODE_ID|delete NAME|add NAME ID [参数]' ;;
           esac
           ;;
         *) usage_die "未知 node 操作：$action" ;;
@@ -434,9 +434,9 @@ main() {
       local action=${2:-ports} assume_yes=${SBM_ASSUME_YES:-0} dry_run=${SBM_DRY_RUN:-0} json=${SBM_OUTPUT_JSON:-0} arg
       shift 2 || true
       while (($#)); do
-        case "$1" in --yes|-y) assume_yes=1; shift;; --dry-run) dry_run=1; shift;; --json) json=1; shift;; *) usage_die '用法：sb firewall status|ports|clear-iptables|ufw-allow|fail2ban|ufw [--yes] [--dry-run] [--json]';; esac
+        case "$1" in --yes|-y) assume_yes=1; shift;; --dry-run) dry_run=1; shift;; --json) json=1; shift;; *) usage_die '用法：xm firewall status|ports|clear-iptables|ufw-allow|fail2ban|ufw [--yes] [--dry-run] [--json]';; esac
       done
-      [[ "$dry_run" == 0 || "$action" == ufw || "$action" == setup-ufw ]] || die '--dry-run 仅适用于 sb firewall ufw。'
+      [[ "$dry_run" == 0 || "$action" == ufw || "$action" == setup-ufw ]] || die '--dry-run 仅适用于 xm firewall ufw。'
       case "$action" in
         status) firewall_status "$json" ;;
         ports|list) firewall_list_protocol_ports "$json" ;;
@@ -444,25 +444,25 @@ main() {
         ufw-allow) firewall_ufw_allow_protocol_ports "$assume_yes" ;;
         fail2ban|setup-fail2ban) firewall_setup_fail2ban "$assume_yes" ;;
         ufw|setup-ufw) firewall_setup_ufw "$assume_yes" "$dry_run" ;;
-        *) usage_die '用法：sb firewall status|ports|clear-iptables|ufw-allow|fail2ban|ufw [--yes]' ;;
+        *) usage_die '用法：xm firewall status|ports|clear-iptables|ufw-allow|fail2ban|ufw [--yes]' ;;
       esac
       ;;
     user)
       local action=${2:-list}; shift 2 || true
       case "$action" in
         list) (($# >= 1)) || die '缺少节点 ID'; node_user_list "$1" "$([[ ${2:-} == --json ]] && echo 1 || echo 0)" ;;
-        add) (($# >= 2)) || die '用法：sb user add NODE_ID USER_ID [NAME]'; node_user_add "$1" "$2" "${3:-$2}" ;;
-        enable) (($# == 2)) || die '用法：sb user enable NODE_ID USER_ID'; node_user_enable "$1" "$2" ;;
-        disable) (($# == 2)) || die '用法：sb user disable NODE_ID USER_ID'; node_user_disable "$1" "$2" ;;
-        delete) (($# == 2)) || die '用法：sb user delete NODE_ID USER_ID'; node_user_delete "$1" "$2" ;;
-        rotate) (($# == 2)) || die '用法：sb user rotate NODE_ID USER_ID'; node_rotate "$1" "$2" ;;
+        add) (($# >= 2)) || die '用法：xm user add NODE_ID USER_ID [NAME]'; node_user_add "$1" "$2" "${3:-$2}" ;;
+        enable) (($# == 2)) || die '用法：xm user enable NODE_ID USER_ID'; node_user_enable "$1" "$2" ;;
+        disable) (($# == 2)) || die '用法：xm user disable NODE_ID USER_ID'; node_user_disable "$1" "$2" ;;
+        delete) (($# == 2)) || die '用法：xm user delete NODE_ID USER_ID'; node_user_delete "$1" "$2" ;;
+        rotate) (($# == 2)) || die '用法：xm user rotate NODE_ID USER_ID'; node_rotate "$1" "$2" ;;
         limit) user_limit_cli "$@" ;;
         stats)
           local stats_node='' stats_json=0
-          while (($#)); do case "$1" in --json) stats_json=1; shift;; *) [[ -z "$stats_node" ]] || usage_die '用法：sb user stats [NODE_ID] [--json]'; stats_node=$1; shift;; esac; done
+          while (($#)); do case "$1" in --json) stats_json=1; shift;; *) [[ -z "$stats_node" ]] || usage_die '用法：xm user stats [NODE_ID] [--json]'; stats_node=$1; shift;; esac; done
           user_stats "$stats_node" "$stats_json" ;;
-        reset-usage) (($# == 2)) || die '用法：sb user reset-usage NODE_ID USER_ID'; user_usage_reset "$1" "$2" ;;
-        tick) (($# == 0)) || die '用法：sb user tick'; user_limits_tick ;;
+        reset-usage) (($# == 2)) || die '用法：xm user reset-usage NODE_ID USER_ID'; user_usage_reset "$1" "$2" ;;
+        tick) (($# == 0)) || die '用法：xm user tick'; user_limits_tick ;;
         *) usage_die "未知 user 操作：$action" ;;
       esac
       ;;
@@ -490,7 +490,7 @@ main() {
           done
           export_client_config "$output" "$mode" "$tun_dns_mode" "$tun_dns_address"
           ;;
-        *) die '当前支持：sb export outbounds|config [文件]' ;;
+        *) die '当前支持：xm export outbounds|config [文件]' ;;
       esac
       ;;
     cert)
@@ -525,8 +525,8 @@ main() {
         create) shift 2; subscription_create_cli "$@" ;;
         list) subscription_list "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         status) subscription_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
-        revoke) [[ $# == 3 ]] || usage_die '用法：sb subscription revoke ID_OR_TOKEN'; subscription_revoke "$3" ;;
-        *) usage_die '用法：sb subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL] | list | status | revoke ID_OR_TOKEN' ;;
+        revoke) [[ $# == 3 ]] || usage_die '用法：xm subscription revoke ID_OR_TOKEN'; subscription_revoke "$3" ;;
+        *) usage_die '用法：xm subscription create [7d|never] [mixed|tun|xray|mihomo] [--live] [--user NODE_ID:USER_ID] [--base-url HTTPS_URL] | list | status | revoke ID_OR_TOKEN' ;;
       esac
       ;;
     api)
@@ -537,7 +537,7 @@ main() {
         status) api_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         show-token) api_show_token ;;
         cli) shift 2; api_cli "$@" ;;
-        *) usage_die '用法：sb api enable [PORT] [--dashboard] | disable | status | show-token | cli COMMAND [ARGS]' ;;
+        *) usage_die '用法：xm api enable [PORT] [--dashboard] | disable | status | show-token | cli COMMAND [ARGS]' ;;
       esac
       ;;
     realm)
@@ -551,34 +551,34 @@ main() {
               --listen) realm_listen=${2:?缺少 listen 地址}; shift 2;;
               --tls-domain) realm_domain=${2:?缺少 TLS 域名}; shift 2;;
               --max-realms) realm_max=${2:?缺少 max_realms}; shift 2;;
-              *) usage_die '用法：sb realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N]';;
+              *) usage_die '用法：xm realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N]';;
             esac
           done
           realm_enable "$realm_port" "$realm_url" "$realm_listen" "$realm_domain" "$realm_max"
           ;;
-        disable) (($# == 2)) || usage_die '用法：sb realm disable'; realm_disable;;
-        status) (($# <= 3)) || usage_die '用法：sb realm status [--json]'; realm_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
-        show-token) (($# == 2)) || usage_die '用法：sb realm show-token'; realm_show_token;;
-        *) usage_die '用法：sb realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N] | disable | status [--json] | show-token';;
+        disable) (($# == 2)) || usage_die '用法：xm realm disable'; realm_disable;;
+        status) (($# <= 3)) || usage_die '用法：xm realm status [--json]'; realm_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
+        show-token) (($# == 2)) || usage_die '用法：xm realm show-token'; realm_show_token;;
+        *) usage_die '用法：xm realm enable PORT PUBLIC_URL [--listen ADDRESS] [--tls-domain DOMAIN] [--max-realms N] | disable | status [--json] | show-token';;
       esac
       ;;
     bbr)
       local action=${2:-status}
       case "$action" in
-        enable) (($# == 2)) || usage_die '用法：sb bbr enable'; bbr_enable;;
-        disable) (($# == 2)) || usage_die '用法：sb bbr disable'; bbr_disable;;
-        status) (($# <= 3)) || usage_die '用法：sb bbr status [--json]'; bbr_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
-        *) usage_die '用法：sb bbr enable|disable|status [--json]';;
+        enable) (($# == 2)) || usage_die '用法：xm bbr enable'; bbr_enable;;
+        disable) (($# == 2)) || usage_die '用法：xm bbr disable'; bbr_disable;;
+        status) (($# <= 3)) || usage_die '用法：xm bbr status [--json]'; bbr_status "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
+        *) usage_die '用法：xm bbr enable|disable|status [--json]';;
       esac
       ;;
     hy2|hysteria2)
-      [[ ${2:-} == buffer || ${2:-} == udp-buffer ]] || usage_die '用法：sb hy2 buffer enable|disable|status [--json]'
+      [[ ${2:-} == buffer || ${2:-} == udp-buffer ]] || usage_die '用法：xm hy2 buffer enable|disable|status [--json]'
       local buffer_action=${3:-status}
       case "$buffer_action" in
-        enable) (($# == 3)) || usage_die '用法：sb hy2 buffer enable'; hy2_udp_buffer_enable;;
-        disable) (($# == 3)) || usage_die '用法：sb hy2 buffer disable'; hy2_udp_buffer_disable;;
-        status) (($# <= 4)) || usage_die '用法：sb hy2 buffer status [--json]'; hy2_udp_buffer_status "$([[ ${4:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
-        *) usage_die '用法：sb hy2 buffer enable|disable|status [--json]';;
+        enable) (($# == 3)) || usage_die '用法：xm hy2 buffer enable'; hy2_udp_buffer_enable;;
+        disable) (($# == 3)) || usage_die '用法：xm hy2 buffer disable'; hy2_udp_buffer_disable;;
+        status) (($# <= 4)) || usage_die '用法：xm hy2 buffer status [--json]'; hy2_udp_buffer_status "$([[ ${4:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)";;
+        *) usage_die '用法：xm hy2 buffer enable|disable|status [--json]';;
       esac
       ;;
     caddy) shift; caddy_cli "$@" ;;
@@ -594,7 +594,7 @@ main() {
           local target=all json=${SBM_OUTPUT_JSON:-0} arg
           shift 2 || true
           for arg in "$@"; do
-            case "$arg" in --json) json=1;; *) [[ "$target" == all ]] || usage_die '用法：sb traffic status [NODE_ID] [--json]'; target=$arg;; esac
+            case "$arg" in --json) json=1;; *) [[ "$target" == all ]] || usage_die '用法：xm traffic status [NODE_ID] [--json]'; target=$arg;; esac
           done
           traffic_status "$target" "$json"
           ;;
@@ -603,56 +603,56 @@ main() {
           while (($#)); do if [[ "$1" == --dry-run ]]; then export SBM_DRY_RUN=1; shift; else traffic_args+=("$1"); shift; fi; done
           traffic_set "$id" "${traffic_args[@]}"
           ;;
-        disable) (($# == 3)) || die '用法：sb traffic disable NODE_ID'; traffic_disable "$3" ;;
-        remove) (($# == 3)) || die '用法：sb traffic remove NODE_ID'; traffic_remove "$3" ;;
+        disable) (($# == 3)) || die '用法：xm traffic disable NODE_ID'; traffic_disable "$3" ;;
+        remove) (($# == 3)) || die '用法：xm traffic remove NODE_ID'; traffic_remove "$3" ;;
         reset)
           local target=${3:?缺少节点 ID} assume_yes=${SBM_ASSUME_YES:-0}
           if (($# != 3)) && ! { (($# == 4)) && [[ ${4:-} == --yes || ${4:-} == -y ]]; }; then
-            usage_die '用法：sb traffic reset NODE_ID|all [--yes]'
+            usage_die '用法：xm traffic reset NODE_ID|all [--yes]'
           fi
           (($# == 3 && ${SBM_ASSUME_YES:-0} != 1)) || assume_yes=1
           if [[ "$assume_yes" == 1 ]] || confirm "确认清零 $target 的本周期流量统计？" N; then traffic_reset "$target"; fi
           ;;
-        reconcile) (($# == 2)) || die '用法：sb traffic reconcile'; traffic_reconcile ;;
-        sync) (($# == 2)) || die '用法：sb traffic sync'; traffic_checkpoint ;;
-        tick) (($# == 2)) || die '用法：sb traffic tick'; traffic_tick ;;
-        *) usage_die '用法：sb traffic status|set|disable|remove|reset' ;;
+        reconcile) (($# == 2)) || die '用法：xm traffic reconcile'; traffic_reconcile ;;
+        sync) (($# == 2)) || die '用法：xm traffic sync'; traffic_checkpoint ;;
+        tick) (($# == 2)) || die '用法：xm traffic tick'; traffic_tick ;;
+        *) usage_die '用法：xm traffic status|set|disable|remove|reset' ;;
       esac
       ;;
     notify)
       local action=${2:-status}; shift 2 || true
       case "$action" in
         status)
-          (($# == 0)) || { (($# == 1)) && [[ ${1:-} == --json ]]; } || usage_die '用法：sb notify status [--json]'
+          (($# == 0)) || { (($# == 1)) && [[ ${1:-} == --json ]]; } || usage_die '用法：xm notify status [--json]'
           notification_status "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
           ;;
         configure)
           local provider=${1:?缺少通知渠道}; shift
           notification_configure_cli "$provider" "$@"
           ;;
-        disable) (($# == 0)) || usage_die '用法：sb notify disable'; notification_disable ;;
-        test) (($# == 0)) || usage_die '用法：sb notify test'; notification_test ;;
-        check) (($# == 0)) || usage_die '用法：sb notify check'; with_lock notification_traffic_check_unlocked ;;
+        disable) (($# == 0)) || usage_die '用法：xm notify disable'; notification_disable ;;
+        test) (($# == 0)) || usage_die '用法：xm notify test'; notification_test ;;
+        check) (($# == 0)) || usage_die '用法：xm notify check'; with_lock notification_traffic_check_unlocked ;;
         bot) telegram_bot_cli "$@" ;;
-        *) usage_die '用法：sb notify status|configure|disable|test|check|bot';;
+        *) usage_die '用法：xm notify status|configure|disable|test|check|bot';;
       esac
       ;;
     health)
       local action=${2:-status}; shift 2 || true
       case "$action" in
         status)
-          (($# == 0)) || { (($# == 1)) && [[ ${1:-} == --json ]]; } || usage_die '用法：sb health status [--json]'
+          (($# == 0)) || { (($# == 1)) && [[ ${1:-} == --json ]]; } || usage_die '用法：xm health status [--json]'
           health_status "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
           ;;
         check)
-          (($# == 0)) || { (($# == 1)) && [[ ${1:-} == --json ]]; } || usage_die '用法：sb health check [--json]'
+          (($# == 0)) || { (($# == 1)) && [[ ${1:-} == --json ]]; } || usage_die '用法：xm health check [--json]'
           health_check "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
           ;;
-        enable) (($# <= 1)) || usage_die '用法：sb health enable [证书预警天数]'; health_enable "${1:-}" ;;
-        disable) (($# == 0)) || usage_die '用法：sb health disable'; health_disable ;;
-        configure) (($# >= 2)) || usage_die '用法：sb health configure --disk-free N --memory-max N [...]'; health_configure_resources "$@" ;;
-        tick) (($# == 0)) || usage_die '用法：sb health tick'; health_tick ;;
-        *) usage_die '用法：sb health status|check|enable|disable [WARN_DAYS]';;
+        enable) (($# <= 1)) || usage_die '用法：xm health enable [证书预警天数]'; health_enable "${1:-}" ;;
+        disable) (($# == 0)) || usage_die '用法：xm health disable'; health_disable ;;
+        configure) (($# >= 2)) || usage_die '用法：xm health configure --disk-free N --memory-max N [...]'; health_configure_resources "$@" ;;
+        tick) (($# == 0)) || usage_die '用法：xm health tick'; health_tick ;;
+        *) usage_die '用法：xm health status|check|enable|disable [WARN_DAYS]';;
       esac
       ;;
     core)
@@ -661,8 +661,8 @@ main() {
         check) local rc=0; core_check_update || rc=$?; [[ "$rc" == 0 || "$rc" == 10 ]] || return "$rc" ;;
         update) core_update "${3:-latest}" ;;
         rollback) core_rollback ;;
-        schema) (($# <= 3)) || usage_die '用法：sb core schema [文件]'; core_schema "${3:-}" ;;
-        capabilities) (($# <= 3)) || usage_die '用法：sb core capabilities [--json]'; core_capabilities "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
+        schema) (($# <= 3)) || usage_die '用法：xm core schema [文件]'; core_schema "${3:-}" ;;
+        capabilities) (($# <= 3)) || usage_die '用法：xm core capabilities [--json]'; core_capabilities "$([[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         policy) core_set_policy "${3:?缺少策略}" ;;
         channel) core_set_channel "${3:?缺少渠道}" ;;
         auto) core_auto_update ;;
@@ -672,20 +672,20 @@ main() {
     xray)
       local action=${2:-status}
       case "$action" in
-        status) (($# <= 3)) || usage_die '用法：sb xray status'; xray_status ;;
-        install) (($# == 2)) || usage_die '用法：sb xray install'; xray_install ;;
-        update) (($# == 2)) || usage_die '用法：sb xray update'; xray_update ;;
+        status) (($# <= 3)) || usage_die '用法：xm xray status'; xray_status ;;
+        install) (($# == 2)) || usage_die '用法：xm xray install'; xray_install ;;
+        update) (($# == 2)) || usage_die '用法：xm xray update'; xray_update ;;
         config)
-          (($# <= 3)) || usage_die '用法：sb xray config [文件]'
-          [[ -x "$SBM_XRAY_BIN" ]] || die 'Xray 尚未安装，请先运行 sb xray install。'
+          (($# <= 3)) || usage_die '用法：xm xray config [文件]'
+          [[ -x "$SBM_XRAY_BIN" ]] || die 'Xray 尚未安装，请先运行 xm xray install。'
           local xray_output=${3:-$SBM_XRAY_CONFIG}
           with_lock xray_render_validate "$xray_output"
           log_ok "Xray 配置已生成：$xray_output"
           ;;
-        enable) (($# == 2)) || usage_die '用法：sb xray enable'; xray_enable ;;
-        disable) (($# == 2)) || usage_die '用法：sb xray disable'; xray_disable ;;
-        policy) (($# == 3)) || usage_die '用法：sb xray policy <manual|notify|patch|stable>'; xray_set_policy "$3" ;;
-        api-port) (($# == 3)) || usage_die '用法：sb xray api-port PORT'; xray_set_api_port "$3" ;;
+        enable) (($# == 2)) || usage_die '用法：xm xray enable'; xray_enable ;;
+        disable) (($# == 2)) || usage_die '用法：xm xray disable'; xray_disable ;;
+        policy) (($# == 3)) || usage_die '用法：xm xray policy <manual|notify|patch|stable>'; xray_set_policy "$3" ;;
+        api-port) (($# == 3)) || usage_die '用法：xm xray api-port PORT'; xray_set_api_port "$3" ;;
         routing) xray_routing_cli show "${3:-}" ;;
         outbound|balancer|route) shift 1; xray_routing_cli "$@" ;;
         warp) shift 2; xray_warp_cli "$@" ;;
@@ -693,23 +693,23 @@ main() {
           case "${3:-}" in
             ''|--json) xray_traffic "$([[ ${3:-} == --json ]] && echo 1 || echo 0)" ;;
             reset) xray_traffic_reset ;;
-            *) usage_die '用法：sb xray traffic [--json|reset]' ;;
+            *) usage_die '用法：xm xray traffic [--json|reset]' ;;
           esac ;;
-        *) usage_die '用法：sb xray status|install|update|config|enable|disable|policy <manual|notify|patch|stable>|api-port PORT|traffic [--json|reset]' ;;
+        *) usage_die '用法：xm xray status|install|update|config|enable|disable|policy <manual|notify|patch|stable>|api-port PORT|traffic [--json|reset]' ;;
       esac
       ;;
     openlist)
       local action=${2:-status}
       case "$action" in
-        status) (($# <= 2)) || usage_die '用法：sb openlist status'; openlist_status ;;
-        install) (($# == 2)) || usage_die '用法：sb openlist install'; openlist_install ;;
-        update) (($# == 2)) || usage_die '用法：sb openlist update'; openlist_update ;;
-        detach) (($# == 3)) || usage_die '用法：sb openlist detach DOMAIN'; openlist_detach "$3" ;;
+        status) (($# <= 2)) || usage_die '用法：xm openlist status'; openlist_status ;;
+        install) (($# == 2)) || usage_die '用法：xm openlist install'; openlist_install ;;
+        update) (($# == 2)) || usage_die '用法：xm openlist update'; openlist_update ;;
+        detach) (($# == 3)) || usage_die '用法：xm openlist detach DOMAIN'; openlist_detach "$3" ;;
         setup)
-          (($# >= 3 && $# <= 4)) || usage_die '用法：sb openlist setup DOMAIN [caddy|nginx]'
+          (($# >= 3 && $# <= 4)) || usage_die '用法：xm openlist setup DOMAIN [caddy|nginx]'
           openlist_setup "$3" "${4:-caddy}"
           ;;
-        *) usage_die '用法：sb openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN' ;;
+        *) usage_die '用法：xm openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN' ;;
       esac
       ;;
     reality) shift; reality_site_cli "$@" ;;
@@ -717,7 +717,7 @@ main() {
       local action=${2:-status}
       case "$action" in
         status)
-          (($# <= 3)) || usage_die '用法：sb cloudflared status [--json]'
+          (($# <= 3)) || usage_die '用法：xm cloudflared status [--json]'
           if [[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]]; then
             local installed=false version=''
             if [[ -x "$SBM_CLOUDFLARED_BIN" ]]; then installed=true; version=$(cloudflared_current_version || true); fi
@@ -726,13 +726,13 @@ main() {
           elif [[ -x "$SBM_CLOUDFLARED_BIN" ]]; then
             printf 'cloudflared：%s\n路径：%s\n' "$(cloudflared_current_version || printf '未知版本')" "$SBM_CLOUDFLARED_BIN"
           else
-            printf 'cloudflared：未安装（按需执行 sb cloudflared install）\n'
+            printf 'cloudflared：未安装（按需执行 xm cloudflared install）\n'
           fi
           ;;
-        install) (($# == 2)) || usage_die '用法：sb cloudflared install'; cloudflared_install ;;
-        update) (($# == 2)) || usage_die '用法：sb cloudflared update'; cloudflared_update ;;
-        policy) (($# == 3)) || usage_die '用法：sb cloudflared policy <manual|notify|patch|stable>'; cloudflared_set_policy "$3" ;;
-        *) usage_die '用法：sb cloudflared status|install|update|policy <manual|notify|patch|stable>' ;;
+        install) (($# == 2)) || usage_die '用法：xm cloudflared install'; cloudflared_install ;;
+        update) (($# == 2)) || usage_die '用法：xm cloudflared update'; cloudflared_update ;;
+        policy) (($# == 3)) || usage_die '用法：xm cloudflared policy <manual|notify|patch|stable>'; cloudflared_set_policy "$3" ;;
+        *) usage_die '用法：xm cloudflared status|install|update|policy <manual|notify|patch|stable>' ;;
       esac
       ;;
     deps)
@@ -740,35 +740,35 @@ main() {
       case "$action" in
         status)
           [[ ${3:-} == --json ]] && json=1
-          (($# <= 3)) || usage_die '用法：sb deps status [--json]'
+          (($# <= 3)) || usage_die '用法：xm deps status [--json]'
           dependency_status "$json"
           ;;
         install)
           feature=${3:?缺少功能名}
-          (($# == 3)) || usage_die '用法：sb deps install FEATURE'
+          (($# == 3)) || usage_die '用法：xm deps install FEATURE'
           dependency_require_feature "$feature" || die "无法准备功能依赖：$feature"
           log_ok "功能依赖已就绪：$feature"
           ;;
-        *) usage_die '用法：sb deps status [--json]|install FEATURE' ;;
+        *) usage_die '用法：xm deps status [--json]|install FEATURE' ;;
       esac
       ;;
-    acme) [[ ${2:-} == update ]] || usage_die '用法：sb acme update'; acme_update ;;
+    acme) [[ ${2:-} == update ]] || usage_die '用法：xm acme update'; acme_update ;;
     doctor)
       case ${2:-} in
         --repair) doctor_run 1 ;;
         --repair-safe) doctor_run 0 0 1 ;;
         --network) doctor_run 0 1 ;;
         '') doctor_run ;;
-        *) usage_die '用法：sb doctor [--repair|--repair-safe|--network]' ;;
+        *) usage_die '用法：xm doctor [--repair|--repair-safe|--network]' ;;
       esac
       ;;
     probe) doctor_probe "${2:?缺少节点 ID}" ;;
     repair)
       if [[ ${2:-} == --safe ]]; then
-        (($# == 2)) || usage_die '用法：sb repair [--safe]'
+        (($# == 2)) || usage_die '用法：xm repair [--safe]'
         doctor_run 0 0 1
       else
-        (($# == 1)) || usage_die '用法：sb repair [--safe]'
+        (($# == 1)) || usage_die '用法：xm repair [--safe]'
         doctor_run 1
       fi
       ;;
@@ -776,19 +776,19 @@ main() {
       local action=${2:-validate}; shift 2 || true
       case "$action" in
         validate)
-          [[ $# == 0 || ( $# == 1 && $1 == --json ) ]] || usage_die '用法：sb config validate [--json]'
+          [[ $# == 0 || ( $# == 1 && $1 == --json ) ]] || usage_die '用法：xm config validate [--json]'
           config_validate "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
           ;;
         diff)
-          [[ $# == 0 || ( $# == 1 && $1 == --json ) ]] || usage_die '用法：sb config diff [--json]'
+          [[ $# == 0 || ( $# == 1 && $1 == --json ) ]] || usage_die '用法：xm config diff [--json]'
           config_diff "$([[ ${1:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)"
           ;;
-        *) usage_die '用法：sb config validate|diff [--json]' ;;
+        *) usage_die '用法：xm config validate|diff [--json]' ;;
       esac
       ;;
     logs) show_logs "${2:-all}" "${3:-100}" ;;
     backup)
-      local output="$SBM_BACKUPS/sb-manager-$(now_stamp).tar.gz" recipient='' arg
+      local output="$SBM_BACKUPS/xray-manager-$(now_stamp).tar.gz" recipient='' arg
       shift
       while (($#)); do
         case "$1" in
@@ -825,13 +825,13 @@ main() {
             optimistic) settings_set_dns optimistic "${4:?缺少 true/false}" ;;
             optimistic-timeout) settings_set_dns optimistic-timeout "${4:?缺少超时时间}" ;;
             timeout) settings_set_dns timeout "${4:?缺少超时时间}" ;;
-            *) usage_die '用法：sb settings dns show|optimistic <true|false>|optimistic-timeout DURATION|timeout DURATION' ;;
+            *) usage_die '用法：xm settings dns show|optimistic <true|false>|optimistic-timeout DURATION|timeout DURATION' ;;
           esac
           ;;
-        *) usage_die '用法：sb settings show|detect-ip|address <auto|HOST>|outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>|dns ...' ;;
+        *) usage_die '用法：xm settings show|detect-ip|address <auto|HOST>|outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>|dns ...' ;;
       esac
       ;;
-    *) usage_die "未知命令：$cmd；运行 sb help 查看帮助。" ;;
+    *) usage_die "未知命令：$cmd；运行 xm help 查看帮助。" ;;
   esac
 }
 

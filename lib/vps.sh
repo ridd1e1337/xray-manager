@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 
 SBM_VPS_INIT_DIR="${SBM_VPS_INIT_DIR:-$SBM_VAR/vps-init}"
-SBM_VPS_FAIL2BAN_CONFIG="${SBM_VPS_FAIL2BAN_CONFIG:-/etc/fail2ban/jail.d/99-sb-manager-vps.local}"
+SBM_VPS_FAIL2BAN_CONFIG="${SBM_VPS_FAIL2BAN_CONFIG:-/etc/fail2ban/jail.d/99-xray-manager-vps.local}"
 
 vps_ssh_ports() {
   local port
@@ -195,14 +195,14 @@ vps_init_fail2ban() {
     log_error '已有 Fail2ban SSH jail 重启后未就绪。'; return 1
   fi
   vps_init_ssh_log "$backup" || return 1
-  [[ "$SBM_VPS_FAIL2BAN_CONFIG" == /etc/fail2ban/jail.d/99-sb-manager-vps.local ]] || {
+  [[ "$SBM_VPS_FAIL2BAN_CONFIG" == /etc/fail2ban/jail.d/99-xray-manager-vps.local ]] || {
     log_error 'VPS 初始化需要使用标准 Fail2ban jail.d 路径。'; return 1;
   }
   stage="$backup/fail2ban-candidate"
   mkdir -p "$stage" || return 1
   cp -a /etc/fail2ban/. "$stage/" || return 1
   mkdir -p "$stage/jail.d" || return 1
-  candidate="$stage/jail.d/99-sb-manager-vps.local"
+  candidate="$stage/jail.d/99-xray-manager-vps.local"
   [[ -z ${SSH_CONNECTION:-} ]] || client_ip=$(awk '{print $1}' <<<"$SSH_CONNECTION")
   if ! validate_ipv4 "$client_ip" && ! validate_ipv6 "$client_ip"; then client_ip=''; fi
   {
@@ -258,7 +258,7 @@ _vps_init() (
   require_init_system || return 1
   backend=$(init_system) || return 1
   distro=$(dependency_distro) || return 1
-  vps_init_supported "$distro" "$backend" || { log_error '新 VPS 初始化目前支持 Debian/Ubuntu systemd 与 Alpine OpenRC；sb vps systems 可查看各功能的系统范围。'; return 1; }
+  vps_init_supported "$distro" "$backend" || { log_error '新 VPS 初始化目前支持 Debian/Ubuntu systemd 与 Alpine OpenRC；xm vps systems 可查看各功能的系统范围。'; return 1; }
   if service_active firewalld.service; then log_error 'firewalld 正在运行，不能同时启用 UFW。'; return 1; fi
   dependency_require_feature probe || return 1
   ports=$(vps_ssh_ports) || return 1
@@ -325,7 +325,7 @@ vps_cli() {
     return
   fi
   while (($#)); do
-    case "$1" in --dry-run) dry_run=1;; --json) json=1;; --yes|-y) ;; *) usage_die '用法：sb vps init [--dry-run] | status [--json] | systems';; esac
+    case "$1" in --dry-run) dry_run=1;; --json) json=1;; --yes|-y) ;; *) usage_die '用法：xm vps init [--dry-run] | status [--json] | systems';; esac
     shift
   done
   if [[ "$action" == systems ]]; then
@@ -337,6 +337,6 @@ vps_cli() {
   case "$action" in
     init) [[ "$json" == 0 ]] || usage_die '初始化不接受 --json。'; vps_init "$dry_run";;
     status) vps_init_status "$json";;
-    *) usage_die '用法：sb vps init [--dry-run] | status [--json] | systems';;
+    *) usage_die '用法：xm vps init [--dry-run] | status [--json] | systems';;
   esac
 }

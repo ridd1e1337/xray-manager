@@ -140,20 +140,20 @@ traffic_group_cli() {
   local action=${1:-status} id='' members='' quota='' day=1 mode=total
   (($# == 0)) || shift
   case "$action" in
-    status|list) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：sb traffic group status [--json]'; with_lock _traffic_group_status; return;;
+    status|list) [[ $# == 0 || ( $# == 1 && "$1" == --json ) ]] || usage_die '用法：xm traffic group status [--json]'; with_lock _traffic_group_status; return;;
     remove|reset)
-      [[ $# == 1 ]] || usage_die '用法：sb traffic group remove|reset ID'
+      [[ $# == 1 ]] || usage_die '用法：xm traffic group remove|reset ID'
       [[ ${SBM_DRY_RUN:-0} == 0 ]] || usage_die '该操作不接受 --dry-run'
       with_state_transaction "group-$action" "_traffic_group_$action" "$1"; return;;
     set) [[ $# -ge 1 ]] || usage_die '缺少配额组 ID'; id=$1; shift;;
-    *) usage_die '用法：sb traffic group set|remove|reset|status';;
+    *) usage_die '用法：xm traffic group set|remove|reset|status';;
   esac
   while (($#)); do
     [[ $# -ge 2 ]] || usage_die "参数 $1 缺少值"
     case "$1" in --nodes) members=$2;; --quota) quota=$2;; --reset-day) day=$2;; --quota-mode) mode=$2;; *) usage_die "未知参数：$1";; esac
     shift 2
   done
-  [[ -n "$members" && -n "$quota" ]] || usage_die '用法：sb traffic group set ID --nodes NODE1,NODE2 --quota 500G [--reset-day 1] [--quota-mode total|download]'
+  [[ -n "$members" && -n "$quota" ]] || usage_die '用法：xm traffic group set ID --nodes NODE1,NODE2 --quota 500G [--reset-day 1] [--quota-mode total|download]'
   if [[ ${SBM_DRY_RUN:-0} == 1 ]]; then with_lock _traffic_group_set "$id" "$members" "$quota" "$day" "$mode"
   else with_state_transaction group-set _traffic_group_set "$id" "$members" "$quota" "$day" "$mode"; fi
 }

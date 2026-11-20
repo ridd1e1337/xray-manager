@@ -1,7 +1,7 @@
 # AnyTLS 证书验证
 
 AnyTLS 服务端需要证书和私钥。管理器使用 `--domain` 对应的
-`/etc/sb-manager/certs/<domain>/{fullchain.pem,key.pem}`；缺少证书时拒绝添加启用节点，
+`/etc/xray-manager/certs/<domain>/{fullchain.pem,key.pem}`；缺少证书时拒绝添加启用节点，
 并回滚事务。面板通过证书菜单签发和选择证书，不提供“忽略证书错误”的捷径。
 
 客户端还必须验证证书链、有效期和域名，才能确认连接的是预期服务器。
@@ -39,9 +39,9 @@ Sub-Store 2.43.1 和 2.44.2 的 V2Ray URI 输出会省略 `skip-cert-verify=fals
 5. 若开启验证后无法连接，检查证书有效期、完整证书链、SNI 和系统时间。
    不要用开启跳过验证来掩盖这些错误。
 
-升级管理器用 `sb update`。重新生成分享链接或订阅后，新参数才会出现；
+升级管理器用 `xm update`。重新生成分享链接或订阅后，新参数才会出现；
 之前手工粘贴进 Sub-Store 的静态内容需要重新导入。现有动态订阅可通过
-`sb substore sync` 重新发布；普通快照订阅需要重新创建。
+`xm substore sync` 重新发布；普通快照订阅需要重新创建。
 即使来源正确，Sub-Store 中强制启用跳过验证的处理器仍须单独修正。
 
 参考：[AnyTLS URI 规范](https://github.com/anytls/anytls-go/blob/main/docs/uri_scheme.md)、

@@ -124,7 +124,7 @@ status_exit_code() {
 status_show() {
   local data row usage quota
   data=$(status_json)
-  printf '%sSB Manager %s%s\n' "$C_BOLD" "$(jq -r '.manager.version' <<<"$data")" "$C_RESET"
+  printf '%sXray Manager %s%s\n' "$C_BOLD" "$(jq -r '.manager.version' <<<"$data")" "$C_RESET"
   printf '服务管理      : %s\n' "$(jq -r '.manager.init_system' <<<"$data")"
   printf 'sing-box     : %s (%s)\n' "$(jq -r '.components.sing_box.version // "未安装"' <<<"$data")" "$(jq -r '.components.sing_box.state' <<<"$data")"
   printf 'Xray-core    : %s (%s)\n' "$(jq -r '.components.xray.version // "未安装"' <<<"$data")" "$(jq -r '.components.xray.state' <<<"$data")"

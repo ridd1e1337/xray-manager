@@ -55,7 +55,7 @@ node_expiry_tick_unlocked() {
 
 node_expiry_cli() {
   local id=${1:-} option=${2:-} value=${3:-} at now
-  [[ -n "$id" ]] || usage_die '用法：sb node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]'
+  [[ -n "$id" ]] || usage_die '用法：xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]'
   state_node_exists "$id" || usage_die "节点不存在：$id"
   if [[ $# == 1 ]]; then state_get_node "$id" | jq '{id,enabled,expiry:(.expiry // {at:null,suspended:false,resume_enabled:false})}'; return; fi
   now=$(date +%s)
@@ -69,7 +69,7 @@ node_expiry_cli() {
       [[ $# == 3 && "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || usage_die '时间须使用 UTC 格式，如 2027-01-01T00:00:00Z。'
       at=$(jq -ner --arg at "$value" '$at|fromdateiso8601') || usage_die '到期时间无效。'
       (( at > now )) || usage_die '到期时间必须晚于当前时间。';;
-    *) usage_die '用法：sb node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]';;
+    *) usage_die '用法：xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]';;
   esac
   node_expiry_set "$id" "$at"
 }

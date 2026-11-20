@@ -790,7 +790,7 @@ snapshot_restore() {
   [[ ! -f "$snapshot/force-xray-restart" ]] || xray_changed=1
   if [[ ! -f "$snapshot/caddy-package/package.json" && -f "$snapshot/state.json" && -f "$SBM_STATE" ]] \
     && [[ $(jq -Sc '.caddy // null' "$snapshot/state.json") != "$(jq -Sc '.caddy // null' "$SBM_STATE")" ]]; then
-    log_error '快照对应的 Caddy 程序版本与当前不同，请先使用 sb caddy rollback 对齐版本。'; return 1
+    log_error '快照对应的 Caddy 程序版本与当前不同，请先使用 xm caddy rollback 对齐版本。'; return 1
   fi
   if [[ "$SBM_SKIP_INIT" != "1" ]] && declare -F nginx_stream_reconcile >/dev/null 2>&1 && service_exists "$SBM_NGINX_STREAM_SERVICE"; then
     service_stop "$SBM_NGINX_STREAM_SERVICE"

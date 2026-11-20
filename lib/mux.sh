@@ -73,7 +73,7 @@ _mux_auto_configure() {
   local ids=$1 public_port=${2:-443} backend=${3:-} candidate id node sni route backend_port tmp
   local -a node_ids=()
   if website_mux_managed; then
-    [[ "$public_port" == 443 && ( -z "$backend" || "$backend" == "$(mux_backend)" ) ]] || { log_error '网站自动接入使用固定入口，请先 sb mux detach 再切换。'; return 1; }
+    [[ "$public_port" == 443 && ( -z "$backend" || "$backend" == "$(mux_backend)" ) ]] || { log_error '网站自动接入使用固定入口，请先 xm mux detach 再切换。'; return 1; }
     _website_mux_setup; return $?
   fi
   [[ "$ids" == all ]] && ids=$(jq -r '[.nodes[]? | select(.enabled==true) | select(
@@ -119,7 +119,7 @@ _mux_auto_configure() {
   if ! apply_candidate_state "$candidate" mux-auto; then rm -f "$candidate"; return 1; fi
   rm -f "$candidate"
   log_ok "已配置并启用 TCP/SNI 复用：$(jq '.nginx_stream.routes|length' "$SBM_STATE") 条路由，共用 ${public_port}/TCP。"
-  [[ "$backend" != caddy ]] || log_info '请将 sb mux caddy 输出接入现有 Caddy 的 HTTPS listener_wrappers 并重载；管理器只配置本机后端和公网导出端口。'
+  [[ "$backend" != caddy ]] || log_info '请将 xm mux caddy 输出接入现有 Caddy 的 HTTPS listener_wrappers 并重载；管理器只配置本机后端和公网导出端口。'
 }
 
 mux_auto_configure() { with_state_transaction mux-auto _mux_auto_configure "$@"; }
@@ -152,7 +152,7 @@ mux_builtin_config() {
 
 _mux_set_backend() {
   local backend=$1 candidate
-  website_mux_managed && { log_error '网站自动接入已启用；请使用 sb mux detach 恢复后再切换方式。'; return 1; }
+  website_mux_managed && { log_error '网站自动接入已启用；请使用 xm mux detach 恢复后再切换方式。'; return 1; }
   case "$backend" in sing-box|nginx|caddy) ;; *) usage_die '复用方式只能是 sing-box、nginx 或 caddy。';; esac
   candidate=$(state_candidate) || return 1
   if ! jq --arg backend "$backend" '.nginx_stream.backend=$backend' "$SBM_STATE" >"$candidate" \
@@ -189,31 +189,31 @@ mux_cli() {
           --config) config=${2:?缺少配置路径}; shift 2;;
           --binary) binary=${2:?缺少程序路径}; shift 2;;
           --build-caddy) SBM_CADDY_BUILD_LOCAL=1; shift;;
-          *) usage_die '用法：sb mux setup [--server auto|nginx|caddy] [--config FILE] [--binary FILE] [--build-caddy]';;
+          *) usage_die '用法：xm mux setup [--server auto|nginx|caddy] [--config FILE] [--binary FILE] [--build-caddy]';;
         esac
       done
       website_mux_setup "$server" "$config" "$binary";;
     detach)
-      (($# == 0)) || usage_die '用法：sb mux detach'
+      (($# == 0)) || usage_die '用法：xm mux detach'
       website_mux_detach;;
     status)
       if [[ ${1:-} == --json ]]; then json=1; shift; fi
-      (($# == 0)) || usage_die '用法：sb mux status [--json]'
+      (($# == 0)) || usage_die '用法：xm mux status [--json]'
       nginx_stream_status "$json";;
     caddy)
-      (($# == 0)) || usage_die '用法：sb mux caddy（输出 HTTPS listener_wrappers 配置）'
+      (($# == 0)) || usage_die '用法：xm mux caddy（输出 HTTPS listener_wrappers 配置）'
       mux_caddy_config;;
     enable)
       [[ "$alias" != nginx-stream ]] || backend=nginx
       if [[ $# -gt 0 && "$1" != --backend ]]; then port=$1; shift; fi
       if [[ ${1:-} == --backend ]]; then backend=${2:?缺少复用方式}; shift 2; fi
-      (($# == 0)) || usage_die '用法：sb mux enable [PORT] [--backend sing-box|nginx|caddy]'
+      (($# == 0)) || usage_die '用法：xm mux enable [PORT] [--backend sing-box|nginx|caddy]'
       nginx_stream_enable "$port" "$backend";;
     disable)
-      (($# == 0)) || usage_die '用法：sb mux disable'
+      (($# == 0)) || usage_die '用法：xm mux disable'
       nginx_stream_disable;;
     backend)
-      (($# == 1)) || usage_die '用法：sb mux backend sing-box|nginx|caddy'
+      (($# == 1)) || usage_die '用法：xm mux backend sing-box|nginx|caddy'
       mux_set_backend "$1";;
     auto)
       local ids=all auto_port=443 auto_backend=''
@@ -222,7 +222,7 @@ mux_cli() {
         case "$1" in
           --port) auto_port=${2:?缺少端口}; shift 2;;
           --backend) auto_backend=${2:?缺少复用方式}; shift 2;;
-          *) usage_die '用法：sb mux auto [all|NODE1,NODE2,...] [--port 443] [--backend sing-box|nginx|caddy]';;
+          *) usage_die '用法：xm mux auto [all|NODE1,NODE2,...] [--port 443] [--backend sing-box|nginx|caddy]';;
         esac
       done
       mux_auto_configure "$ids" "$auto_port" "$auto_backend";;
@@ -230,15 +230,15 @@ mux_cli() {
       action=${1:-list}
       (($# == 0)) || shift
       case "$action" in
-        list) (($# == 0)) || usage_die '用法：sb mux route list'; nginx_stream_route_list;;
+        list) (($# == 0)) || usage_die '用法：xm mux route list'; nginx_stream_route_list;;
         add)
-          (( $# == 2 || $# == 3 )) || usage_die '用法：sb mux route add NODE_ID SNI [BACKEND_PORT]'
+          (( $# == 2 || $# == 3 )) || usage_die '用法：xm mux route add NODE_ID SNI [BACKEND_PORT]'
           nginx_stream_route_add "$@";;
         remove|del)
-          (($# == 1)) || usage_die '用法：sb mux route remove NODE_ID'
+          (($# == 1)) || usage_die '用法：xm mux route remove NODE_ID'
           nginx_stream_route_remove "$1";;
-        *) usage_die '用法：sb mux route list|add NODE_ID SNI [BACKEND_PORT]|remove NODE_ID';;
+        *) usage_die '用法：xm mux route list|add NODE_ID SNI [BACKEND_PORT]|remove NODE_ID';;
       esac;;
-    *) usage_die '用法：sb mux status|enable [PORT] [--backend sing-box|nginx|caddy]|disable|backend sing-box|nginx|caddy|auto [NODE_IDS]|route ...';;
+    *) usage_die '用法：xm mux status|enable [PORT] [--backend sing-box|nginx|caddy]|disable|backend sing-box|nginx|caddy|auto [NODE_IDS]|route ...';;
   esac
 }

@@ -56,7 +56,7 @@ write_managed_tunnel_unit() {
     mkdir -p "$SBM_SYSTEMD_DIR" || return 1
     cat >"$unit" <<EOF_UNIT
 [Unit]
-Description=sb-manager multi-service Cloudflare Tunnel
+Description=xray-manager multi-service Cloudflare Tunnel
 After=network-online.target
 Wants=network-online.target
 
@@ -81,7 +81,7 @@ EOF_UNIT
   else
     mkdir -p "$SBM_OPENRC_DIR" || return 1
     write_openrc_supervised_service "$SBM_OPENRC_DIR/${SBM_TUNNEL_SERVICE%.service}" \
-      'sb-manager Tunnel routes' 'sb-manager multi-service Cloudflare Tunnel' "$SBM_CLOUDFLARED_BIN" \
+      'xray-manager Tunnel routes' 'xray-manager multi-service Cloudflare Tunnel' "$SBM_CLOUDFLARED_BIN" \
       "tunnel --config $SBM_TUNNEL_INGRESS --no-autoupdate run" "$SBM_SERVICE_USER" \
       "$SBM_TUNNEL_LOG" "$SBM_TUNNEL_ERROR_LOG" 'after firewall' '' "$SBM_VAR/cloudflared-home"
   fi
@@ -106,7 +106,7 @@ _tunnel_managed_setup() {
 
 _tunnel_route_edit() {
   local action=$1 id=$2 host=${3:-} service=${4:-} path=${5:-} candidate
-  [[ $(jq -r '.tunnel.mode' "$SBM_STATE") == managed ]] || usage_die '请先配置 sb tunnel managed UUID CREDENTIALS_JSON。'
+  [[ $(jq -r '.tunnel.mode' "$SBM_STATE") == managed ]] || usage_die '请先配置 xm tunnel managed UUID CREDENTIALS_JSON。'
   validate_node_id "$id" || usage_die '路由 ID 无效。'
   candidate=$(state_candidate) || return 1
   if [[ "$action" == add ]]; then
@@ -126,13 +126,13 @@ _tunnel_route_edit() {
 tunnel_routes_cli() {
   [[ ${SBM_DRY_RUN:-0} == 0 ]] || usage_die 'Tunnel 路由操作暂不接受 --dry-run。'
   case "${1:-}" in
-    managed) [[ $# == 3 ]] || usage_die '用法：sb tunnel managed UUID CREDENTIALS_JSON'; with_state_transaction tunnel-managed _tunnel_managed_setup "$2" "$3";;
+    managed) [[ $# == 3 ]] || usage_die '用法：xm tunnel managed UUID CREDENTIALS_JSON'; with_state_transaction tunnel-managed _tunnel_managed_setup "$2" "$3";;
     route)
       case "${2:-list}" in
-        list) [[ $# -le 3 && ${3:---json} == --json ]] || usage_die '用法：sb tunnel route list [--json]'; jq '.tunnel.routes // []' "$SBM_STATE";;
-        add) [[ $# == 5 || $# == 6 ]] || usage_die '用法：sb tunnel route add ID DOMAIN LOCAL_URL [PATH_REGEX]'; with_state_transaction tunnel-route _tunnel_route_edit add "$3" "$4" "$5" "${6:-}";;
-        remove) [[ $# == 3 ]] || usage_die '用法：sb tunnel route remove ID'; with_state_transaction tunnel-route _tunnel_route_edit remove "$3";;
-        *) usage_die '用法：sb tunnel route list|add|remove';;
+        list) [[ $# -le 3 && ${3:---json} == --json ]] || usage_die '用法：xm tunnel route list [--json]'; jq '.tunnel.routes // []' "$SBM_STATE";;
+        add) [[ $# == 5 || $# == 6 ]] || usage_die '用法：xm tunnel route add ID DOMAIN LOCAL_URL [PATH_REGEX]'; with_state_transaction tunnel-route _tunnel_route_edit add "$3" "$4" "$5" "${6:-}";;
+        remove) [[ $# == 3 ]] || usage_die '用法：xm tunnel route remove ID'; with_state_transaction tunnel-route _tunnel_route_edit remove "$3";;
+        *) usage_die '用法：xm tunnel route list|add|remove';;
       esac;;
     *) return 2;;
   esac

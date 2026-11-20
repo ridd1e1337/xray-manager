@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 SOURCE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 VERSION=$(tr -d '[:space:]' <"$SOURCE_DIR/VERSION")
-OUTPUT=${1:-"$SOURCE_DIR/../sb-manager-install.sh"}
+OUTPUT=${1:-"$SOURCE_DIR/../xray-manager-install.sh"}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-ROOT="sb-manager-$VERSION"
+ROOT="xray-manager-$VERSION"
 mkdir -p "$TMP/$ROOT"
 cp -a "$SOURCE_DIR"/. "$TMP/$ROOT"/
 rm -rf "$TMP/$ROOT/.git" "$TMP/$ROOT/.github" "$TMP/$ROOT/dist"

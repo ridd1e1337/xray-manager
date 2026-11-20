@@ -6,11 +6,11 @@ OUTPUT_DIR=${1:-"$SOURCE_DIR/dist"}
 SOURCE_COMMIT=$(git -C "$SOURCE_DIR" rev-parse HEAD 2>/dev/null || printf 'unavailable')
 mkdir -p "$OUTPUT_DIR"
 
-"$SOURCE_DIR/build-standalone.sh" "$OUTPUT_DIR/sb-manager-install.sh" >/dev/null
-bash -n "$OUTPUT_DIR/sb-manager-install.sh"
+"$SOURCE_DIR/build-standalone.sh" "$OUTPUT_DIR/xray-manager-install.sh" >/dev/null
+bash -n "$OUTPUT_DIR/xray-manager-install.sh"
 (
   cd "$OUTPUT_DIR"
-  sha256sum sb-manager-install.sh >SHA256SUMS
+  sha256sum xray-manager-install.sh >SHA256SUMS
 )
 jq -n --arg version "$VERSION" --arg built_at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
   --arg source_commit "$SOURCE_COMMIT" \

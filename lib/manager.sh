@@ -24,9 +24,9 @@ _manager_update_components() (
   case "${1:-}" in
     --check) check_only=1; shift;;
     '') ;;
-    *) usage_die '用法：sb update [--check]';;
+    *) usage_die '用法：xm update [--check]';;
   esac
-  (($# == 0)) || usage_die '用法：sb update [--check]'
+  (($# == 0)) || usage_die '用法：xm update [--check]'
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || check_only=1
   (( ! check_only )) || arguments+=(--check)
   if _manager_update "$automatic" "${arguments[@]}"; then
@@ -53,7 +53,7 @@ _manager_update_components() (
     log_info '正在更新已接入管理的 Caddy。'
     # Setup may have replaced every loaded module. Use the installed entry
     # point for this independent transaction while retaining the update lock.
-    if (unset SBM_VERSION; bash "$SBM_LIB/sb" caddy update); then :; else caddy_rc=$?; fi
+    if (unset SBM_VERSION; bash "$SBM_LIB/xm" caddy update); then :; else caddy_rc=$?; fi
   fi
   if (( caddy_rc != 0 )); then
     log_error 'Caddy 更新阶段未完成，请检查上方日志；脚本阶段的结果已保留。'
@@ -77,13 +77,13 @@ manager_auto_reconcile() {
   [[ ${NO_START:-0} != 1 ]] || start=0
   [[ ${SBM_SKIP_INIT:-0} != 1 ]] || return 0
   backend=$(init_system) || return 1
-  unit="$SBM_SYSTEMD_DIR/sb-manager-update.service"
-  timer="$SBM_SYSTEMD_DIR/sb-manager-update.timer"
-  job="$SBM_PERIODIC_DIR/15min/sb-manager-update"
+  unit="$SBM_SYSTEMD_DIR/xm-manager-update.service"
+  timer="$SBM_SYSTEMD_DIR/xm-manager-update.timer"
+  job="$SBM_PERIODIC_DIR/15min/xm-manager-update"
   if ! manager_auto_enabled; then
     if [[ "$backend" == systemd && -f "$timer" ]]; then
       # Disabling future activations must not kill an installer in progress.
-      systemctl disable --now sb-manager-update.timer || return 1
+      systemctl disable --now xm-manager-update.timer || return 1
     fi
     rm -f "$unit" "$timer" "$job" || return 1
     [[ "$backend" != systemd ]] || service_reload_manager || return 1
@@ -95,7 +95,7 @@ manager_auto_reconcile() {
       mkdir -p "$SBM_SYSTEMD_DIR" || return 1
       cat >"$unit" <<EOF_UNIT || return 1
 [Unit]
-Description=Update sb-manager and managed Caddy automatically
+Description=Update xray-manager and managed Caddy automatically
 After=network-online.target
 Wants=network-online.target
 
@@ -103,12 +103,12 @@ Wants=network-online.target
 Type=oneshot
 User=root
 UMask=0077
-ExecStart="$SBM_BIN_DIR/sb" update auto run --scheduled
+ExecStart="$SBM_BIN_DIR/xm" update auto run --scheduled
 TimeoutStartSec=infinity
 EOF_UNIT
       cat >"$timer" <<EOF_TIMER || return 1
 [Unit]
-Description=Daily sb-manager and managed Caddy update
+Description=Daily xray-manager and managed Caddy update
 
 [Timer]
 OnCalendar=*-*-* $time:00
@@ -121,14 +121,14 @@ EOF_TIMER
       chmod 0644 "$unit" "$timer" || return 1
       rm -f "$job" || return 1
       service_reload_manager || return 1
-      [[ "$start" != 1 ]] || systemctl enable --now sb-manager-update.timer || return 1
+      [[ "$start" != 1 ]] || systemctl enable --now xm-manager-update.timer || return 1
       ;;
     openrc)
       mkdir -p "$(dirname "$job")" || return 1
       if [[ "$start" == 1 || -x "$job" ]]; then job_mode=0755; fi
       cat >"$job" <<EOF_JOB || return 1
 #!/usr/bin/env bash
-exec $(printf '%q' "$SBM_BIN_DIR/sb") update auto run --scheduled
+exec $(printf '%q' "$SBM_BIN_DIR/xm") update auto run --scheduled
 EOF_JOB
       chmod "$job_mode" "$job" || return 1
       rm -f "$unit" "$timer" || return 1
@@ -169,8 +169,8 @@ manager_auto_status() {
   time=$(manager_auto_time) || return 1
   backend=$(init_system 2>/dev/null || true)
   case "$backend" in
-    systemd) if systemctl is-active --quiet sb-manager-update.timer; then scheduler=active; fi;;
-    openrc) if [[ -x "$SBM_PERIODIC_DIR/15min/sb-manager-update" ]] && service_active crond; then scheduler=active; fi;;
+    systemd) if systemctl is-active --quiet xm-manager-update.timer; then scheduler=active; fi;;
+    openrc) if [[ -x "$SBM_PERIODIC_DIR/15min/xm-manager-update" ]] && service_active crond; then scheduler=active; fi;;
   esac
   [[ ! -f "$SBM_VAR/updates/manager.json" ]] || record=$(jq . "$SBM_VAR/updates/manager.json") || return 1
   if [[ ${1:-0} == 1 ]]; then
@@ -200,9 +200,9 @@ manager_auto_record() {
 manager_auto_run() (
   require_root
   require_command jq
-  [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '自动更新执行不支持 --dry-run；可使用 sb update --check。'
+  [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '自动更新执行不支持 --dry-run；可使用 xm update --check。'
   local scheduled=${1:-0} day started slot hour minute last='' rc=0
-  manager_auto_enabled || { [[ "$scheduled" == 1 ]] || log_info '自动更新已关闭；立即手动更新可运行 sb update。'; exit 0; }
+  manager_auto_enabled || { [[ "$scheduled" == 1 ]] || log_info '自动更新已关闭；立即手动更新可运行 xm update。'; exit 0; }
   manager_update_lock || { log_info '已有脚本更新正在运行，本次跳过。'; exit 0; }
   manager_auto_enabled || exit 0
   day=$(date +%F)
@@ -244,12 +244,12 @@ manager_update_cli() {
   case "$action" in
     run)
       if [[ ${1:-} == --scheduled ]]; then scheduled=1; shift; fi
-      (($# == 0)) || usage_die '用法：sb update auto run'
+      (($# == 0)) || usage_die '用法：xm update auto run'
       manager_auto_run "$scheduled";;
     status|enable|disable)
       require_root
       if [[ "$action" == status && ${1:-} == --json ]]; then json=1; shift; fi
-      (($# == 0)) || usage_die '用法：sb update auto status [--json] | enable | disable'
+      (($# == 0)) || usage_die '用法：xm update auto status [--json] | enable | disable'
       if [[ "$action" != status && ${SBM_DRY_RUN:-0} == 1 ]]; then usage_die '自动更新开关不支持 --dry-run。'; fi
       state_init 0
       case "$action" in
@@ -257,7 +257,7 @@ manager_update_cli() {
         enable) with_lock _manager_auto_set true;;
         disable) with_lock _manager_auto_set false;;
       esac;;
-    *) usage_die '用法：sb update auto enable|disable|status|run';;
+    *) usage_die '用法：xm update auto enable|disable|status|run';;
   esac
 }
 
@@ -268,9 +268,9 @@ _manager_update() (
   case "${1:-}" in
     --check) check_only=1; shift ;;
     '') ;;
-    *) usage_die '用法：sb update [--check]' ;;
+    *) usage_die '用法：xm update [--check]' ;;
   esac
-  (($# == 0)) || usage_die '用法：sb update [--check]'
+  (($# == 0)) || usage_die '用法：xm update [--check]'
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || check_only=1
   if (( ! check_only )); then
     require_root
@@ -281,16 +281,16 @@ _manager_update() (
   if [[ -z "$repository" && -r "$SBM_LIB/INSTALL_REPOSITORY" ]]; then
     repository=$(cat "$SBM_LIB/INSTALL_REPOSITORY")
     case "$repository" in
-      R1ddle1337/sb-manager|wugan666/sb-manager) repository=ridd1e1337/sb-manager ;;
+      R1ddle1337/xray-manager) repository=ridd1e1337/xray-manager ;;
     esac
   fi
-  repository=${repository:-ridd1e1337/sb-manager}
+  repository=${repository:-ridd1e1337/xray-manager}
   [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die '无效的 GitHub 仓库名。'
   [[ ! -r "$SBM_LIB/INSTALL_COMMIT" ]] || current=$(cat "$SBM_LIB/INSTALL_COMMIT")
   printf '当前脚本：%s（commit：%s）\n' "$SBM_VERSION" "${current:-未记录}"
   response=$(curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
     --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github+json' \
-    -H 'User-Agent: sb-manager' "https://api.github.com/repos/$repository/commits/main") \
+    -H 'User-Agent: xray-manager' "https://api.github.com/repos/$repository/commits/main") \
     || die '检查脚本更新失败，请检查 GitHub 网络连接后重试。'
   latest=$(jq -er '.sha | select(type=="string" and test("^[0-9a-fA-F]{40}$"))' <<<"$response") \
     || die 'GitHub 未返回有效的脚本 commit。'
@@ -299,7 +299,7 @@ _manager_update() (
     exit 0
   fi
   printf '可更新至 commit：%s\n' "$latest"
-  (( ! check_only )) || { printf '执行 sb update 更新脚本；当前核心和节点将保留。\n'; exit 0; }
+  (( ! check_only )) || { printf '执行 xm update 更新脚本；当前核心和节点将保留。\n'; exit 0; }
   [[ -x "$SBM_SING_BOX_BIN" ]] || die '未找到已安装核心；请重新运行安装器。'
   if [[ "$automatic" == 1 ]] && ! manager_auto_enabled; then
     log_info '自动更新已关闭，本次不安装。'; exit 0

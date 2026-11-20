@@ -3,14 +3,14 @@
 
 _backup_create() (
   set -Eeuo pipefail
-  local output=${1:-$SBM_BACKUPS/sb-manager-$(now_stamp).tar.gz} recipient=${2:-} stage='' output_tmp=''
+  local output=${1:-$SBM_BACKUPS/xray-manager-$(now_stamp).tar.gz} recipient=${2:-} stage='' output_tmp=''
   trap '[[ -z "$stage" ]] || rm -rf -- "$stage"; [[ -z "$output_tmp" ]] || rm -f -- "$output_tmp"' EXIT
   if [[ "$SBM_SKIP_INIT" != "1" ]] && declare -F traffic_checkpoint_unlocked >/dev/null 2>&1; then
     traffic_checkpoint_unlocked || return 1
   fi
   mkdir -p "$(dirname "$output")" "$SBM_CACHE" || return 1
   stage=$(mktemp -d "$SBM_CACHE/backup.XXXXXX") || return 1
-  output_tmp=$(mktemp "$(dirname "$output")/.sb-manager-backup.XXXXXX") || return 1
+  output_tmp=$(mktemp "$(dirname "$output")/.xray-manager-backup.XXXXXX") || return 1
   rm -f "$output_tmp" || return 1
   mkdir -p "$stage/etc" "$stage/meta" "$stage/var" || return 1
   cp -a "$SBM_STATE" "$stage/etc/state.json" || return 1
@@ -85,13 +85,13 @@ _restore_backup() (
     die '备份的 OpenList 站点记录与当前不同；请先对齐网站入口。管理器备份不会替换宿主机网站或 OpenList 数据库。'
   fi
   if [[ $(jq -Sc '.caddy // null' "$stage/etc/state.json") != "$(jq -Sc '.caddy // null' "$SBM_STATE")" ]]; then
-    die '备份的 Caddy 程序管理状态与当前不同，请先通过 sb caddy rollback 对齐版本；备份不会覆盖宿主机包管理数据库。'
+    die '备份的 Caddy 程序管理状态与当前不同，请先通过 xm caddy rollback 对齐版本；备份不会覆盖宿主机包管理数据库。'
   fi
   if website_mux_managed "$stage/etc/state.json" || website_mux_managed "$SBM_STATE"; then
     if ! website_mux_managed "$stage/etc/state.json" || ! website_mux_managed "$SBM_STATE" \
       || [[ ! -s "$SBM_WEBSITE_MUX_DIR/manifest.json" ]] \
       || [[ $(jq -Sc '.nginx_stream.website' "$stage/etc/state.json") != "$(jq -Sc '.nginx_stream.website' "$SBM_STATE")" ]]; then
-      die '网站自动接入备份只能恢复到同一接入配置；请先用 sb mux detach 恢复入口，或在目标主机重新接入网站。'
+      die '网站自动接入备份只能恢复到同一接入配置；请先用 xm mux detach 恢复入口，或在目标主机重新接入网站。'
     fi
   fi
   # with_state_transaction already holds the operation-local recovery copy.

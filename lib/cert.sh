@@ -114,7 +114,7 @@ _cert_setup_cloudflare() {
 cert_setup_cloudflare() { with_state_transaction cert-provider _cert_setup_cloudflare "$@"; }
 
 cert_load_cloudflare_env() {
-  [[ -s "$SBM_CF_DNS_ENV" ]] || die "尚未配置 Cloudflare DNS API Token。运行：sb cert setup-cloudflare"
+  [[ -s "$SBM_CF_DNS_ENV" ]] || die "尚未配置 Cloudflare DNS API Token。运行：xm cert setup-cloudflare"
   unset CF_Token CF_Zone_ID CF_Account_ID CF_Key CF_Email
   set -a
   # shellcheck disable=SC1090
@@ -141,7 +141,7 @@ _cert_prepare_node_domain() {
   if cert_usable "$domain"; then log_info "复用现有证书：$domain"; return 0; fi
   cert_load_cloudflare_env || return 1
   email=$(jq -r '.settings.acme_email // ""' "$SBM_STATE") || return 1
-  [[ -n "$email" ]] || { log_error '请先用 sb cert setup-cloudflare 配置 ACME 邮箱。'; return 1; }
+  [[ -n "$email" ]] || { log_error '请先用 xm cert setup-cloudflare 配置 ACME 邮箱。'; return 1; }
   acme_install "$email" || return 1
   zone=$(cloudflare_dns_zone "$domain") || return 1
   cloudflare_dns_prepare "$domain" "$zone" || return 1
@@ -203,7 +203,7 @@ _cert_issue() {
   acme_run_timed "为 $domain 签发证书" "$SBM_ACME_ISSUE_TIMEOUT" '0 2' \
     --home "$SBM_ACME_HOME" --config-home "$SBM_ACME_CONFIG" --cert-home "$SBM_ACME_CERT_HOME" \
     --accountemail "$email" --issue --dns dns_cf -d "$domain" --server letsencrypt --keylength ec-256 || return $?
-  reloadcmd="SBM_SKIP_STATE_INIT=1 $(printf '%q' "$SBM_BIN_DIR/sb") cert hook $(printf '%q' "$domain")"
+  reloadcmd="SBM_SKIP_STATE_INIT=1 $(printf '%q' "$SBM_BIN_DIR/xm") cert hook $(printf '%q' "$domain")"
   acme_run_timed "为 $domain 部署证书" "$SBM_ACME_INSTALL_TIMEOUT" '0' \
     --home "$SBM_ACME_HOME" --config-home "$SBM_ACME_CONFIG" --cert-home "$SBM_ACME_CERT_HOME" \
     --install-cert -d "$domain" --ecc \
@@ -234,7 +234,7 @@ cert_renew() {
   local rc=0
   with_state_transaction cert-renew _cert_renew "$@" || rc=$?
   if (( rc != 0 )) && declare -F notification_send >/dev/null 2>&1; then
-    notification_send certificate_renewal_failed "sb-manager 证书续期失败：$(hostname 2>/dev/null || printf unknown)，请运行 sb cert renew 和 sb logs 检查。" || true
+    notification_send certificate_renewal_failed "xray-manager 证书续期失败：$(hostname 2>/dev/null || printf unknown)，请运行 xm cert renew 和 xm logs 检查。" || true
   fi
   return "$rc"
 }

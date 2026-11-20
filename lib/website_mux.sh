@@ -71,7 +71,7 @@ website_mux_compile_caddy() {
   [[ "$version" =~ ^v2\.[0-9]+\.[0-9]+$ ]] || { log_error '无法识别 Caddy 2 正式版本，拒绝替换。'; return 1; }
   version_ge "${version#v}" 2.11.7 || version=v2.11.8
   digest=$(printf '%s' "$plugins" | sha256sum | cut -c1-12) || return 1
-  target="$SBM_PREFIX/lib/sb-manager-web/caddy-$version-${SBM_WEBSITE_L4_COMMIT:0:12}-$digest"
+  target="$SBM_PREFIX/lib/xray-manager-web/caddy-$version-${SBM_WEBSITE_L4_COMMIT:0:12}-$digest"
   if [[ -x "$target" ]] && "$target" list-modules 2>/dev/null | grep -Fx caddy.listeners.layer4 >/dev/null; then printf '%s\n' "$target"; return; fi
   core_check_free_space "$SBM_CACHE" 1800000000 || return 1
   work=$(mktemp -d "$SBM_CACHE/caddy-build.XXXXXX") || return 1
@@ -103,7 +103,7 @@ website_mux_compile_caddy() {
     [[ -n "$module_id" ]] || continue
     awk '{print $1}' <<<"$built_modules" | grep -Fx "$module_id" >/dev/null || { log_error "重建的 Caddy 缺少原有模块：$module_id"; return 1; }
   done <<<"$module_ids"
-  install -d -m 0755 "$SBM_PREFIX/lib/sb-manager-web" || return 1
+  install -d -m 0755 "$SBM_PREFIX/lib/xray-manager-web" || return 1
   install -m 0755 "$work/caddy" "$target" || return 1
   mkdir -p "$SBM_WEBSITE_MUX_DIR" || return 1
   install -m 0600 "$work/build.log" "$SBM_WEBSITE_MUX_DIR/build.log" || return 1
@@ -131,7 +131,7 @@ _website_mux_setup() {
     if [[ ( "$server" != auto && "$server" != "$(jq -r '.nginx_stream.website.server' "$SBM_STATE")" ) \
        || ( -n "$config" && "$config" != "$(jq -r '.nginx_stream.website.config' "$SBM_STATE")" ) \
        || ( -n "$binary" && "$binary" != "$(jq -r '.nginx_stream.website.binary' "$SBM_STATE")" ) ]]; then
-      log_error '网站接入设置已固定，请先 sb mux detach 再切换程序或路径。'; return 1
+      log_error '网站接入设置已固定，请先 xm mux detach 再切换程序或路径。'; return 1
     fi
     log_info '网站入口已接入，正在同步全部启用的 TCP/TLS 节点。'
     candidate=$(state_candidate) || return 1
@@ -186,7 +186,7 @@ _website_mux_setup() {
   if [[ "$server" == caddy ]]; then
     binary=$(website_mux_build_caddy "$binary") || return 1
     if [[ "$binary" != "$original_binary" ]]; then
-      if [[ "$init" == systemd ]]; then override="$SBM_SYSTEMD_DIR/caddy.service.d/70-sb-manager-l4.conf"
+      if [[ "$init" == systemd ]]; then override="$SBM_SYSTEMD_DIR/caddy.service.d/70-xray-manager-l4.conf"
       else
         grep -Eq '(^|[[:space:]])command=' "$SBM_OPENRC_DIR/caddy" || { log_error '非标准 Caddy OpenRC 服务，无法自动配置启动命令。'; return 1; }
         override="$SBM_OPENRC_DIR/caddy"
@@ -221,7 +221,7 @@ website_mux_setup() {
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '网站接入不支持 --dry-run。'
   with_state_transaction website-setup _website_mux_setup "$@" || return 1
   if [[ $(jq -r '.nginx_stream.website.server' "$SBM_STATE") == caddy ]] && ! caddy_managed; then
-    caddy_manage || { log_warn '网站共用 443 已保留；Caddy 程序维护接入未完成，可运行 sb caddy manage 重试。'; return 1; }
+    caddy_manage || { log_warn '网站共用 443 已保留；Caddy 程序维护接入未完成，可运行 xm caddy manage 重试。'; return 1; }
   fi
 }
 

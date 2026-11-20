@@ -1,7 +1,7 @@
 # 可选运维功能（0.1.0-alpha.32 起）
 
 参考 vps-tcp-tune 的测速、端口计费、代理入口、Tunnel 与 Sub-Store 管理思路，
-按 sb-manager 的状态、凭据和事务模型实现。全部按需启用；默认安装不增加
+按 xray-manager 的状态、凭据和事务模型实现。全部按需启用；默认安装不增加
 Node.js、Python、iperf3 或 tc 依赖。兼容 Debian/systemd 和 Alpine/OpenRC。
 
 从 alpha.42 起，菜单和选择列表用 Enter / `0` 逐级返回；结果页 Enter 直接回到
@@ -21,7 +21,7 @@ BBR/TCP/QUIC 网络调优、测速和系统支持说明。旧主菜单 21 仍可
 
 ## 系统支持说明
 
-`sb vps systems` 显示当前内核架构、包管理器分支、服务管理器和功能范围，
+`xm vps systems` 显示当前内核架构、包管理器分支、服务管理器和功能范围，
 也可在“15. VPS 与网站运维 → 支持的 Linux 系统与当前环境”查看。
 此命令只显示信息，不需要 root，也不会创建状态、安装软件或更改服务。
 
@@ -48,8 +48,8 @@ Debian/Ubuntu、Alpine 自动补装，其他系统需要先安装匹配的模块
 项目的主功能仍是 sing-box 安装与节点管理。基础环境初始化是独立的显式操作：
 
 ```bash
-sb vps init
-sb vps status
+xm vps init
+xm vps status
 ```
 
 也可在首次安装时传入 `--init-vps`，或选择“15. VPS 与网站运维 → 新 VPS 一键初始化”。
@@ -57,7 +57,7 @@ sb vps status
 安装 Caddy、UFW、Fail2ban。Alpine 需要可用的 community 软件源；缺少包时会
 报错，不自动添加第三方源。新 VPS 的基础初始化与网站 443 共存接入是两个功能：
 这里沿用 Caddy 包的默认配置或创建 HTTP 欢迎页，域名网站配置好后可使用
-`sb mux setup` 接入节点分流。
+`xm mux setup` 接入节点分流。
 
 UFW 会允许 22/TCP、80/TCP、443/TCP 和 443/UDP，后者用于 HTTP/3 或 QUIC。
 同时探测 sshd 配置、监听套接字和当前 `SSH_CONNECTION`，保留实际 SSH 端口；
@@ -75,7 +75,7 @@ UFW 会允许 22/TCP、80/TCP、443/TCP 和 443/UDP，后者用于 HTTP/3 或 QU
 
 操作由管理器锁保护。Caddy/Fail2ban 配置经过原生程序校验，Fail2ban 使用
 候选目录校验后安装；UFW 配置和服务状态保存到
-`/var/lib/sb-manager/vps-init/<时间>/`。失败时尝试恢复本次修改的规则、配置
+`/var/lib/xray-manager/vps-init/<时间>/`。失败时尝试恢复本次修改的规则、配置
 和服务状态，已安装的包保留，修正问题后可重试。成功记录位于同目录的
 `last.json`，状态命令读取实时服务状态。备份和日志仅供 root 访问。
 
@@ -98,8 +98,8 @@ Token 需包含目标区域的 `Zone:Read` 和 `DNS:Edit`；Zone ID 可留空自
 已配置 Zone ID 时，域名必须属于该区域。命令行可先保存凭据，再创建节点：
 
 ```bash
-sb cert setup-cloudflare
-sb node add anytls --id edge --domain edge.example.com
+xm cert setup-cloudflare
+xm node add anytls --id edge --domain edge.example.com
 ```
 
 同域名的已有 A/AAAA 只有在指向探测到的本机 IP 且关闭橙云时才复用。
@@ -110,7 +110,7 @@ Reality、ShadowTLS 的握手域名和 VMess Tunnel 域名不走此流程。
 
 探测不到公网地址时可通过 `SBM_PUBLIC_IPV4` / `SBM_PUBLIC_IPV6` 显式提供地址；
 `SBM_DISABLE_IPV6_DETECTION=1` 可只准备 IPv4，但若已有无法核对的 AAAA 则仍会
-拒绝继续。独立的 `sb cert issue DOMAIN` 和证书菜单只签发证书，保留手工
+拒绝继续。独立的 `xm cert issue DOMAIN` 和证书菜单只签发证书，保留手工
 DNS、转发入口和其他部署方式。
 
 DNS 请求与证书申请由管理器锁保护。本次新建记录带独立标记，先写事务日志，
@@ -121,13 +121,13 @@ DNS 请求与证书申请由管理器锁保护。本次新建记录带独立标�
 
 ## Nginx/Caddy 网站一键接入（alpha.54）
 
-网站通过系统的 `nginx` 或 `caddy` 服务监听 TCP/443 时，执行 `sb mux setup`
+网站通过系统的 `nginx` 或 `caddy` 服务监听 TCP/443 时，执行 `xm mux setup`
 即可接入。也可指定 `--server nginx|caddy`、`--config /实际配置路径` 和
 `--binary /实际程序路径`。先接入网站，再添加节点，无需先开放临时端口：
 
 ```bash
-sb mux setup
-sb node add anytls --id any-main --domain node.example.com
+xm mux setup
+xm node add anytls --id any-main --domain node.example.com
 ```
 
 面板入口：“15. VPS 与网站运维 → 网站与节点共用 443 → 一键接入现有 Nginx/Caddy
@@ -142,7 +142,7 @@ Caddy 沿用 HTTP 网站配置并增加 L4 listener wrapper。从 alpha.59 起�
 模块集合和网站配置后才接入。官方构建不可用时保持现状并报错，不自动在 VPS
 安装编译工具。接入完成后自动启用下方的 Caddy 程序维护。
 
-确需本机编译时，可显式使用 `sb mux setup --server caddy --build-caddy`。
+确需本机编译时，可显式使用 `xm mux setup --server caddy --build-caddy`。
 该方式固定 `xcaddy`/`caddy-l4` 源码版本并通过 Go 校验数据库验证模块；缺少
 合适 Go 时，从官方元数据取 SHA-256 校验下载。编译需要约 1.8 GB 可用磁盘；
 Go 模块、构建缓存与工具链均限制在本次临时目录，成功后删除，失败资料受一天
@@ -162,14 +162,14 @@ Python 只在接入时按需安装，用于按语法编辑配置及记录恢复�
 外部修改过的文件不会被显式恢复命令覆盖。
 
 ```bash
-sb mux detach
+xm mux detach
 ```
 
 该命令恢复接入前的网站配置和复用方式；若原先没有分流，节点恢复独立端口。
 若接入前已有 alpha.53 Caddy 分流，则保留它原来的手工配置。相关原节点被删除
 或改了域名时，恢复可能因旧路由不再适用而被拒绝，需先处理旧路由。
 网站配置被人工修改后，恢复会要求先合并修改；不会静默覆盖后来的网站内容。
-恢复信息保存在 `/var/lib/sb-manager/website-mux/`，每次操作的 before-image
+恢复信息保存在 `/var/lib/xray-manager/website-mux/`，每次操作的 before-image
 保存在状态快照内。完整备份包含这些信息供人工恢复，同一接入配置可恢复节点；
 不会把其他主机的网站路径和服务命令直接应用到本机。卸载前也会先恢复网站入口。
 
@@ -179,7 +179,7 @@ Caddy/Nginx HTTP/3 占用 UDP/443 时，Hysteria2/TUIC 不能再直接绑定同�
 ## Caddy 程序维护（alpha.59）
 
 从 alpha.64 起，节点使用独立端口、网站采用官方 stable APT Caddy 时，可在
-Debian/Ubuntu systemd 上执行 `sb caddy apt`，将标准包登记到 `sb update`
+Debian/Ubuntu systemd 上执行 `xm caddy apt`，将标准包登记到 `xm update`
 和原有每日任务。仍可直接运行 `apt update && apt upgrade`；APT 拥有实际
 运行的 `/usr/bin/caddy`。登记命令要求已经恢复标准包，不负责拆除现有 L4、
 更改网站或防火墙，已登记的标准包不会再次接入 L4。
@@ -192,7 +192,7 @@ APT 更新会刷新索引、确认官方源、核对包摘要、保留原版本�
 此维护方式不使用插件构建接口；Alpine/OpenRC 的原有定制程序流程保持不变。
 
 面板入口：“15. VPS 与网站运维 → Caddy 程序维护”。已有 alpha.53–58 网站接入
-使用 `sb caddy manage` 迁移；网站、节点凭据和 DNS 保持原值。新的网站接入自动
+使用 `xm caddy manage` 迁移；网站、节点凭据和 DNS 保持原值。新的网站接入自动
 执行这一操作。接入需要正在运行、可验证的网站服务，不会接管其他工具已有的
 diversion/alternatives 配置。
 
@@ -209,10 +209,10 @@ Alpine/OpenRC 等不使用 Debian 包管理的环境保留发行版程序，使�
 `caddy-managed` 链接和原有服务脚本；按需设置低端口 capability。两种方式都
 保留当前版本和一个可回滚版本，不把运行程序当临时缓存删除。
 
-`sb caddy status` 分别显示命令入口、实际服务、官方包和回滚版本。
-`sb caddy update --check` 仅查询 Caddy 主程序的官方正式版本，不检查插件构建；
-`sb update` 和每日更新任务会在脚本阶段结束后执行受管 Caddy 更新；也可使用
-`sb caddy update` 单独维护。它们使用与官方
+`xm caddy status` 分别显示命令入口、实际服务、官方包和回滚版本。
+`xm caddy update --check` 仅查询 Caddy 主程序的官方正式版本，不检查插件构建；
+`xm update` 和每日更新任务会在脚本阶段结束后执行受管 Caddy 更新；也可使用
+`xm caddy update` 单独维护。它们使用与官方
 `caddy upgrade` 相同的 HTTPS 构建服务下载候选，保留插件集合，并允许发布方
 更新插件版本。从 alpha.61 起，即使主程序版本相同，实际更新仍会下载当前官方
 构建，以免跳过主版本之外的插件或构建依赖更新。候选程序摘要与当前程序相同且
@@ -222,7 +222,7 @@ Alpine/OpenRC 等不使用 Debian 包管理的环境保留发行版程序，使�
 最新正式版时停止，不自动降级。实际插件和依赖版本以官方构建产物为准。
 构建服务未提供独立签名摘要：管理器校验 HTTPS 来源、大小、ELF
 架构、正式版本、模块身份和配置，并记录 SHA-256 用于安装及后续完整性核对。
-不会把自行计算的摘要描述为发布方签名。请通过 `sb update` 维护受管程序，
+不会把自行计算的摘要描述为发布方签名。请通过 `xm update` 维护受管程序，
 直接覆盖二进制会导致摘要检查停止后续升级。
 
 候选配置校验通过后才切换链接，重启 Caddy 并确认实际运行版本；操作失败按
@@ -232,17 +232,17 @@ Alpine/OpenRC 等不使用 Debian 包管理的环境保留发行版程序，使�
 继续保留，以维持解除入口的能力。手动完整备份要求 Caddy 管理状态匹配，
 不会直接覆盖另一台主机的包管理数据库。
 
-网站分流恢复与 Caddy 程序维护是独立操作；`sb mux detach` 恢复网站配置，
-已经接入的程序维护仍然保留。卸载 sb-manager 不删除运行网站需要的 Caddy
+网站分流恢复与 Caddy 程序维护是独立操作；`xm mux detach` 恢复网站配置，
+已经接入的程序维护仍然保留。卸载 xray-manager 不删除运行网站需要的 Caddy
 程序、官方包或 alternatives 链接。
 
-从 alpha.63 起，`sb update` 和 `sb update auto run` 统一处理脚本与已接入管理的
-Caddy，沿用原有 `sb-manager-update.timer` 或 OpenRC periodic 任务、每日执行时间
+从 alpha.63 起，`xm update` 和 `xm update auto run` 统一处理脚本与已接入管理的
+Caddy，沿用原有 `xm-manager-update.timer` 或 OpenRC periodic 任务、每日执行时间
 和自动更新开关。脚本没有新提交时仍检查 Caddy；脚本阶段失败也会尝试 Caddy 阶段，
 任一阶段失败都会使整体返回非零。两个阶段分别提交和回滚，Caddy 失败不撤销已经
 成功的脚本更新。脚本升级后使用新的已安装入口执行 Caddy 更新；未接入管理的
 网站程序会跳过。自动更新关闭后不启动后续阶段，正在执行的阶段完成后退出。
-`sb update --check` 和 `sb --dry-run update` 只查询版本，不写状态、不下载构建或
+`xm update --check` 和 `xm --dry-run update` 只查询版本，不写状态、不下载构建或
 切换程序；版本查询无法判断同一主版本下的插件构建差异。sing-box 和 cloudflared
 的更新策略保持独立。
 
@@ -252,12 +252,12 @@ Caddy，沿用原有 `sb-manager-update.timer` 或 OpenRC periodic 任务、每�
 Xray 运行，sing-box 不渲染 VLESS 入站，也不生成 Reality 密钥。旧状态中的
 `sing-box` 或缺失值在状态迁移时改为 `xray`，随后的渲染按需安装官方 Xray，
 先重启 sing-box 释放端口再启动 Xray；节点凭据与 Reality 密钥（同为 X25519）
-保持不变。`sb mux` 的 sing-box 后端只做 TCP/SNI 转发，不解析 VLESS。
-`sb xray disable` 将引擎设为
+保持不变。`xm mux` 的 sing-box 后端只做 TCP/SNI 转发，不解析 VLESS。
+`xm xray disable` 将引擎设为
 `disabled` 并暂停 VLESS，其余协议保持工作。共用 443 的 Reality 节点需先解除
 网站入口才能停用，以免网站随代理节点停机。
 
-`sb xray install|update|status|config` 和面板 `8 → 13` 管理官方 Xray。
+`xm xray install|update|status|config` 和面板 `8 → 13` 管理官方 Xray。
 支持官方两位年份版本号（如 v26.11.9），核对 Release SHA-256 或官方 .dgst，
 只提取 Xray 程序，不安装此配置用不到的 geoip/geosite 数据库。两份配置分别原生
 校验后才原子安装；按实际配置变化重启对应服务，失败恢复两份配置及服务定义。
@@ -271,7 +271,7 @@ Vision flow 写入每个 clients 项，Reality 使用最新 target 字段并支�
 
 ## VLESS 原生 Xray 参数（alpha.73）
 
-VLESS 结构化参数只是原生 Xray 入站/出站对象的视图：`sb node set ID --transport
+VLESS 结构化参数只是原生 Xray 入站/出站对象的视图：`xm node set ID --transport
 raw|ws|grpc|httpupgrade|xhttp|kcp|hysteria --security none|tls|reality` 及
 `--path/--host/--service-name/--xhttp-mode/--tls-server-name/--fingerprint/--alpn/
 --flow/--packet-encoding/--vless-encryption/--vless-decryption/--transport-json/
@@ -302,7 +302,7 @@ Xray 配置固定包含 `direct`（freedom，默认拒绝私有目标）与 `blo
 其后是自定义出站；`via` 渲染为 `streamSettings.sockopt.dialerProxy`。leastPing/
 leastLoad 负载均衡自动生成 `burstObservatory`（generate_204，1 分钟）。默认出口
 渲染为最后一条 `network: tcp,udp` 规则。所有变更经完整 `xray run -test`。
-同一次 Stats API 读取同时记录 `inbound>>>`/`outbound>>>` 计数，`sb xray traffic`
+同一次 Stats API 读取同时记录 `inbound>>>`/`outbound>>>` 计数，`xm xray traffic`
 查看、`reset` 清零。
 
 在线 IP 统计会忽略 127.0.0.1/::1 来源（Xray 上游行为）；节点只监听本机时需要
@@ -324,16 +324,16 @@ Telegram 机器人作为 root 服务长轮询 getUpdates，令牌经 curl 标准
 ## OpenList 与 Reality 共用 443（alpha.72）
 
 ```bash
-sb vps reality files.example.com nginx
-sb vps reality files.example.com caddy
-sb reality setup files.example.com nginx --node EXISTING_VLESS_ID
-sb reality status
-sb reality detach
+xm vps reality files.example.com nginx
+xm vps reality files.example.com caddy
+xm reality setup files.example.com nginx --node EXISTING_VLESS_ID
+xm reality status
+xm reality detach
 ```
 
 前两条是二选一的新 VPS 初始化入口，会安装网站、OpenList、Xray、UFW 和 Fail2ban。
-面板入口为 `15 → 10 → 1`。`sb reality setup` 默认不改变防火墙；追加 `--init-vps`
-或使用 `sb vps reality` 才显式配置基础防护。新主机只放行 22/TCP、80/TCP、443/TCP、
+面板入口为 `15 → 10 → 1`。`xm reality setup` 默认不改变防火墙；追加 `--init-vps`
+或使用 `xm vps reality` 才显式配置基础防护。新主机只放行 22/TCP、80/TCP、443/TCP、
 443/UDP，同时保留当前 SSH 端口和已有规则，不会清空现有主机规则。
 支持 Debian/Ubuntu systemd 与 Alpine OpenRC；默认选择更节省磁盘的 Nginx。
 
@@ -351,8 +351,8 @@ Caddy 支持标准单文件具名站点，复杂 import、监听包装、来源 
 Nginx 支持标准 http/include，复杂 stream/mail、来源 IP 访问控制或自定义地址绑定拒绝。
 普通网站日志会看到代理后的本机地址，这不是客户端真实 IP。
 
-`sb reality detach` 先停用对应 Reality 节点，再恢复普通网站 443，保留节点凭据和
-OpenList 数据。当前网站恢复所需的少量配置保存在 `/var/lib/sb-manager/reality-site/current`，
+`xm reality detach` 先停用对应 Reality 节点，再恢复普通网站 443，保留节点凭据和
+OpenList 数据。当前网站恢复所需的少量配置保存在 `/var/lib/xray-manager/reality-site/current`，
 属于活动入口配置；它在解除入口时删除。日常节点操作不能隐式停掉这个网站入口。
 普通 OpenList 移除和卸载也先处理 Reality 入口。手动备份不能隐式迁移网站端口。
 
@@ -360,23 +360,23 @@ OpenList 官方 v4.2.10 amd64 解压程序约 162.3 MiB，Xray v26.11.9 约 33.8
 脚本在安装前估算剩余空间，下载后再按实际展开大小留至少 32 MiB 余量；不足即停止。
 程序只保留当前版本，操作中的旧程序用于失败恢复，完成后清理。压缩包优先暂存在
 `/tmp` 并检查 tmpfs 的可用空间/内存。OpenList 默认 Go 内存软目标 128 MiB，可通过
-`/etc/default/sb-openlist` 或 OpenRC 配置覆盖，软目标不是进程 RSS 硬上限。
+`/etc/default/xm-openlist` 或 OpenRC 配置覆盖，软目标不是进程 RSS 硬上限。
 1 GiB 物理磁盘若大量划给 /boot 和 swap，根分区可能装不下这些组件；脚本不会
 自动重分区或占用 /boot。小磁盘应使用外部网盘，不宜放本地上传和下载缓存。
 
 ## OpenList 网站配置（alpha.71）
 
 面板 `15 → 9` 可安装、更新 OpenList，并选择 Caddy 或 Nginx 配置域名。
-命令为 `sb openlist install|update|status`、`sb openlist setup DOMAIN caddy|nginx`
-和 `sb openlist detach DOMAIN`。网站服务需已安装、运行并使用标准配置路径。
+命令为 `xm openlist install|update|status`、`xm openlist setup DOMAIN caddy|nginx`
+和 `xm openlist detach DOMAIN`。网站服务需已安装、运行并使用标准配置路径。
 支持 Debian/Ubuntu 的 systemd 和 Alpine 的 OpenRC；检测到自定义启动配置、
 已接入网站分流、域名冲突或其他程序占用网站端口时会停止操作。
 
 安装从 OpenListTeam/OpenList 最新正式 Release 下载匹配架构的程序，核对
-GitHub 提供的 SHA-256 摘要后保存。独立 `sb-openlist` 用户运行服务，默认只监听
+GitHub 提供的 SHA-256 摘要后保存。独立 `xm-openlist` 用户运行服务，默认只监听
 `127.0.0.1:5244`，关闭 OpenList 自带文件日志及 FTP/SFTP/S3/MCP 入口。
-首次上线前显式初始化管理员，输出保存至 `/etc/sb-manager/secrets/openlist-admin.txt`，
-权限为 `0600`；更新不重置密码。数据目录为 `/var/lib/sb-openlist`，管理本机 SQLite。
+首次上线前显式初始化管理员，输出保存至 `/etc/xray-manager/secrets/openlist-admin.txt`，
+权限为 `0600`；更新不重置密码。数据目录为 `/var/lib/xm-openlist`，管理本机 SQLite。
 更新前停止服务并备份 SQLite、配置、程序链接和服务文件；失败恢复并重启旧服务。
 缓存下载结束即删除，文件日志和专属 journal 纳入一天维护策略；只保留当前程序，
 临时 SQLite/服务恢复记录在成功或恢复完成后立即删除。旧 systemd 的系统日志仍沿用宿主机策略。
@@ -386,10 +386,10 @@ Caddy 自动申请 HTTPS，域名需已解析至服务器。Nginx 使用本项�
 站点写入 Nginx 主配置同目录的隐藏片段，并在 http 块显式 include，兼容 Debian 的
 conf.d 与 Alpine 的 http.d。两种网站程序都先保存配置、校验候选、原子安装和平滑
 重载，再确认本机 HTTPS 入口；失败恢复本次变更，已有站点域名拒绝覆盖。
-操作期间的配置记录位于 `/var/lib/sb-manager/backups/openlist/`，受保护并在操作结束后删除。
+操作期间的配置记录位于 `/var/lib/xray-manager/backups/openlist/`，受保护并在操作结束后删除。
 
 普通卸载移除受管网站入口、停止服务，保留 OpenList 数据；彻底卸载会删除默认路径
-中的 OpenList 数据和日志。完整 `sb backup` 仍只备份管理器数据；OpenList 的数据库
+中的 OpenList 数据和日志。完整 `xm backup` 仍只备份管理器数据；OpenList 的数据库
 及上传文件需单独备份其数据目录。共享 Reality 入口使用上节的专用命令。
 
 面板 `8 → 13` 也已接入 Xray 管理；VLESS 向导支持输入原生 JSON 或 `@FILE`。
@@ -397,7 +397,7 @@ Xray 配置在候选文件校验成功后原子替换，失败保留现有配置
 
 ## 缓存与日志的一天保留策略
 
-`sb maintenance status` 查看策略；`sb maintenance run` 立即维护。正常安装
+`xm maintenance status` 查看策略；`xm maintenance run` 立即维护。正常安装
 启用每 15 分钟的 systemd timer 或 OpenRC periodic 任务，`--no-start` 仅写入
 任务定义。维护使用更新、安装和管理器锁，避免清理正在使用的候选程序。
 
@@ -406,7 +406,7 @@ Xray 配置在候选文件校验成功后原子替换，失败保留现有配置
 1 MiB 在下一轮维护时截断，不重启代理服务。诊断、管理器更新、网站构建日志
 同样按时间和容量清理。活动操作、停机或调度器不可用期间无法保证准时清理。
 
-systemd 245+ 使用独立 `sb-manager` journal namespace：23 小时、持久总量
+systemd 245+ 使用独立 `xray-manager` journal namespace：23 小时、持久总量
 4 MiB，并每 15 分钟轮转与清理；不修改主机默认 namespace。日志命令和
 Quick Tunnel 域名发现同时兼容迁移前后的日志。迁移前共享 journal 中的旧记录
 不能按单个服务物理删除，仍沿用宿主机策略；systemd 245 之前也保留主机策略。
@@ -424,9 +424,9 @@ Caddy 已监听 443 时，先为 AnyTLS 等 TLS 节点选一个空闲端口，�
 `reverse_proxy` 无法透传 AnyTLS。管理器不会安装模块或改写 Caddy 网站配置。
 
 ```bash
-sb node add anytls --id any-main --domain node.example.com --port 24443
-sb mux auto any-main --port 443 --backend caddy
-sb mux caddy
+xm node add anytls --id any-main --domain node.example.com --port 24443
+xm mux auto any-main --port 443 --backend caddy
+xm mux caddy
 ```
 
 启用后，节点改为只监听分配的 `127.0.0.1:后端端口`，分享链接和订阅使用
@@ -447,11 +447,11 @@ sb mux caddy
 ## SOCKS5、HTTP 和 mixed 入口
 
 ```bash
-sb node add socks --id socks-local --port 1080
-sb node add http --id http-local --port 8080
-sb node add mixed --id mixed-main --listen 0.0.0.0 --address 192.0.2.20 --port 1081
-sb share mixed-main
-sb user add mixed-main second-user
+xm node add socks --id socks-local --port 1080
+xm node add http --id http-local --port 8080
+xm node add mixed --id mixed-main --listen 0.0.0.0 --address 192.0.2.20 --port 1081
+xm share mixed-main
+xm user add mixed-main second-user
 ```
 
 默认监听 `127.0.0.1`，也可选 `::1`、`0.0.0.0`、`::`。每个用户自动生成
@@ -468,10 +468,10 @@ outbound，避免绕过配额。未启用流量策略时保留核心原有 UDP �
 ## 节点到期与续期
 
 ```bash
-sb node expiry mixed-main --days 30
-sb node expiry mixed-main --at 2027-01-01T00:00:00Z
-sb node expiry mixed-main
-sb node expiry mixed-main --clear
+xm node expiry mixed-main --days 30
+xm node expiry mixed-main --at 2027-01-01T00:00:00Z
+xm node expiry mixed-main
+xm node expiry mixed-main --clear
 ```
 
 `--days` 从原到期日与当前时间中较晚的时刻延长；`--at` 使用 UTC。到期任务
@@ -480,18 +480,18 @@ sb node expiry mixed-main --clear
 
 复用流量维护任务：systemd 每 5 分钟、OpenRC periodic 每 15 分钟检查，停用
 可能有一个检查周期的延迟；OpenRC 需要运行 cron。配置通知后，在到期前 3 天
-和停用后分别发送去重通知。`sb traffic tick` 可主动执行检查。
+和停用后分别发送去重通知。`xm traffic tick` 可主动执行检查。
 
 面板：“管理现有节点 → 设置/延长节点有效期”。
 
 ## 多节点共享配额
 
 ```bash
-sb traffic group set family --nodes snell-main,hy2-main,mixed-main --quota 500G \
+xm traffic group set family --nodes snell-main,hy2-main,mixed-main --quota 500G \
   --reset-day 1 --quota-mode total
-sb traffic group status --json
-sb traffic group reset family
-sb traffic group remove family
+xm traffic group status --json
+xm traffic group reset family
+xm traffic group remove family
 ```
 
 使用共享 nftables quota 和独立组用量账本，支持双向合计或仅下行；与单节点
@@ -509,12 +509,12 @@ sb traffic group remove family
 官方 `tunnel login` / `tunnel create NAME` 流程取得。
 
 ```bash
-sb cloudflared install
-sb tunnel managed 11111111-2222-3333-4444-555555555555 /root/tunnel-credentials.json
-sb tunnel route add web app.example.com http://127.0.0.1:3001
-sb tunnel route add api app.example.com http://127.0.0.1:9080 '^/api/'
-sb tunnel route list
-sb tunnel route remove api
+xm cloudflared install
+xm tunnel managed 11111111-2222-3333-4444-555555555555 /root/tunnel-credentials.json
+xm tunnel route add web app.example.com http://127.0.0.1:3001
+xm tunnel route add api app.example.com http://127.0.0.1:9080 '^/api/'
+xm tunnel route list
+xm tunnel route remove api
 ```
 
 在 Cloudflare 将域名 CNAME 指向 `<UUID>.cfargotunnel.com`，或自行使用
@@ -527,7 +527,7 @@ sb tunnel route remove api
 
 ## Snell 分享与客户端导入
 
-`sb share NODE_ID` 和面板分享功能优先显示可复制的 Surge 原生配置，放入
+`xm share NODE_ID` 和面板分享功能优先显示可复制的 Surge 原生配置，放入
 Surge 配置文件的 `[Proxy]` 段即可。单节点还保存 `surge.conf`；批量分享先显示
 全部可用 Snell 原生行，再显示其他协议链接，并保存 `snell-surge.conf`。
 这些文件与凭据一样按 0600 保存。
@@ -550,7 +550,7 @@ Sub-Store 是**订阅整理工具**。它把本机、其他 VPS 或已有订阅�
 只使用一个节点时直接导入分享内容即可，无需安装 Sub-Store。
 
 在“20. Sub-Store 订阅管理”选择“11. 首次设置”，会安装或启用组件，把本机
-节点接入 `sb-manager` 来源，加入 `sb-manager-all` 组合，并显示访问方法。
+节点接入 `xray-manager` 来源，加入 `xray-manager-all` 组合，并显示访问方法。
 已有安装会复用，节点变更后无需重新运行向导。选“12. 使用指南”可随时查看说明。
 
 首次使用流程：
@@ -560,7 +560,7 @@ Sub-Store 是**订阅整理工具**。它把本机、其他 VPS 或已有订阅�
    SSH 端口。默认示例：`ssh -N -L 3001:127.0.0.1:3001 -p 22 root@YOUR_VPS_IP`。
 3. 保持连接，在该电脑浏览器打开 `http://127.0.0.1:3001/`；网页要求后端地址时，
    填入面板显示的完整后端 URL（含随机访问路径）。无需在 UFW 开放 3001。
-4. 打开 `sb-manager-all` 组合，选择客户端格式，导出内容并导入客户端。
+4. 打开 `xray-manager-all` 组合，选择客户端格式，导出内容并导入客户端。
    单用户 Snell 可选择 Surge；多用户 Snell 请通过主菜单 5 直接导出 sing-box 配置。
 5. 合并其他服务器时，选择“9. 接入其他 VPS/订阅并合并来源”，填写中心机
    能访问的订阅地址。来源服务器无需安装 Sub-Store。
@@ -574,15 +574,15 @@ Sub-Store 是**订阅整理工具**。它把本机、其他 VPS 或已有订阅�
 ## Sub-Store 生命周期与节点同步
 
 ```bash
-sb substore install --port 3001
-sb substore update --version 2.39.9 --frontend-version 2.32.2
-sb substore status --json
-sb substore access
-sb substore sync sb-manager
-sb substore backup /root/substore-backup.tar.gz
-sb substore restore /root/substore-backup.tar.gz
-sb substore disable
-sb substore enable
+xm substore install --port 3001
+xm substore update --version 2.39.9 --frontend-version 2.32.2
+xm substore status --json
+xm substore access
+xm substore sync xray-manager
+xm substore backup /root/substore-backup.tar.gz
+xm substore restore /root/substore-backup.tar.gz
+xm substore disable
+xm substore enable
 ```
 
 按需安装发行版 Node.js 和 Python，下载官方后端 bundle 与前端 Release，并
@@ -590,12 +590,12 @@ sb substore enable
 `access` 显示前后端地址。可用 SSH 转发，或显式配置 Tunnel 路由访问。
 
 `sync` 一次接入本机动态来源，后续节点变更自动更新，再次执行复用有效令牌。
-首次执行也会把来源加入默认组合 `sb-manager-all`。原有本地订阅在对同名来源
+首次执行也会把来源加入默认组合 `xray-manager-all`。原有本地订阅在对同名来源
 执行 `sync` 时转为动态来源，已有处理规则保留。凭据保存在 secrets 目录，程序和数据位于
-`/var/lib/sb-manager/substore/`。服务使用现有服务账号，支持 systemd/OpenRC。
+`/var/lib/xray-manager/substore/`。服务使用现有服务账号，支持 systemd/OpenRC。
 更新或恢复失败会回退程序、数据和设置。
 
-独立备份和完整 `sb backup` 都包含 Sub-Store 数据；备份期间短暂停止正在运行
+独立备份和完整 `xm backup` 都包含 Sub-Store 数据；备份期间短暂停止正在运行
 的 Sub-Store 以取得一致副本，再恢复服务。备份含访问路径和订阅凭据，权限为
 0600。普通卸载停止组件并保留数据，彻底卸载才删除。完整恢复沿用 128 MiB
 压缩 / 512 MiB 解压上限；独立恢复为 128 MiB 压缩 / 256 MiB 解压上限。
@@ -604,7 +604,7 @@ sb substore enable
 
 ## 多服务器接入与动态订阅（alpha.34）
 
-只有中心服务器需要安装 Sub-Store。其他使用 sb-manager 的服务器提供动态
+只有中心服务器需要安装 Sub-Store。其他使用 xray-manager 的服务器提供动态
 订阅地址，中心登记一次，客户端以后更新组合订阅时自动拉取最新节点。
 节点增删、启停、地址/端口变更、用户变更和凭据轮换都会更新动态内容。
 客户端仍需按自身的订阅刷新周期拉取，已导入的配置不会被主动推送替换。
@@ -612,9 +612,9 @@ sb substore enable
 在每台来源服务器创建动态地址：
 
 ```bash
-sb subscription create never mixed --live --base-url https://sub.example.com
+xm subscription create never mixed --live --base-url https://sub.example.com
 # 或仅在 30 天内有效：
-sb subscription create 30d mixed --live --base-url https://sub.example.com
+xm subscription create 30d mixed --live --base-url https://sub.example.com
 ```
 
 `--base-url` 填写**已配置好**的 HTTPS 入口，需把 `/sub/` 请求转发到该服务器
@@ -625,16 +625,16 @@ sb subscription create 30d mixed --live --base-url https://sub.example.com
 在中心机接入本机和远程来源：
 
 ```bash
-sb substore sync local-server
-sb substore source add server-b 'https://sub.example.com/sub/TOKEN?format=substore'
-sb substore source list
-sb substore source check server-b
-sb substore source remove server-b
-# 最后一个参数可选择另一个组合；默认 sb-manager-all：
-sb substore source add server-c 'https://other.example.com/sub/TOKEN?format=substore' my-servers
+xm substore sync local-server
+xm substore source add server-b 'https://sub.example.com/sub/TOKEN?format=substore'
+xm substore source list
+xm substore source check server-b
+xm substore source remove server-b
+# 最后一个参数可选择另一个组合；默认 xray-manager-all：
+xm substore source add server-c 'https://other.example.com/sub/TOKEN?format=substore' my-servers
 ```
 
-打开 Sub-Store 网页中的 `sb-manager-all` 组合，选择支持所用协议的客户端
+打开 Sub-Store 网页中的 `xray-manager-all` 组合，选择支持所用协议的客户端
 格式并导出订阅。后续无需复制节点或重建组合。添加同名来源更新其 URL，并
 保留处理规则；加入组合时保留已有成员顺序和其他设置。移除来源由 Sub-Store
 清理组合中的引用，不自动撤销原服务器令牌。其他脚本的 HTTPS 订阅也可接入。
@@ -650,8 +650,8 @@ sb substore source add server-c 'https://other.example.com/sub/TOKEN?format=subs
 创建时显示，节点变更不会换令牌；发现泄露时在来源服务器按 ID 撤销并重新接入：
 
 ```bash
-sb subscription list
-sb subscription revoke SUBSCRIPTION_ID
+xm subscription list
+xm subscription revoke SUBSCRIPTION_ID
 ```
 
 状态事务成功后，管理器把当前订阅内容写入一个原子替换的文件。订阅 HTTP
@@ -662,12 +662,12 @@ sb subscription revoke SUBSCRIPTION_ID
 ## tc 下行平滑限速
 
 ```bash
-sb deps install shaping
-sb traffic set mixed-main --download-rate 50M --upload-rate 20M
-sb traffic shaping plan eth0 --capacity 1G
-sb traffic shaping enable eth0 --capacity 1G
-sb traffic shaping status --json
-sb traffic shaping disable
+xm deps install shaping
+xm traffic set mixed-main --download-rate 50M --upload-rate 20M
+xm traffic shaping plan eth0 --capacity 1G
+xm traffic shaping enable eth0 --capacity 1G
+xm traffic shaping status --json
+xm traffic shaping disable
 ```
 
 对所选网卡上直连节点的**下行**执行 HTB + fq_codel 排队整形。容量参数是
@@ -677,7 +677,7 @@ Tunnel/TCP-SNI 复用的 loopback 回源和其他网卡的流量继续使用 nft
 
 只接管内核默认 noqueue/mq/fq/fq_codel，或管理器之前恢复的相同队列。自定义
 队列、过滤器或无法还原的参数会被拒绝。原队列记录保存在
-`/var/lib/sb-manager/shaping/`。调整失败尝试回滚，停用或卸载时恢复；恢复失败
+`/var/lib/xray-manager/shaping/`。调整失败尝试回滚，停用或卸载时恢复；恢复失败
 保留记录并中止卸载。默认安装不启用整形。
 
 面板：“流量统计、配额与限速 → tc 下行平滑限速”。

@@ -54,8 +54,8 @@ Simplified example:
       "domain": "edge.example.com",
       "provider": "acme.sh/dns_cf",
       "key_type": "ec-256",
-      "certificate_path": "/etc/sb-manager/certs/edge.example.com/fullchain.pem",
-      "key_path": "/etc/sb-manager/certs/edge.example.com/key.pem"
+      "certificate_path": "/etc/xray-manager/certs/edge.example.com/fullchain.pem",
+      "key_path": "/etc/xray-manager/certs/edge.example.com/key.pem"
     }
   ],
   "nodes": [
@@ -98,7 +98,7 @@ accepted only on VLESS nodes because the counters come from the Xray Stats API.
 `suspended` is `null`, `quota`, `expired` or `ip`; while suspended the user has
 `enabled: false` and `resume_enabled` stores the state to restore. A node whose
 users are all suspended stays enabled but is not rendered. Per-user counters live
-in `/var/lib/sb-manager/user-usage.json` (keys `<node-id>:<user-id>`, also used as
+in `/var/lib/xray-manager/user-usage.json` (keys `<node-id>:<user-id>`, also used as
 the Xray client `email`). `settings.xray_api_port` (default 10085) is the
 loopback Stats API port and must not equal any node port.
 
@@ -132,7 +132,7 @@ Last-attempt state and logs live under `var/updates/`, not in topology state.
 
 `settings.xray_update_policy` is `manual`, `notify`, `patch`, or `stable` and
 defaults to `notify`. Xray-core is an optional service provider managed by
-`sb xray`; downloaded binaries and generated configuration remain outside
+`xm xray`; downloaded binaries and generated configuration remain outside
 topology state. `settings.vless_engine` is `xray` or `disabled`. Legacy `sing-box` or missing
 values normalize to `xray`; sing-box never renders VLESS. Xray renders only
 VLESS; sing-box renders the other enabled nodes. `disabled` pauses VLESS without
@@ -142,7 +142,7 @@ and unchanged services keep running. The state schema version remains 2.
 Since alpha.64, optional `caddy_apt: {"enabled": true, "config": "/etc/caddy/Caddyfile"}`
 enrolls a standard official stable APT package in the same updater. It is
 mutually exclusive with `caddy` and managed website multiplexing. Enrollment
-is explicit (`sb caddy apt`), requires a standard Debian/Ubuntu systemd Caddy
+is explicit (`xm caddy apt`), requires a standard Debian/Ubuntu systemd Caddy
 installation, and never removes an existing L4 deployment. APT continues to
 own `/usr/bin/caddy`; version and build hashes are obtained from the package,
 not pinned in topology state. This provider never invokes the plugin build
@@ -160,7 +160,7 @@ support information, and prioritizes native Surge entries when sharing Snell.
 It adds no state fields or migrations. Generated export files remain derived
 artifacts; Snell credentials and the schema version remain unchanged.
 
-Notification provider choice and thresholds are non-secret state. Telegram tokens/chat IDs and Webhook URLs live only in `secrets/notifications.json` with mode `0600`. Delivery deduplication and the last health report are runtime journals under `/var/lib/sb-manager/`.
+Notification provider choice and thresholds are non-secret state. Telegram tokens/chat IDs and Webhook URLs live only in `secrets/notifications.json` with mode `0600`. Delivery deduplication and the last health report are runtime journals under `/var/lib/xray-manager/`.
 
 Snell nodes require a sing-box 1.14.0-rc.1 or newer core. `snell_version` is 5 or 6 (existing schema-v2 nodes normalize to 5; new nodes default to 5). Version 5 uses `obfs_mode`/`obfs_host` and exports a compatible v4 client; version 6 uses `snell_mode` (`default`, `unshaped`, or `unsafe-raw`) and requires sing-box 1.14.0-rc.2 or newer. Their protocol-level secret stores the server `psk`; each user secret stores a Snell `userkey`.
 
@@ -191,13 +191,13 @@ Hysteria2 nodes may set `obfs.type` to `salamander` or the sing-box 1.14-only `g
 
 Multiple TLS nodes may reference the same `certificates[].domain` and certificate files. Certificate identity is independent from listener binding; transport/port validation still prevents two direct TCP listeners from using the same port.
 
-Every node has a normalized `traffic` object. `configured` distinguishes a never-configured node from a disabled policy; `enabled` controls runtime rules without discarding policy or usage. `quota_bytes` and either directional rate may be `null` for unlimited. `quota_mode` is `total` (upload plus download) or `download`; `reset_day` is an integer from 1 through 28 and is evaluated in UTC. Rate values are stored as bit/s. Accumulated counters are runtime data and live in `/var/lib/sb-manager/traffic-usage.json`, not in state or generated sing-box configuration.
+Every node has a normalized `traffic` object. `configured` distinguishes a never-configured node from a disabled policy; `enabled` controls runtime rules without discarding policy or usage. `quota_bytes` and either directional rate may be `null` for unlimited. `quota_mode` is `total` (upload plus download) or `download`; `reset_day` is an integer from 1 through 28 and is evaluated in UTC. Rate values are stored as bit/s. Accumulated counters are runtime data and live in `/var/lib/xray-manager/traffic-usage.json`, not in state or generated sing-box configuration.
 
 `nginx_stream` retains its historical key for TCP/SNI mux backends.
 `backend` is `sing-box`, `nginx`, `caddy`, or `nginx-site`. The `caddy` backend represents an
 operator-owned Caddy L4 frontend: the manager renders loopback node listeners,
 exports the public port, and observes `caddy.service` (`caddy` on OpenRC).
-It does not install, stop, rewrite or reload Caddy. `sb mux caddy` emits a
+It does not install, stop, rewrite or reload Caddy. `xm mux caddy` emits a
 listener-wrapper snippet to integrate into that frontend after route changes.
 New empty configurations default to
 `sing-box`; legacy configurations missing `backend` keep `nginx` when enabled
@@ -210,7 +210,7 @@ service override and stream module paths, plus reserved `website_port` and
 `relay_port`. The frontend stays enabled at port 443 even without active nodes.
 Routes are derived from enabled SNI-capable nodes on each candidate operation;
 existing route backend ports are reused. `nginx-site` uses the host's Nginx
-service rather than the separate sb-manager Nginx service.
+service rather than the separate xray-manager Nginx service.
 
 The website source files remain operator-owned. Protected host journals under
 `var/website-mux/` store original file contents and installed hashes; operation
@@ -250,7 +250,7 @@ Existing v1 installations migrate once, before rendering, with a pre-migration s
 
 `nodes[].singbox.inbound` and `nodes[].singbox.outbound` are optional JSON
 objects for fields introduced by newer sing-box releases. They are accepted by
-`sb node add` and `sb node set` through `--sing-box-inbound-json` and
+`xm node add` and `xm node set` through `--sing-box-inbound-json` and
 `--sing-box-outbound-json` (or `@FILE`), merged into generated server and client
 objects, and checked by the installed core. The manager keeps `type`, `tag`,
 addresses, ports, users, and credentials authoritative. Compound protocol
@@ -325,7 +325,7 @@ Optional `openlist.sites` records contain `domain`, `server` (`caddy` or `nginx`
 website ownership, certificate reloads and explicit detach. Site changes use
 protected filesystem journals before updating this state; they do not restart
 sing-box. OpenList itself owns its SQLite/configuration data under
-`/var/lib/sb-openlist`; this independent application's data is not included in
+`/var/lib/xm-openlist`; this independent application's data is not included in
 the manager's full backup. Initial admin output is stored as a protected secret.
 
 ## Reality website entry

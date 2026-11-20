@@ -88,7 +88,7 @@ openlist_download_latest() (
       log_error '内存不足以安全暂存 OpenList 官方压缩包；请设置 SBM_DOWNLOAD_TMP 为容量充足的磁盘目录。'; return 1;
     }
   fi
-  tmpdir=$(mktemp -d "$SBM_DOWNLOAD_TMP/sb-manager-openlist.XXXXXX") || return 1
+  tmpdir=$(mktemp -d "$SBM_DOWNLOAD_TMP/xray-manager-openlist.XXXXXX") || return 1
   trap 'rm -rf -- "$tmpdir"; [[ -z "$candidate" ]] || rm -f -- "$candidate"' EXIT
   archive="$tmpdir/$name"
   download_file_with_retries "$url" "$archive" "OpenList $version" 5 || return 1
@@ -137,7 +137,7 @@ openlist_write_service() {
     systemd)
       cat >"$unit" <<EOF_UNIT || return 1
 [Unit]
-Description=sb-manager managed OpenList service
+Description=xray-manager managed OpenList service
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -147,7 +147,7 @@ Group=$SBM_OPENLIST_USER
 WorkingDirectory=$SBM_OPENLIST_DATA
 ExecStart=$SBM_OPENLIST_BIN server --data $SBM_OPENLIST_DATA
 Environment=GOMEMLIMIT=128MiB
-EnvironmentFile=-/etc/default/sb-openlist
+EnvironmentFile=-/etc/default/xm-openlist
 Restart=on-failure
 RestartSec=3s
 UMask=0077
@@ -164,7 +164,7 @@ EOF_UNIT
       chmod 0644 "$unit" ;;
     openrc)
       local SBM_LOG_DIR=$SBM_OPENLIST_LOG_DIR
-      write_openrc_supervised_service "$unit" 'sb-manager openlist' 'sb-manager managed OpenList service' "$SBM_OPENLIST_BIN" "server --data $SBM_OPENLIST_DATA" "$SBM_OPENLIST_USER" "$SBM_OPENLIST_LOG" "$SBM_OPENLIST_ERROR_LOG" 'after firewall' '' "$SBM_OPENLIST_DATA" || return 1
+      write_openrc_supervised_service "$unit" 'xray-manager openlist' 'xray-manager managed OpenList service' "$SBM_OPENLIST_BIN" "server --data $SBM_OPENLIST_DATA" "$SBM_OPENLIST_USER" "$SBM_OPENLIST_LOG" "$SBM_OPENLIST_ERROR_LOG" 'after firewall' '' "$SBM_OPENLIST_DATA" || return 1
       printf '\nexport GOMEMLIMIT="${GOMEMLIMIT:-128MiB}"\n' >>"$unit" || return 1
       ;;
   esac
@@ -179,7 +179,7 @@ openlist_ready() {
     fi
     sleep 0.5
   done
-  log_error 'OpenList 本机 HTTP 服务未就绪，请查看 sb-openlist 服务日志。'
+  log_error 'OpenList 本机 HTTP 服务未就绪，请查看 xm-openlist 服务日志。'
   return 1
 }
 
@@ -228,7 +228,7 @@ _openlist_install() (
       log_error '现有 OpenList 程序不是本项目管理，拒绝覆盖。'; return 1;
     }
   fi
-  if [[ -e "$unit" ]] && ! grep -Fq 'sb-manager managed OpenList service' "$unit"; then
+  if [[ -e "$unit" ]] && ! grep -Fq 'xray-manager managed OpenList service' "$unit"; then
     log_error '同名 OpenList 服务由其他工具管理，拒绝覆盖。'; return 1
   fi
   if [[ -f "$config" ]]; then
@@ -452,7 +452,7 @@ _openlist_setup() {
   binary=${context[0]}; config=${context[1]}
   website_mux_require_python || return 1
   if [[ "$server" == nginx ]] && ! cert_usable "$domain"; then
-    [[ -s "$SBM_CF_DNS_ENV" ]] || { log_error 'Nginx 网站需要证书，请先配置 sb cert setup-cloudflare。'; return 1; }
+    [[ -s "$SBM_CF_DNS_ENV" ]] || { log_error 'Nginx 网站需要证书，请先配置 xm cert setup-cloudflare。'; return 1; }
     _state_transaction_run openlist-certificate _cert_prepare_node_domain "$domain" || return 1
   fi
   if [[ ! -x "$SBM_OPENLIST_BIN" ]]; then
@@ -462,7 +462,7 @@ _openlist_setup() {
       log_error '现有 OpenList 不属于本项目管理，拒绝接入。'; return 1;
     }
     jq -e '.scheme.address=="127.0.0.1" and .scheme.https_port==-1' "$SBM_OPENLIST_DATA/config.json" >/dev/null || {
-      log_error 'OpenList 监听设置已改变，请先运行 sb openlist update 恢复本机监听。'; return 1;
+      log_error 'OpenList 监听设置已改变，请先运行 xm openlist update 恢复本机监听。'; return 1;
     }
     service_start "$SBM_OPENLIST_SERVICE" && openlist_ready "$(openlist_port)" || return 1
   fi
@@ -508,7 +508,7 @@ openlist_forget_site() (
 _openlist_detach() {
   local domain=$1 site server binary config port backup active=false
   if jq -e --arg domain "$domain" '.reality_site.enabled==true and .reality_site.domain==$domain' "$SBM_STATE" >/dev/null; then
-    log_error '此网站仍由 Reality 入口使用；请先运行 sb reality detach，再移除 OpenList 网站。'
+    log_error '此网站仍由 Reality 入口使用；请先运行 xm reality detach，再移除 OpenList 网站。'
     return 1
   fi
   site=$(jq -c --arg domain "$domain" 'first(.openlist.sites[]? | select(.domain==$domain)) // empty' "$SBM_STATE") || return 1

@@ -3,12 +3,12 @@ set -Eeuo pipefail
 umask 027
 
 SRC_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-TARGET_LIB=${SBM_LIB:-/usr/local/lib/sb-manager}
+TARGET_LIB=${SBM_LIB:-/usr/local/lib/xray-manager}
 TARGET_BIN=${SBM_BIN_DIR:-/usr/local/bin}
 SETUP_SYSTEMD_DIR=${SBM_SYSTEMD_DIR:-/etc/systemd/system}
 SETUP_OPENRC_DIR=${SBM_OPENRC_DIR:-/etc/init.d}
 SETUP_PERIODIC_DIR=${SBM_PERIODIC_DIR:-/etc/periodic}
-PROGRAM_BACKUP_ROOT=${SBM_BACKUPS:-${SBM_VAR:-/var/lib/sb-manager}/backups}
+PROGRAM_BACKUP_ROOT=${SBM_BACKUPS:-${SBM_VAR:-/var/lib/xray-manager}/backups}
 NO_MENU=0
 NO_START=0
 CORE_VERSION=latest
@@ -26,7 +26,7 @@ SETUP_CORE_TARGET=''
 source "$SRC_DIR/lib/common.sh"
 # shellcheck source=lib/dependencies.sh
 source "$SRC_DIR/lib/dependencies.sh"
-SBM_JOURNAL_CONFIG="${SBM_JOURNAL_CONFIG:-$(dirname "$SETUP_SYSTEMD_DIR")/journald@sb-manager.conf}"
+SBM_JOURNAL_CONFIG="${SBM_JOURNAL_CONFIG:-$(dirname "$SETUP_SYSTEMD_DIR")/journald@xray-manager.conf}"
 
 setup_rollback_on_error() {
   local rc=$? restore_rc=0 path target
@@ -38,41 +38,41 @@ setup_rollback_on_error() {
       find "$TARGET_LIB" -mindepth 1 -maxdepth 1 ! -name cores -exec rm -rf {} + || restore_rc=1
       cp -a "$SETUP_ROLLBACK_DIR/program"/. "$TARGET_LIB"/ || restore_rc=1
     fi
-    rm -f "$SETUP_SYSTEMD_DIR/sb-sing-box.service" "$SETUP_SYSTEMD_DIR/sb-xray.service" "$SETUP_SYSTEMD_DIR/sb-openlist.service" "$SETUP_SYSTEMD_DIR/sb-cloudflared.service" "$SETUP_SYSTEMD_DIR/sb-nginx-stream.service" \
-      "$SETUP_SYSTEMD_DIR/sb-core-update.service" "$SETUP_SYSTEMD_DIR/sb-core-update.timer" \
-      "$SETUP_SYSTEMD_DIR/sb-manager-update.service" "$SETUP_SYSTEMD_DIR/sb-manager-update.timer" \
-      "$SETUP_SYSTEMD_DIR/sb-acme-renew.service" "$SETUP_SYSTEMD_DIR/sb-acme-renew.timer" \
-      "$SETUP_SYSTEMD_DIR/sb-quick-tunnel-refresh.service" "$SETUP_SYSTEMD_DIR/sb-quick-tunnel-refresh.timer" \
-      "$SETUP_SYSTEMD_DIR/sb-subscription.service" "$SETUP_SYSTEMD_DIR/sb-traffic.service" \
-      "$SETUP_SYSTEMD_DIR/sb-traffic-sync.service" "$SETUP_SYSTEMD_DIR/sb-traffic-sync.timer" \
-      "$SETUP_SYSTEMD_DIR/sb-health-check.service" "$SETUP_SYSTEMD_DIR/sb-health-check.timer"
-    rm -f "$SETUP_SYSTEMD_DIR/sb-maintenance.service" "$SETUP_SYSTEMD_DIR/sb-maintenance.timer"
+    rm -f "$SETUP_SYSTEMD_DIR/xm-sing-box.service" "$SETUP_SYSTEMD_DIR/xm-xray.service" "$SETUP_SYSTEMD_DIR/xm-openlist.service" "$SETUP_SYSTEMD_DIR/xm-cloudflared.service" "$SETUP_SYSTEMD_DIR/xm-nginx-stream.service" \
+      "$SETUP_SYSTEMD_DIR/xm-core-update.service" "$SETUP_SYSTEMD_DIR/xm-core-update.timer" \
+      "$SETUP_SYSTEMD_DIR/xm-manager-update.service" "$SETUP_SYSTEMD_DIR/xm-manager-update.timer" \
+      "$SETUP_SYSTEMD_DIR/xm-acme-renew.service" "$SETUP_SYSTEMD_DIR/xm-acme-renew.timer" \
+      "$SETUP_SYSTEMD_DIR/xm-quick-tunnel-refresh.service" "$SETUP_SYSTEMD_DIR/xm-quick-tunnel-refresh.timer" \
+      "$SETUP_SYSTEMD_DIR/xm-subscription.service" "$SETUP_SYSTEMD_DIR/xm-traffic.service" \
+      "$SETUP_SYSTEMD_DIR/xm-traffic-sync.service" "$SETUP_SYSTEMD_DIR/xm-traffic-sync.timer" \
+      "$SETUP_SYSTEMD_DIR/xm-health-check.service" "$SETUP_SYSTEMD_DIR/xm-health-check.timer"
+    rm -f "$SETUP_SYSTEMD_DIR/xm-maintenance.service" "$SETUP_SYSTEMD_DIR/xm-maintenance.timer"
     [[ ! -d "$SETUP_ROLLBACK_DIR/systemd" ]] || cp -a "$SETUP_ROLLBACK_DIR/systemd"/. "$SETUP_SYSTEMD_DIR"/ || restore_rc=1
     if [[ -f "$SETUP_ROLLBACK_DIR/journal.conf" ]]; then cp -a "$SETUP_ROLLBACK_DIR/journal.conf" "$SBM_JOURNAL_CONFIG"
     else rm -f "$SBM_JOURNAL_CONFIG"; fi
-    if [[ ! -f "$SETUP_ROLLBACK_DIR/systemd/sb-maintenance.timer" ]]; then
-      command -v systemctl >/dev/null 2>&1 && systemctl disable --now sb-maintenance.timer >/dev/null 2>&1 || true
-      rm -f "$SETUP_SYSTEMD_DIR/timers.target.wants/sb-maintenance.timer"
+    if [[ ! -f "$SETUP_ROLLBACK_DIR/systemd/xm-maintenance.timer" ]]; then
+      command -v systemctl >/dev/null 2>&1 && systemctl disable --now xm-maintenance.timer >/dev/null 2>&1 || true
+      rm -f "$SETUP_SYSTEMD_DIR/timers.target.wants/xm-maintenance.timer"
     fi
-    if [[ ! -f "$SETUP_ROLLBACK_DIR/systemd/sb-manager-update.timer" ]]; then
-      command -v systemctl >/dev/null 2>&1 && systemctl disable --now sb-manager-update.timer >/dev/null 2>&1 || true
-      rm -f "$SETUP_SYSTEMD_DIR/timers.target.wants/sb-manager-update.timer"
+    if [[ ! -f "$SETUP_ROLLBACK_DIR/systemd/xm-manager-update.timer" ]]; then
+      command -v systemctl >/dev/null 2>&1 && systemctl disable --now xm-manager-update.timer >/dev/null 2>&1 || true
+      rm -f "$SETUP_SYSTEMD_DIR/timers.target.wants/xm-manager-update.timer"
     fi
-    rm -f "$SETUP_OPENRC_DIR/sb-sing-box" "$SETUP_OPENRC_DIR/sb-xray" "$SETUP_OPENRC_DIR/sb-openlist" "$SETUP_OPENRC_DIR/sb-cloudflared" "$SETUP_OPENRC_DIR/sb-nginx-stream" "$SETUP_OPENRC_DIR/sb-subscription" "$SETUP_OPENRC_DIR/sb-traffic"
+    rm -f "$SETUP_OPENRC_DIR/xm-sing-box" "$SETUP_OPENRC_DIR/xm-xray" "$SETUP_OPENRC_DIR/xm-openlist" "$SETUP_OPENRC_DIR/xm-cloudflared" "$SETUP_OPENRC_DIR/xm-nginx-stream" "$SETUP_OPENRC_DIR/xm-subscription" "$SETUP_OPENRC_DIR/xm-traffic"
     [[ ! -d "$SETUP_ROLLBACK_DIR/openrc" ]] || cp -a "$SETUP_ROLLBACK_DIR/openrc"/. "$SETUP_OPENRC_DIR"/ || restore_rc=1
-    rm -f "$SETUP_PERIODIC_DIR/15min/sb-health-check"
-    if [[ -f "$SETUP_ROLLBACK_DIR/periodic/sb-health-check" ]]; then
+    rm -f "$SETUP_PERIODIC_DIR/15min/xm-health-check"
+    if [[ -f "$SETUP_ROLLBACK_DIR/periodic/xm-health-check" ]]; then
       mkdir -p "$SETUP_PERIODIC_DIR/15min"
-      cp -a "$SETUP_ROLLBACK_DIR/periodic/sb-health-check" "$SETUP_PERIODIC_DIR/15min/sb-health-check"
+      cp -a "$SETUP_ROLLBACK_DIR/periodic/xm-health-check" "$SETUP_PERIODIC_DIR/15min/xm-health-check"
     fi
-    rm -f "$SETUP_PERIODIC_DIR/15min/sb-manager-update"
-    if [[ -f "$SETUP_ROLLBACK_DIR/periodic/sb-manager-update" ]]; then
+    rm -f "$SETUP_PERIODIC_DIR/15min/xm-manager-update"
+    if [[ -f "$SETUP_ROLLBACK_DIR/periodic/xm-manager-update" ]]; then
       mkdir -p "$SETUP_PERIODIC_DIR/15min"
-      cp -a "$SETUP_ROLLBACK_DIR/periodic/sb-manager-update" "$SETUP_PERIODIC_DIR/15min/"
+      cp -a "$SETUP_ROLLBACK_DIR/periodic/xm-manager-update" "$SETUP_PERIODIC_DIR/15min/"
     fi
-    rm -f "$SETUP_PERIODIC_DIR/15min/sb-maintenance"
-    if [[ -f "$SETUP_ROLLBACK_DIR/periodic/sb-maintenance" ]]; then
-      cp -a "$SETUP_ROLLBACK_DIR/periodic/sb-maintenance" "$SETUP_PERIODIC_DIR/15min/"
+    rm -f "$SETUP_PERIODIC_DIR/15min/xm-maintenance"
+    if [[ -f "$SETUP_ROLLBACK_DIR/periodic/xm-maintenance" ]]; then
+      cp -a "$SETUP_ROLLBACK_DIR/periodic/xm-maintenance" "$SETUP_PERIODIC_DIR/15min/"
     fi
     if [[ -n "$SETUP_CORE_TARGET" && -x "$SETUP_CORE_TARGET" ]]; then
       ln -sfn "$SETUP_CORE_TARGET" "$SBM_SING_BOX_BIN.new" && mv -Tf "$SBM_SING_BOX_BIN.new" "$SBM_SING_BOX_BIN" || restore_rc=1
@@ -102,7 +102,7 @@ setup_acquire_lock() {
   command_exists flock || return 0
   ensure_runtime_dirs
   lock_file="$SBM_RUN/setup.lock"
-  # setup may have launched the interactive `sb` panel after installation.
+  # setup may have launched the interactive `xm` panel after installation.
   # That child inherits descriptor 8, so a manager update started from the
   # panel must reuse the same open file description instead of reopening the
   # lock and deadlocking against its own parent installer.
@@ -226,7 +226,7 @@ write_systemd_runtime() {
   mkdir -p "$SBM_SYSTEMD_DIR"
   cat >"$SBM_SYSTEMD_DIR/$SBM_SERVICE" <<EOF_UNIT
 [Unit]
-Description=sb-manager managed sing-box service
+Description=xray-manager managed sing-box service
 Documentation=https://sing-box.sagernet.org/
 After=network-online.target
 Wants=network-online.target
@@ -265,19 +265,19 @@ ReadWritePaths=$SBM_VAR/dashboard
 WantedBy=multi-user.target
 EOF_UNIT
 
-  cat >"$SBM_SYSTEMD_DIR/sb-core-update.service" <<EOF_UNIT
+  cat >"$SBM_SYSTEMD_DIR/xm-core-update.service" <<EOF_UNIT
 [Unit]
-Description=sb-manager sing-box update policy check
+Description=xray-manager sing-box update policy check
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=$SBM_BIN_DIR/sb core auto
+ExecStart=$SBM_BIN_DIR/xm core auto
 EOF_UNIT
-  cat >"$SBM_SYSTEMD_DIR/sb-core-update.timer" <<'EOF_UNIT'
+  cat >"$SBM_SYSTEMD_DIR/xm-core-update.timer" <<'EOF_UNIT'
 [Unit]
-Description=Periodic sb-manager sing-box update check
+Description=Periodic xray-manager sing-box update check
 
 [Timer]
 OnBootSec=15min
@@ -288,19 +288,19 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF_UNIT
-  cat >"$SBM_SYSTEMD_DIR/sb-acme-renew.service" <<EOF_UNIT
+  cat >"$SBM_SYSTEMD_DIR/xm-acme-renew.service" <<EOF_UNIT
 [Unit]
-Description=sb-manager ACME renewal check
+Description=xray-manager ACME renewal check
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=$SBM_BIN_DIR/sb cert renew --quiet
+ExecStart=$SBM_BIN_DIR/xm cert renew --quiet
 EOF_UNIT
-  cat >"$SBM_SYSTEMD_DIR/sb-acme-renew.timer" <<'EOF_UNIT'
+  cat >"$SBM_SYSTEMD_DIR/xm-acme-renew.timer" <<'EOF_UNIT'
 [Unit]
-Description=Daily sb-manager ACME renewal check
+Description=Daily xray-manager ACME renewal check
 
 [Timer]
 OnBootSec=30min
@@ -314,31 +314,31 @@ EOF_UNIT
 
   cat >"$SBM_SYSTEMD_DIR/$SBM_TRAFFIC_SERVICE" <<EOF_UNIT
 [Unit]
-Description=sb-manager traffic control lifecycle
+Description=xray-manager traffic control lifecycle
 After=network-pre.target nftables.service ufw.service firewalld.service
 Before=$SBM_SERVICE
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=$SBM_BIN_DIR/sb traffic reconcile
-ExecStop=$SBM_BIN_DIR/sb traffic sync
+ExecStart=$SBM_BIN_DIR/xm traffic reconcile
+ExecStop=$SBM_BIN_DIR/xm traffic sync
 
 [Install]
 WantedBy=multi-user.target
 EOF_UNIT
-  cat >"$SBM_SYSTEMD_DIR/sb-traffic-sync.service" <<EOF_UNIT
+  cat >"$SBM_SYSTEMD_DIR/xm-traffic-sync.service" <<EOF_UNIT
 [Unit]
-Description=Checkpoint and maintain sb-manager traffic counters
+Description=Checkpoint and maintain xray-manager traffic counters
 After=$SBM_TRAFFIC_SERVICE
 
 [Service]
 Type=oneshot
-ExecStart=$SBM_BIN_DIR/sb traffic tick
+ExecStart=$SBM_BIN_DIR/xm traffic tick
 EOF_UNIT
-  cat >"$SBM_SYSTEMD_DIR/sb-traffic-sync.timer" <<'EOF_UNIT'
+  cat >"$SBM_SYSTEMD_DIR/xm-traffic-sync.timer" <<'EOF_UNIT'
 [Unit]
-Description=Periodic sb-manager traffic counter checkpoint
+Description=Periodic xray-manager traffic counter checkpoint
 
 [Timer]
 OnBootSec=5min
@@ -351,17 +351,17 @@ WantedBy=timers.target
 EOF_UNIT
   cat >"$SBM_SYSTEMD_DIR/$SBM_HEALTH_SERVICE" <<EOF_UNIT
 [Unit]
-Description=sb-manager periodic health check and notification
+Description=xray-manager periodic health check and notification
 After=network-online.target $SBM_SERVICE $SBM_TRAFFIC_SERVICE
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=$SBM_BIN_DIR/sb health tick
+ExecStart=$SBM_BIN_DIR/xm health tick
 EOF_UNIT
-  cat >"$SBM_SYSTEMD_DIR/sb-health-check.timer" <<'EOF_UNIT'
+  cat >"$SBM_SYSTEMD_DIR/xm-health-check.timer" <<'EOF_UNIT'
 [Unit]
-Description=Periodic sb-manager health check
+Description=Periodic xray-manager health check
 
 [Timer]
 OnBootSec=10min
@@ -372,7 +372,7 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF_UNIT
-  chmod 0644 "$SBM_SYSTEMD_DIR/$SBM_SERVICE" "$SBM_SYSTEMD_DIR"/sb-*.service "$SBM_SYSTEMD_DIR"/sb-*.timer
+  chmod 0644 "$SBM_SYSTEMD_DIR/$SBM_SERVICE" "$SBM_SYSTEMD_DIR"/xm-*.service "$SBM_SYSTEMD_DIR"/xm-*.timer
 }
 
 write_periodic_job() {
@@ -390,33 +390,33 @@ write_openrc_runtime() {
   mkdir -p "$SBM_OPENRC_DIR" "$SBM_LOG_DIR"
   write_openrc_supervised_service \
     "$SBM_OPENRC_DIR/$(service_native_name "$SBM_SERVICE")" \
-    'sb-manager sing-box' 'sb-manager managed sing-box service' \
+    'xray-manager sing-box' 'xray-manager managed sing-box service' \
     "$SBM_SING_BOX_BIN" "run -c $SBM_CONFIG" root \
     "$SBM_SINGBOX_LOG" "$SBM_SINGBOX_ERROR_LOG" 'after firewall'
-  write_periodic_job daily sb-core-update "$SBM_BIN_DIR/sb core auto"
-  write_periodic_job daily sb-acme-renew "$SBM_BIN_DIR/sb cert renew --quiet"
-  write_periodic_job 15min sb-traffic-sync "$SBM_BIN_DIR/sb traffic tick"
-  write_periodic_job 15min sb-health-check "$SBM_BIN_DIR/sb health tick"
+  write_periodic_job daily xm-core-update "$SBM_BIN_DIR/xm core auto"
+  write_periodic_job daily xm-acme-renew "$SBM_BIN_DIR/xm cert renew --quiet"
+  write_periodic_job 15min xm-traffic-sync "$SBM_BIN_DIR/xm traffic tick"
+  write_periodic_job 15min xm-health-check "$SBM_BIN_DIR/xm health tick"
   cat >"$SBM_OPENRC_DIR/$(service_native_name "$SBM_TRAFFIC_SERVICE")" <<EOF_OPENRC
 #!/sbin/openrc-run
-name="sb-manager traffic control"
-description="Restore and checkpoint sb-manager nftables traffic rules"
+name="xray-manager traffic control"
+description="Restore and checkpoint xray-manager nftables traffic rules"
 
 depend() {
   need localmount
   after firewall
-  before sb-sing-box
+  before xm-sing-box
 }
 
 start() {
-  ebegin "Applying sb-manager traffic controls"
-  "$SBM_BIN_DIR/sb" traffic reconcile
+  ebegin "Applying xray-manager traffic controls"
+  "$SBM_BIN_DIR/xm" traffic reconcile
   eend \$?
 }
 
 stop() {
-  ebegin "Checkpointing sb-manager traffic counters"
-  "$SBM_BIN_DIR/sb" traffic sync
+  ebegin "Checkpointing xray-manager traffic counters"
+  "$SBM_BIN_DIR/xm" traffic sync
   eend \$?
 }
 EOF_OPENRC
@@ -441,7 +441,7 @@ scheduler_reconcile() {
   [[ "$NO_START" == 0 ]] || return 0
   case "$(init_system)" in
     systemd)
-      systemctl enable --now sb-core-update.timer sb-acme-renew.timer sb-traffic-sync.timer sb-health-check.timer "$SBM_TRAFFIC_SERVICE"
+      systemctl enable --now xm-core-update.timer xm-acme-renew.timer xm-traffic-sync.timer xm-health-check.timer "$SBM_TRAFFIC_SERVICE"
       ;;
     openrc)
       service_enable "$SBM_TRAFFIC_SERVICE"
@@ -451,7 +451,7 @@ scheduler_reconcile() {
         service_active crond || service_start crond || log_warn '无法启动 crond；自动更新和证书续期定时任务不会运行。'
       else
         if manager_auto_enabled; then log_info '稍后会为每日自动更新补齐 dcron 调度器。'
-        else log_info '未安装 dcron；已保留 periodic 任务，需自动更新/续期时运行 sb deps install scheduler。'; fi
+        else log_info '未安装 dcron；已保留 periodic 任务，需自动更新/续期时运行 xm deps install scheduler。'; fi
       fi
       ;;
   esac
@@ -467,7 +467,7 @@ chmod 0755 "$(dirname "$TARGET_LIB")" "$TARGET_LIB" "$TARGET_BIN"
 src_real=$(readlink -f "$SRC_DIR")
 target_real=$(readlink -m "$TARGET_LIB")
 if [[ "$src_real" != "$target_real" ]]; then
-  if [[ -f "$TARGET_LIB/sb" ]]; then
+  if [[ -f "$TARGET_LIB/xm" ]]; then
     mkdir -p "$PROGRAM_BACKUP_ROOT"
     backup=$(mktemp -d "$PROGRAM_BACKUP_ROOT/program-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
     SETUP_ROLLBACK_DIR="$backup"
@@ -475,11 +475,11 @@ if [[ "$src_real" != "$target_real" ]]; then
     mkdir -p "$backup/program" "$backup/systemd" "$backup/openrc" "$backup/periodic"
     # Copy only manager sources; duplicating core binaries would exhaust small VPS disks.
     while IFS= read -r -d '' path; do cp -a "$path" "$backup/program/"; done < <(find "$TARGET_LIB" -mindepth 1 -maxdepth 1 ! -name cores -print0)
-    for path in "$SETUP_SYSTEMD_DIR"/sb-*.service "$SETUP_SYSTEMD_DIR"/sb-*.timer; do [[ ! -f "$path" ]] || cp -a "$path" "$backup/systemd/"; done
-    for path in "$SETUP_OPENRC_DIR"/sb-*; do [[ ! -f "$path" ]] || cp -a "$path" "$backup/openrc/"; done
-    [[ ! -f "$SETUP_PERIODIC_DIR/15min/sb-health-check" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/sb-health-check" "$backup/periodic/"
-    [[ ! -f "$SETUP_PERIODIC_DIR/15min/sb-manager-update" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/sb-manager-update" "$backup/periodic/"
-    [[ ! -f "$SETUP_PERIODIC_DIR/15min/sb-maintenance" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/sb-maintenance" "$backup/periodic/"
+    for path in "$SETUP_SYSTEMD_DIR"/xm-*.service "$SETUP_SYSTEMD_DIR"/xm-*.timer; do [[ ! -f "$path" ]] || cp -a "$path" "$backup/systemd/"; done
+    for path in "$SETUP_OPENRC_DIR"/xm-*; do [[ ! -f "$path" ]] || cp -a "$path" "$backup/openrc/"; done
+    [[ ! -f "$SETUP_PERIODIC_DIR/15min/xm-health-check" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/xm-health-check" "$backup/periodic/"
+    [[ ! -f "$SETUP_PERIODIC_DIR/15min/xm-manager-update" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/xm-manager-update" "$backup/periodic/"
+    [[ ! -f "$SETUP_PERIODIC_DIR/15min/xm-maintenance" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/xm-maintenance" "$backup/periodic/"
     [[ ! -f "$SBM_JOURNAL_CONFIG" ]] || cp -a "$SBM_JOURNAL_CONFIG" "$backup/journal.conf"
     SETUP_MUTATED=1
     trap setup_rollback_on_error ERR
@@ -492,9 +492,9 @@ else
 fi
 find "$TARGET_LIB/lib" "$TARGET_LIB/protocols" -type d -exec chmod 0755 {} +
 [[ ! -d "$TARGET_LIB/libexec" ]] || find "$TARGET_LIB/libexec" -type d -exec chmod 0755 {} +
-chmod 0755 "$TARGET_LIB" "$TARGET_LIB/sb" "$TARGET_LIB/setup.sh" "$TARGET_LIB/install.sh" "$TARGET_LIB/build-standalone.sh" "$TARGET_LIB/build-release.sh" "$TARGET_LIB/lib/"*.sh "$TARGET_LIB/protocols/"*.sh
+chmod 0755 "$TARGET_LIB" "$TARGET_LIB/xm" "$TARGET_LIB/setup.sh" "$TARGET_LIB/install.sh" "$TARGET_LIB/build-standalone.sh" "$TARGET_LIB/build-release.sh" "$TARGET_LIB/lib/"*.sh "$TARGET_LIB/protocols/"*.sh
 [[ ! -f "$TARGET_LIB/libexec/subscription_server.py" ]] || chmod 0755 "$TARGET_LIB/libexec/subscription_server.py"
-ln -sfn "$TARGET_LIB/sb" "$TARGET_BIN/sb"
+ln -sfn "$TARGET_LIB/xm" "$TARGET_BIN/xm"
 
 # shellcheck source=lib/common.sh
 source "$TARGET_LIB/lib/common.sh"
@@ -562,9 +562,9 @@ if [[ -z "$SETUP_ROLLBACK_DIR" && -s "$SBM_STATE" ]]; then
   SETUP_ROLLBACK_DIR=$(mktemp -d "$PROGRAM_BACKUP_ROOT/program-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
   printf '%s\n' "$$" >"$SETUP_ROLLBACK_DIR/.operation-pid"
   mkdir -p "$SETUP_ROLLBACK_DIR/systemd" "$SETUP_ROLLBACK_DIR/openrc" "$SETUP_ROLLBACK_DIR/periodic"
-  for path in "$SETUP_SYSTEMD_DIR"/sb-*.service "$SETUP_SYSTEMD_DIR"/sb-*.timer; do [[ ! -f "$path" ]] || cp -a "$path" "$SETUP_ROLLBACK_DIR/systemd/"; done
-  for path in "$SETUP_OPENRC_DIR"/sb-*; do [[ ! -f "$path" ]] || cp -a "$path" "$SETUP_ROLLBACK_DIR/openrc/"; done
-  for path in sb-health-check sb-manager-update sb-maintenance; do
+  for path in "$SETUP_SYSTEMD_DIR"/xm-*.service "$SETUP_SYSTEMD_DIR"/xm-*.timer; do [[ ! -f "$path" ]] || cp -a "$path" "$SETUP_ROLLBACK_DIR/systemd/"; done
+  for path in "$SETUP_OPENRC_DIR"/xm-*; do [[ ! -f "$path" ]] || cp -a "$path" "$SETUP_ROLLBACK_DIR/openrc/"; done
+  for path in xm-health-check xm-manager-update xm-maintenance; do
     [[ ! -f "$SETUP_PERIODIC_DIR/15min/$path" ]] || cp -a "$SETUP_PERIODIC_DIR/15min/$path" "$SETUP_ROLLBACK_DIR/periodic/"
   done
   [[ ! -f "$SBM_JOURNAL_CONFIG" ]] || cp -a "$SBM_JOURNAL_CONFIG" "$SETUP_ROLLBACK_DIR/journal.conf"
@@ -628,7 +628,7 @@ elif [[ -x "$SBM_CLOUDFLARED_BIN" ]]; then
   printf '[5/7] 保留现有 cloudflared（可用 --with-cloudflared 更新）…\n'
   validate_runtime_binary_path cloudflared "$SBM_CLOUDFLARED_BIN"
 else
-  printf '[5/7] 跳过 cloudflared（按需执行：sb cloudflared install）…\n'
+  printf '[5/7] 跳过 cloudflared（按需执行：xm cloudflared install）…\n'
 fi
 
 printf '[6/7] 生成配置与 %s 服务…\n' "$BACKEND"
@@ -695,7 +695,7 @@ if [[ "$NO_START" == 0 ]]; then
   fi
   tunnel_reconcile 1 || true
   subscription_reconcile 1 || log_warn '订阅服务协调失败；不会影响代理数据面。'
-  substore_reconcile 1 || log_warn 'Sub-Store 服务协调失败，请运行 sb substore status 检查。'
+  substore_reconcile 1 || log_warn 'Sub-Store 服务协调失败，请运行 xm substore status 检查。'
 else
   tunnel_reconcile 0 || true
   subscription_reconcile 0 || true
@@ -715,40 +715,40 @@ prune_setup_backups
 printf '\n安装完成。\n'
 printf '  服务管理：%s\n' "$BACKEND"
 printf '  安装档位：%s\n' "$INSTALL_PROFILE"
-printf '  面板命令：sb\n'
-printf '  添加向导：sb quick（选择协议、准备证书并获取导入内容）\n'
+printf '  面板命令：xm\n'
+printf '  添加向导：xm quick（选择协议、准备证书并获取导入内容）\n'
 if manager_auto_enabled; then
   printf '  脚本与受管 Caddy 自动更新：开启，每天约 %s（服务器本地时间）\n' "$(manager_auto_time)"
-  [[ "$NO_START" != 1 ]] || printf '  使用了 --no-start，本次不启用新定时任务；已有调度状态保留，可运行 sb update auto enable 启用。\n'
-else printf '  每日自动更新：保持关闭（可运行 sb update auto enable 开启）\n'; fi
-printf '  状态检查：sb status\n'
-printf '  诊断命令：sb doctor（自动修复：sb doctor --repair）\n'
+  [[ "$NO_START" != 1 ]] || printf '  使用了 --no-start，本次不启用新定时任务；已有调度状态保留，可运行 xm update auto enable 启用。\n'
+else printf '  每日自动更新：保持关闭（可运行 xm update auto enable 开启）\n'; fi
+printf '  状态检查：xm status\n'
+printf '  诊断命令：xm doctor（自动修复：xm doctor --repair）\n'
 printf '  数据目录：%s\n' "$SBM_ETC"
 if ! state_runtime_required; then
   printf '  sing-box：暂无分配到本核心的启用节点，服务保持待命。\n'
 fi
 if [[ ! -x "$SBM_CLOUDFLARED_BIN" ]]; then
-  printf '  cloudflared：未安装（Tunnel 功能启用前执行 sb cloudflared install）。\n'
+  printf '  cloudflared：未安装（Tunnel 功能启用前执行 xm cloudflared install）。\n'
 fi
 if [[ "$INIT_VPS" == 1 ]]; then
   printf '\n即将按 --init-vps 启用 UFW，放行基础端口和实际 SSH 端口。\n'
 else
-  printf '\n普通安装保持防火墙设置；新 VPS 可运行 sb vps init 初始化基础环境。\n'
+  printf '\n普通安装保持防火墙设置；新 VPS 可运行 xm vps init 初始化基础环境。\n'
 fi
 
 trap - ERR
 setup_release_lock
 if [[ "$INIT_VPS" == 1 ]]; then
-  if ! "$SBM_BIN_DIR/sb" vps init; then
-    printf 'sing-box 管理器已安装；VPS 初始化未完成，请按上方提示处理后运行 sb vps init。\n' >&2
+  if ! "$SBM_BIN_DIR/xm" vps init; then
+    printf 'sing-box 管理器已安装；VPS 初始化未完成，请按上方提示处理后运行 xm vps init。\n' >&2
     exit 1
   fi
 fi
 # `curl ... | bash` leaves stdin on the pipe; reopen the controlling terminal
 # so the panel still opens after a one-line installation.
 if [[ "$NO_MENU" == 0 ]]; then
-  if [[ -t 0 ]]; then "$SBM_BIN_DIR/sb"
-  elif [[ -t 1 ]] && { : </dev/tty; } 2>/dev/null; then "$SBM_BIN_DIR/sb" </dev/tty
-  else printf '运行 sb 打开管理面板。\n'
+  if [[ -t 0 ]]; then "$SBM_BIN_DIR/xm"
+  elif [[ -t 1 ]] && { : </dev/tty; } 2>/dev/null; then "$SBM_BIN_DIR/xm" </dev/tty
+  else printf '运行 xm 打开管理面板。\n'
   fi
 fi

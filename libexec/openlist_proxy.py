@@ -55,7 +55,7 @@ def caddy_hosts(value):
 
 
 def caddy_site(domain, port):
-    return (f'\n# sb-manager OpenList: {domain}\n{domain} {{\n'
+    return (f'\n# xray-manager OpenList: {domain}\n{domain} {{\n'
             f'  reverse_proxy 127.0.0.1:{port}\n}}\n')
 
 
@@ -104,7 +104,7 @@ def nginx_site(domain, port, cert, key, ipv6=None):
         ipv6 = ipv6_available()
     http6 = '\n  listen [::]:80;' if ipv6 else ''
     https6 = '\n  listen [::]:443 ssl;' if http6 else ''
-    return f'''# Managed by sb-manager OpenList
+    return f'''# Managed by xray-manager OpenList
 server {{
   listen 80;{http6}
   server_name {domain};
@@ -162,7 +162,7 @@ def nginx_plan(binary, main, domain, port, cert, key, log):
         fail('Nginx 主配置需要包含唯一的 http 块；未修改网站配置')
     # A hidden file is outside ordinary conf.d/*.conf and http.d/*.conf
     # includes. It is referenced explicitly from the main http block.
-    snippet = main.parent / f'.sb-manager-openlist-{domain}.conf'
+    snippet = main.parent / f'.xray-manager-openlist-{domain}.conf'
     if snippet.exists() or snippet.is_symlink():
         fail('OpenList 站点文件已经存在，拒绝覆盖：' + str(snippet))
     files = {str(main): hashlib.sha256(original).hexdigest()}
@@ -195,12 +195,12 @@ def detach_plan(server, binary, main, domain, port, cert, key, log):
         addition = caddy_site(domain, port)
         if text.count(addition) != 1:
             fail('Caddy OpenList 站点缺失或已被修改，拒绝自动移除')
-        start = text.index(addition) + len(f'\n# sb-manager OpenList: {domain}\n')
+        start = text.index(addition) + len(f'\n# xray-manager OpenList: {domain}\n')
         if not any(node['start'] == start and node['words'] == [domain]
                    and 'children' in node for node in parse(text, 'caddy')):
             fail('Caddy OpenList 内容不再是独立站点，拒绝自动移除')
         return {str(main): text.replace(addition, '', 1)}, None, expected
-    snippet = main.parent / f'.sb-manager-openlist-{domain}.conf'
+    snippet = main.parent / f'.xray-manager-openlist-{domain}.conf'
     if snippet.is_symlink() or not snippet.is_file():
         fail('Nginx OpenList 站点文件缺失或已被替换，拒绝自动移除')
     content = snippet.read_bytes()

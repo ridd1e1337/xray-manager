@@ -4,12 +4,12 @@
 # Hysteria2 官方建议的 Linux UDP socket buffer 上限。只管理这两个键，
 # 避免把系统上其他 UDP/TCP 调优混入本项目的恢复范围。
 SBM_HY2_UDP_BUFFER_SIZE="${SBM_HY2_UDP_BUFFER_SIZE:-16777216}"
-SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG="${SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG:-/etc/sysctl.d/99-hysteria.conf}"
+SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG="${SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG:-/etc/sysctl.d/99-xray-manager-hysteria.conf}"
 SBM_HY2_UDP_BUFFER_BACKUP_DIR="${SBM_HY2_UDP_BUFFER_BACKUP_DIR:-$SBM_VAR/hysteria2-udp-buffer}"
 SBM_HY2_UDP_BUFFER_BACKUP_META="${SBM_HY2_UDP_BUFFER_BACKUP_META:-$SBM_HY2_UDP_BUFFER_BACKUP_DIR/previous.json}"
 SBM_HY2_UDP_BUFFER_BACKUP_CONFIG="${SBM_HY2_UDP_BUFFER_BACKUP_CONFIG:-$SBM_HY2_UDP_BUFFER_BACKUP_DIR/previous.conf}"
 SBM_HY2_UDP_BUFFER_SYSCTL_CMD="${SBM_HY2_UDP_BUFFER_SYSCTL_CMD:-sysctl}"
-SBM_HY2_UDP_BUFFER_MARKER='# Managed by sb-manager; use sb hy2 buffer disable to restore previous values.'
+SBM_HY2_UDP_BUFFER_MARKER='# Managed by xray-manager; use xm hy2 buffer disable to restore previous values.'
 
 hy2_udp_buffer_sysctl_get() { "$SBM_HY2_UDP_BUFFER_SYSCTL_CMD" -n "$1" 2>/dev/null; }
 hy2_udp_buffer_config_managed() { grep -Fqx "$SBM_HY2_UDP_BUFFER_MARKER" "$SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG" 2>/dev/null; }
@@ -32,7 +32,7 @@ hy2_udp_buffer_status() {
       --arg config "$SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG" --argjson enabled "$enabled" --argjson managed "$managed" \
       '{enabled:$enabled,managed:$managed,rmem_max:$rmem,wmem_max:$wmem,recommended_size:$size,managed_config:$config}'
   else
-    printf 'Hysteria2 UDP 缓冲区：%s\nsb-manager 管理：%s\n接收缓冲区上限：%s\n发送缓冲区上限：%s\n官方建议值：%s\n管理配置：%s\n' \
+    printf 'Hysteria2 UDP 缓冲区：%s\nxray-manager 管理：%s\n接收缓冲区上限：%s\n发送缓冲区上限：%s\n官方建议值：%s\n管理配置：%s\n' \
       "$([[ "$enabled" == true ]] && echo '已生效' || echo '未生效')" \
       "$([[ "$managed" == true ]] && echo '是' || echo '否')" \
       "${rmem:--}" "${wmem:--}" "$SBM_HY2_UDP_BUFFER_SIZE" "$SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG"
@@ -78,7 +78,7 @@ _hy2_udp_buffer_enable() {
     hy2_udp_buffer_save_previous "$rmem" "$wmem"
   fi
   mkdir -p "$(dirname "$SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG")" "$SBM_RUN"
-  tmp=$(mktemp "$(dirname "$SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG")/.sb-manager-hysteria.XXXXXX")
+  tmp=$(mktemp "$(dirname "$SBM_HY2_UDP_BUFFER_SYSCTL_CONFIG")/.xray-manager-hysteria.XXXXXX")
   printf '%s\n' "$SBM_HY2_UDP_BUFFER_MARKER" \
     "net.core.rmem_max=$SBM_HY2_UDP_BUFFER_SIZE" "net.core.wmem_max=$SBM_HY2_UDP_BUFFER_SIZE" >"$tmp"
   chmod 0644 "$tmp"
@@ -124,7 +124,7 @@ hy2_udp_buffer_restore_previous() {
 
 _hy2_udp_buffer_disable() {
   if [[ ! -s "$SBM_HY2_UDP_BUFFER_BACKUP_META" ]] && ! hy2_udp_buffer_config_managed; then
-    log_warn 'Hysteria2 UDP 缓冲区未由 sb-manager 管理，无需恢复。'
+    log_warn 'Hysteria2 UDP 缓冲区未由 xray-manager 管理，无需恢复。'
     return 0
   fi
   hy2_udp_buffer_restore_previous || die '恢复 Hysteria2 UDP 缓冲区启用前配置失败；已保留备份，请检查 sysctl 日志后重试。'

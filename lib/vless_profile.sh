@@ -124,7 +124,7 @@ vless_encryption_pair_check() {
 xray_vless_keys() {
   local kind=${1:-x25519} output index
   local -a values=()
-  [[ -x "$SBM_XRAY_BIN" ]] || { log_error '请先运行 sb xray install。'; return 1; }
+  [[ -x "$SBM_XRAY_BIN" ]] || { log_error '请先运行 xm xray install。'; return 1; }
   case "$kind" in x25519) index=0;; mlkem768|ml-kem-768) index=2;; *) usage_die '密钥类型只能是 x25519 或 mlkem768。';; esac
   output=$("$SBM_XRAY_BIN" vlessenc 2>/dev/null) || return 1
   mapfile -t values < <(awk -F'"' '/^"decryption":|^"encryption":/ {print $4}' <<<"$output")

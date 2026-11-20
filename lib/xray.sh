@@ -198,7 +198,7 @@ xray_write_service() {
       mkdir -p "$SBM_SYSTEMD_DIR" || return 1
       cat >"$unit.new" <<EOF_UNIT || return 1
 [Unit]
-Description=sb-manager VLESS Xray-core service
+Description=xray-manager VLESS Xray-core service
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -225,7 +225,7 @@ EOF_UNIT
       setcap cap_net_bind_service=+ep "$(readlink -f "$SBM_XRAY_BIN")" || {
         log_error '无法授予 Xray 低端口能力，未切换为 root 服务。'; return 1;
       }
-      write_openrc_supervised_service "$unit" 'sb-manager xray' 'sb-manager VLESS Xray-core service' "$SBM_XRAY_BIN" "run -config $SBM_XRAY_CONFIG" "$SBM_SERVICE_USER" "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" 'after firewall' || return 1 ;;
+      write_openrc_supervised_service "$unit" 'xray-manager xray' 'xray-manager VLESS Xray-core service' "$SBM_XRAY_BIN" "run -config $SBM_XRAY_CONFIG" "$SBM_SERVICE_USER" "$SBM_XRAY_LOG" "$SBM_XRAY_ERROR_LOG" 'after firewall' || return 1 ;;
     *) log_error 'Xray 需要 systemd 或 OpenRC。'; return 1 ;;
   esac
 }
@@ -265,7 +265,7 @@ _xray_install() {
   service_active "$SBM_XRAY_SERVICE" && active=1
   [[ -L "$SBM_XRAY_BIN" || ! -e "$SBM_XRAY_BIN" ]] || { log_error '已有非托管 Xray 程序，拒绝覆盖。'; return 1; }
   if (( active )) && ! xray_runtime_required; then
-    log_error '旧 Xray 服务尚未按 VLESS 分工接入，请先执行 sb xray enable。'; return 1
+    log_error '旧 Xray 服务尚未按 VLESS 分工接入，请先执行 xm xray enable。'; return 1
   fi
   target=$(xray_download_version latest) || return 1
   if [[ "$old" == "$target" ]]; then
@@ -351,7 +351,7 @@ xray_auto_update() {
   latest=$(xray_release_json latest | jq -r '.tag_name // empty | ltrimstr("v")') || return 1
   [[ -n "$latest" && "$current" != "$latest" ]] || return 0
   case "$policy" in
-    notify) log_warn "发现 Xray 更新：$current → $latest；运行 sb xray update。" ;;
+    notify) log_warn "发现 Xray 更新：$current → $latest；运行 xm xray update。" ;;
     patch|stable) _xray_install ;;
   esac
 }

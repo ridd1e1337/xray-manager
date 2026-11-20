@@ -42,7 +42,7 @@ ui_run() {
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || flags+=(--dry-run)
   [[ ${SBM_QUIET:-0} != 1 ]] || flags+=(--quiet)
   [[ -z ${NO_COLOR:-} ]] || flags+=(--no-color)
-  SBM_UI_WORKER=1 SBM_LIB="$SBM_LIB" bash "$SBM_LIB/sb" "${flags[@]}" __ui-step "$@" || rc=$?
+  SBM_UI_WORKER=1 SBM_LIB="$SBM_LIB" bash "$SBM_LIB/xm" "${flags[@]}" __ui-step "$@" || rc=$?
   SBM_UI_LAST_STATUS=$rc
 }
 
@@ -53,7 +53,7 @@ ui_reload() {
   [[ ${SBM_QUIET:-0} != 1 ]] || flags+=(--quiet)
   [[ -z ${NO_COLOR:-} ]] || flags+=(--no-color)
   unset SBM_VERSION
-  exec bash "$SBM_LIB/sb" "${flags[@]}"
+  exec bash "$SBM_LIB/xm" "${flags[@]}"
 }
 
 ui_end_session() {
@@ -242,7 +242,7 @@ ui_header() {
   else
     service_state='未运行'
   fi
-  printf '%s╭──────────────────── sb-manager ────────────────────╮%s\n' "$C_CYAN" "$C_RESET"
+  printf '%s╭──────────────────── xray-manager ────────────────────╮%s\n' "$C_CYAN" "$C_RESET"
   printf '  版本 %-18s sing-box %-16s\n' "$SBM_VERSION" "$(core_current_version || echo '-')"
   if [[ -x "$SBM_XRAY_BIN" ]]; then printf '  Xray %-16s VLESS %-16s\n' "$(xray_current_version || echo '-')" "$(jq -r '.settings.vless_engine // "xray"' "$SBM_STATE")"; fi
   printf '  服务管理 %-16s\n' "$(init_system_label)"
@@ -1031,7 +1031,7 @@ ui_update_menu() {
     8) prompt_value path 'Schema 输出文件' "$SBM_EXPORTS/sing-box-schema.json"; core_schema "$path";;
     9) core_capabilities;;
     10) manager_update --check;;
-    11) manager_update; if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/sb"; fi;;
+    11) manager_update; if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/xm"; fi;;
     12) ui_open_submenu ui_manager_auto_menu;;
     13) ui_open_submenu ui_xray_menu;;
   esac
@@ -1114,7 +1114,7 @@ ui_manager_auto_menu() {
     3)
       if ! manager_auto_enabled; then log_warn '请先开启自动更新，或使用上级菜单的“更新脚本与 Caddy”。'; return; fi
       manager_auto_run
-      if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/sb"; fi;;
+      if [[ ${SBM_UI_WORKER:-0} == 1 ]]; then exit 203; else exec "$SBM_BIN_DIR/xm"; fi;;
     4)
       if [[ -f "$SBM_VAR/updates/manager.log" ]]; then tail -n 80 "$SBM_VAR/updates/manager.log"
       else log_info '尚无自动更新日志。'; fi;;
@@ -1640,10 +1640,10 @@ Sub-Store 是订阅整理工具：把本机、其他 VPS 或已有订阅里的�
 
 第一次使用（菜单 11 可自动完成前两步）：
   1. 安装并启用 Sub-Store。它默认只监听本机，通常使用 3001 端口。
-  2. 接入本机节点。会创建 sb-manager 来源，并加入 sb-manager-all 组合。
+  2. 接入本机节点。会创建 xray-manager 来源，并加入 xray-manager-all 组合。
   3. 选择“打开网页”，在自己的电脑上建立 SSH 转发，再打开浏览器地址。
      服务器只需要现有 SSH 端口，无需为 3001 开放 UFW。
-  4. 在网页中打开 sb-manager-all 组合，选择你的客户端格式并导出/复制内容，
+  4. 在网页中打开 xray-manager-all 组合，选择你的客户端格式并导出/复制内容，
      然后导入客户端。Snell 单用户选择 Surge；多用户 Snell 请用主菜单 5 直接导出。
   5. 要合并其他 VPS，选择“其他服务器来源”，填入那台服务器的动态订阅地址。
      来源机不必安装 Sub-Store，只需提供中心机可访问的订阅 URL。
@@ -1659,7 +1659,7 @@ EOF_GUIDE
 ui_substore_access() {
   local port ssh_port=''
   [[ -f "$SBM_SUBSTORE_SECRET" ]] || { log_warn '请先选择“首次设置”安装 Sub-Store。'; return; }
-  port=$(jq -r '.substore.port // 3001' "$SBM_STATE")
+  port=$(jq -r '.substore.port // 3002' "$SBM_STATE")
   [[ -z ${SSH_CONNECTION:-} ]] || ssh_port=$(awk '{print $4}' <<<"$SSH_CONNECTION")
   if ! validate_port "$ssh_port"; then ssh_port=$(firewall_ssh_ports_or_default | sed -n '1p'); fi
   printf '在你自己的电脑上运行下面的命令，填写用户名、服务器 IP 和实际 SSH 端口；保持该连接：\n'
@@ -1673,16 +1673,16 @@ ui_substore_onboard() {
   local port
   [[ ${SBM_DRY_RUN:-0} == 0 ]] || usage_die 'Sub-Store 首次设置不接受 --dry-run。'
   if [[ ! -f "$SBM_SUBSTORE_DIR/app/manifest.json" ]]; then
-    port=$(jq -r '.substore.port // 3001' "$SBM_STATE")
+    port=$(jq -r '.substore.port // 3002' "$SBM_STATE")
     prompt_value port 'Sub-Store 本机端口（无需在 UFW 放行）' "$port"
     substore_cli install --port "$port"
   elif [[ $(jq -r '.substore.enabled // false' "$SBM_STATE") != true ]]; then
     substore_cli enable
   fi
-  substore_cli sync sb-manager
-  printf '\n本机节点已加入 sb-manager-all 组合；以后节点变化会随订阅刷新生效。\n'
+  substore_cli sync xray-manager
+  printf '\n本机节点已加入 xray-manager-all 组合；以后节点变化会随订阅刷新生效。\n'
   ui_substore_access
-  printf '进入网页后：打开 sb-manager-all 组合 → 选择客户端格式 → 导出并导入客户端。\n'
+  printf '进入网页后：打开 xray-manager-all 组合 → 选择客户端格式 → 导出并导入客户端。\n'
 }
 
 ui_substore_menu() {
@@ -1692,15 +1692,15 @@ ui_substore_menu() {
   printf '1. 查看 Sub-Store 安装与运行状态\n2. 安装/升级 Sub-Store 网页和后端\n3. 启动订阅管理服务\n4. 停止订阅管理服务\n5. 打开管理网页\n6. 将本机节点接入订阅组合\n7. 备份订阅来源和处理规则\n8. 恢复 Sub-Store 数据\n9. 接入其他 VPS/订阅并合并来源\n10. 管理本机动态订阅 URL\n11. 首次设置：安装 + 接入本机节点 + 显示访问方法\n12. 使用指南：用途、来源、组合和客户端导入\n0. 返回\n'
   ui_menu_choice c '选择订阅管理操作' 12
   case "$c" in
-    1) jq -r '(.substore // {enabled:false,port:3001,version:"",frontend_version:""})|"Sub-Store：\(if .version=="" then "未安装" elif .enabled then "已启用" else "已停用" end)；本机端口：\(.port)","后端版本：\(.version)；前端版本：\(.frontend_version)"' "$SBM_STATE";;
+    1) jq -r '(.substore // {enabled:false,port:3002,version:"",frontend_version:""})|"Sub-Store：\(if .version=="" then "未安装" elif .enabled then "已启用" else "已停用" end)；本机端口：\(.port)","后端版本：\(.version)；前端版本：\(.frontend_version)"' "$SBM_STATE";;
     2)
-      port=$(jq -r '.substore.port // 3001' "$SBM_STATE")
+      port=$(jq -r '.substore.port // 3002' "$SBM_STATE")
       current=$(jq -r '.substore.version // "未安装"' "$SBM_STATE"); current_frontend=$(jq -r '.substore.frontend_version // "未安装"' "$SBM_STATE")
       prompt_value port '本机端口' "$port"
       prompt_value version "后端版本（当前 $current）" 'latest'; prompt_value frontend "前端版本（当前 $current_frontend）" 'latest'
       substore_cli install --port "$port" --version "$version" --frontend-version "$frontend";;
     3) substore_cli enable;; 4) substore_cli disable;; 5) ui_substore_access;;
-    6) prompt_value name 'Sub-Store 来源名称' 'sb-manager'; substore_cli sync "$name";;
+    6) prompt_value name 'Sub-Store 来源名称' 'xray-manager'; substore_cli sync "$name";;
     7) prompt_value file '备份文件路径' "$SBM_BACKUPS/substore-$(now_stamp).tar.gz"; substore_cli backup "$file";;
     8) prompt_value file '备份文件路径' ''; confirm '恢复会覆盖 Sub-Store 当前数据，继续？' N && substore_cli restore "$file";;
     9) ui_open_submenu ui_substore_sources_menu;;
@@ -1724,7 +1724,7 @@ ui_substore_sources_menu() {
         2)
           printf '填写对方服务器生成的动态订阅 URL；首次接入后无需重复导入节点。\n'
           prompt_secret url '订阅 URL（输入隐藏）'
-          prompt_value collection '组合名称' 'sb-manager-all'
+          prompt_value collection '组合名称' 'xray-manager-all'
           substore_cli source add "$name" "$url" "$collection";;
         3) substore_cli source check "$name";;
         4) confirm "确认从 Sub-Store 移除来源 $name？" N && substore_cli source remove "$name";;

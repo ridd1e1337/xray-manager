@@ -199,7 +199,7 @@ _node_add() {
   done
   domain=${domain%.}; domain=${domain,,}
   if [[ "$SBM_SKIP_INIT" != 1 ]] && ! command_exists ss && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature probe || die '节点端口探测需要 iproute2/ss；请运行 sb deps install probe。'
+    dependency_require_feature probe || die '节点端口探测需要 iproute2/ss；请运行 xm deps install probe。'
   fi
   if [[ "$proxy_listen_supplied" == 1 ]]; then
     case "$type" in socks|socks5|http|mixed|vless) ;; *) usage_die '--listen 目前仅用于 VLESS 与 socks/http/mixed 代理入口。';; esac
@@ -449,7 +449,7 @@ _node_set_enabled() {
   local id=$1 value=$2 candidate
   state_node_exists "$id" || die "节点不存在：$id"
   if [[ "$value" == true && "$SBM_SKIP_INIT" != 1 ]] && ! command_exists ss && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature probe || die '节点端口探测需要 iproute2/ss；请运行 sb deps install probe。'
+    dependency_require_feature probe || die '节点端口探测需要 iproute2/ss；请运行 xm deps install probe。'
   fi
   if [[ "$value" == true ]] && jq -e --arg id "$id" --argjson now "$(date +%s)" '.nodes[]|select(.id==$id)|.expiry.at!=null and .expiry.at<=$now' "$SBM_STATE" >/dev/null; then die '节点已到期，请先续期或清除到期策略。'; fi
   candidate=$(state_candidate)
@@ -782,7 +782,7 @@ settings_default_address() {
     _settings_detect_public_ip
     address=$(jq -r '.settings.default_server_address // ""' "$SBM_STATE")
   fi
-  [[ -n "$address" ]] || die '未配置服务器地址；请使用 sb settings detect-ip 或 sb settings address HOST。'
+  [[ -n "$address" ]] || die '未配置服务器地址；请使用 xm settings detect-ip 或 xm settings address HOST。'
   printf '%s\n' "$address"
 }
 

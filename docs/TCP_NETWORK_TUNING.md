@@ -2,12 +2,12 @@
 
 参考项目：[Eric86777/vps-tcp-tune](https://github.com/Eric86777/vps-tcp-tune)，
 审阅版本 `e5f3e8d262a442b3c3f3167885998a84fdd17136`（MIT）。本次借鉴功能
-思路，代码按 sb-manager 的模块、锁、备份和 CLI 约定独立实现。
+思路，代码按 xray-manager 的模块、锁、备份和 CLI 约定独立实现。
 
-| 参考功能 | sb-manager 的处理 |
+| 参考功能 | xray-manager 的处理 |
 | --- | --- |
-| 按带宽/地区选择 TCP 缓冲区 | 新增 `sb tcp`，用明确的带宽和 RTT 计算 2 倍 BDP，结合内存限额；先预览，再应用 |
-| 网络延迟质量检测 | 新增 `sb network ping`，本地 ping/timeout，提供丢包、RTT、抖动和 JSON |
+| 按带宽/地区选择 TCP 缓冲区 | 新增 `xm tcp`，用明确的带宽和 RTT 计算 2 倍 BDP，结合内存限额；先预览，再应用 |
+| 网络延迟质量检测 | 新增 `xm network ping`，本地 ping/timeout，提供丢包、RTT、抖动和 JSON |
 | Snell 多实例、多端口 | 已有统一节点管理与 Snell v5/v6 导出，继续复用 |
 | 按端口流量配额与限速 | 已有节点流量控制和通知机制，继续复用 |
 | BBR、UDP 缓冲区 | 已有独立开启/恢复功能；新 TCP 调优不改动其键 |
@@ -16,7 +16,7 @@
 | DNS、IPv6、Swap、第三方脚本入口 | 与本次代理网络诊断的范围不同，未移植 |
 
 上游的地区档位被改为用户提供的实际 RTT，避免把地域直接等同于链路延迟。
-本项目不自动运行 Speedtest，也不宣称这些参数必然提升吞吐。现有 `sb bbr`
+本项目不自动运行 Speedtest，也不宣称这些参数必然提升吞吐。现有 `xm bbr`
 表示启用内核提供的 `bbr` 算法，并不意味着安装了 BBRv3。
 
 ## 参数与恢复
@@ -50,9 +50,9 @@ net.ipv4.tcp_mtu_probing: 0 → 1
 配置里可能包含的其他参数。备份损坏或恢复失败时保留恢复资料并返回失败，
 不继续卸载。升级无需修改 `state.json` 或执行状态迁移。
 
-系统原有的 sysctl 启动服务负责加载 `/etc/sysctl.d/99-sb-manager-tcp.conf`。
+系统原有的 sysctl 启动服务负责加载 `/etc/sysctl.d/99-xray-manager-tcp.conf`。
 Alpine OpenRC 会在该目录之后加载 `/etc/sysctl.conf` 和 `/run/sysctl.d/`；
-其他文件也可能设置相同键，因此预览列出冲突文件，启动后可用 `sb tcp status`
+其他文件也可能设置相同键，因此预览列出冲突文件，启动后可用 `xm tcp status`
 核对。预览不会编辑这些文件。
 
 ## 兼容性

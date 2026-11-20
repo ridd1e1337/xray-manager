@@ -2,9 +2,9 @@
 # shellcheck shell=bash
 
 SBM_TUNNEL_TOKEN_FILE="${SBM_TUNNEL_TOKEN_FILE:-$SBM_SECRETS/cloudflared.token}"
-SBM_QUICK_REFRESH_SERVICE="${SBM_QUICK_REFRESH_SERVICE:-sb-quick-tunnel-refresh.service}"
-SBM_QUICK_REFRESH_TIMER="${SBM_QUICK_REFRESH_TIMER:-sb-quick-tunnel-refresh.timer}"
-SBM_QUICK_REFRESH_PERIODIC="${SBM_QUICK_REFRESH_PERIODIC:-$SBM_PERIODIC_DIR/15min/sb-quick-tunnel-refresh}"
+SBM_QUICK_REFRESH_SERVICE="${SBM_QUICK_REFRESH_SERVICE:-xm-quick-tunnel-refresh.service}"
+SBM_QUICK_REFRESH_TIMER="${SBM_QUICK_REFRESH_TIMER:-xm-quick-tunnel-refresh.timer}"
+SBM_QUICK_REFRESH_PERIODIC="${SBM_QUICK_REFRESH_PERIODIC:-$SBM_PERIODIC_DIR/15min/xm-quick-tunnel-refresh}"
 
 write_quick_refresh_schedule() {
   case "$(effective_init_system)" in
@@ -12,16 +12,16 @@ write_quick_refresh_schedule() {
       mkdir -p "$SBM_SYSTEMD_DIR"
       cat >"$SBM_SYSTEMD_DIR/$SBM_QUICK_REFRESH_SERVICE" <<EOF_UNIT
 [Unit]
-Description=Refresh sb-manager Quick Tunnel hostname
+Description=Refresh xray-manager Quick Tunnel hostname
 After=$SBM_TUNNEL_SERVICE
 
 [Service]
 Type=oneshot
-ExecStart=$SBM_BIN_DIR/sb tunnel refresh-auto
+ExecStart=$SBM_BIN_DIR/xm tunnel refresh-auto
 EOF_UNIT
       cat >"$SBM_SYSTEMD_DIR/$SBM_QUICK_REFRESH_TIMER" <<EOF_UNIT
 [Unit]
-Description=Periodically refresh sb-manager Quick Tunnel hostname
+Description=Periodically refresh xray-manager Quick Tunnel hostname
 
 [Timer]
 OnBootSec=1min
@@ -38,7 +38,7 @@ EOF_UNIT
       mkdir -p "$(dirname "$SBM_QUICK_REFRESH_PERIODIC")"
       cat >"$SBM_QUICK_REFRESH_PERIODIC" <<EOF_JOB
 #!/bin/sh
-exec $SBM_BIN_DIR/sb tunnel refresh-auto >/dev/null 2>&1
+exec $SBM_BIN_DIR/xm tunnel refresh-auto >/dev/null 2>&1
 EOF_JOB
       chmod 0755 "$SBM_QUICK_REFRESH_PERIODIC"
       ;;
@@ -77,7 +77,7 @@ write_tunnel_unit() {
         token_path=$SBM_TUNNEL_TOKEN_FILE
         cat >"$unit" <<EOF_UNIT
 [Unit]
-Description=sb-manager Cloudflare Tunnel
+Description=xray-manager Cloudflare Tunnel
 After=network-online.target
 Wants=network-online.target
 
@@ -106,7 +106,7 @@ EOF_UNIT
       else
         cat >"$unit" <<EOF_UNIT
 [Unit]
-Description=sb-manager Cloudflare Quick Tunnel
+Description=xray-manager Cloudflare Quick Tunnel
 After=network-online.target $SBM_SERVICE
 Wants=network-online.target
 Requires=$SBM_SERVICE
@@ -143,7 +143,7 @@ EOF_UNIT
       start_post=''
       if [[ "$mode" == fixed ]]; then
         write_openrc_supervised_service \
-          "$unit" 'sb-manager Cloudflare Tunnel' 'sb-manager Cloudflare fixed Tunnel' \
+          "$unit" 'xray-manager Cloudflare Tunnel' 'xray-manager Cloudflare fixed Tunnel' \
           "$SBM_CLOUDFLARED_BIN" "tunnel --no-autoupdate --edge-ip-version auto --protocol http2 run --token-file $SBM_TUNNEL_TOKEN_FILE" \
           "$SBM_SERVICE_USER" "$SBM_TUNNEL_LOG" "$SBM_TUNNEL_ERROR_LOG" "$dependency" '' "$SBM_VAR/cloudflared-home"
       else
@@ -153,13 +153,13 @@ EOF_UNIT
 start_post() {
   (
     sleep 4
-    "$SBM_BIN_DIR/sb" tunnel refresh-auto >/dev/null 2>&1 || true
+    "$SBM_BIN_DIR/xm" tunnel refresh-auto >/dev/null 2>&1 || true
   ) &
 }
 EOF_POST
 )
         write_openrc_supervised_service \
-          "$unit" 'sb-manager Cloudflare Quick Tunnel' 'sb-manager Cloudflare Quick Tunnel' \
+          "$unit" 'xray-manager Cloudflare Quick Tunnel' 'xray-manager Cloudflare Quick Tunnel' \
           "$SBM_CLOUDFLARED_BIN" "tunnel --no-autoupdate --edge-ip-version auto --protocol http2 --url http://127.0.0.1:$port" \
           "$SBM_SERVICE_USER" "$SBM_TUNNEL_LOG" "$SBM_TUNNEL_ERROR_LOG" "$dependency" "$start_post" "$SBM_VAR/cloudflared-home"
       fi
@@ -251,7 +251,7 @@ _tunnel_setup_quick() {
       _tunnel_update_state quick "$id" "$domain" "$domain"
       log_ok "Quick Tunnel：$domain"
     else
-      log_warn '尚未从日志中取得 trycloudflare.com 域名；运行 sb tunnel refresh。'
+      log_warn '尚未从日志中取得 trycloudflare.com 域名；运行 xm tunnel refresh。'
     fi
   fi
 }
@@ -349,14 +349,14 @@ tunnel_reconcile() {
     none) return 0 ;;
     managed) quick_refresh_disable; write_managed_tunnel_unit || return 1 ;;
     fixed)
-      [[ -x "$SBM_CLOUDFLARED_BIN" ]] || { log_warn 'Cloudflare Tunnel 已配置，但 cloudflared 尚未安装；运行 sb cloudflared install。'; return 1; }
+      [[ -x "$SBM_CLOUDFLARED_BIN" ]] || { log_warn 'Cloudflare Tunnel 已配置，但 cloudflared 尚未安装；运行 xm cloudflared install。'; return 1; }
       [[ -n "$id" ]] || { log_warn '固定 Tunnel 状态缺少节点 ID。'; return 1; }
       [[ -s "$SBM_TUNNEL_TOKEN_FILE" ]] || { log_warn '固定 Tunnel Token 文件缺失，未启动 Tunnel。'; return 1; }
       quick_refresh_disable
       write_tunnel_unit fixed "$id"
       ;;
     quick)
-      [[ -x "$SBM_CLOUDFLARED_BIN" ]] || { log_warn 'Quick Tunnel 已配置，但 cloudflared 尚未安装；运行 sb cloudflared install。'; return 1; }
+      [[ -x "$SBM_CLOUDFLARED_BIN" ]] || { log_warn 'Quick Tunnel 已配置，但 cloudflared 尚未安装；运行 xm cloudflared install。'; return 1; }
       [[ -n "$id" ]] || { log_warn 'Quick Tunnel 状态缺少节点 ID。'; return 1; }
       write_tunnel_unit quick "$id"
       write_quick_refresh_schedule

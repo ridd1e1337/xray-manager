@@ -19,7 +19,7 @@ reality_site_validate_state() {
          ((.singbox.inbound // {})|length)==0 and ((.singbox.outbound // {})|length)==0)]|length)==1 and
        all(.nodes[]; .port!=$r.backend_port)) end
   ' "$state" >/dev/null || {
-    log_error 'Reality 网站入口必须由启用的 Xray Vision 节点维持；请先 sb reality detach 再停用、删除或修改其入口。'; return 1;
+    log_error 'Reality 网站入口必须由启用的 Xray Vision 节点维持；请先 xm reality detach 再停用、删除或修改其入口。'; return 1;
   }
 }
 
@@ -179,7 +179,7 @@ _reality_site_setup() (
   require_init_system
   [[ ${SBM_DRY_RUN:-0} != 1 ]] || { log_error 'Reality 一键建站不接受 --dry-run。'; return 1; }
   if jq -e '.reality_site.enabled==true' "$SBM_STATE" >/dev/null; then
-    log_error '已有 Reality 网站入口；请先查看 sb reality status 或使用 sb reality detach。'; return 1
+    log_error '已有 Reality 网站入口；请先查看 xm reality status 或使用 xm reality detach。'; return 1
   fi
   if nginx_stream_state_enabled "$SBM_STATE"; then log_error '请先解除已有 TCP/SNI 分流，再接入 Reality 网站。'; return 1; fi
   [[ ! -e "$SBM_REALITY_SITE_DIR/current" ]] || { log_error '存在未完成的 Reality 网站恢复记录，请先处理该记录。'; return 1; }
@@ -222,7 +222,7 @@ _reality_site_setup() (
       log_error '现有 OpenList 不是本项目管理，拒绝自动发布网站。'; return 1;
     }
     jq -e '.scheme.address=="127.0.0.1" and .scheme.https_port==-1' "$SBM_OPENLIST_DATA/config.json" >/dev/null || {
-      log_error 'OpenList 本机监听配置已改变，请先通过 sb openlist update 对齐。'; return 1;
+      log_error 'OpenList 本机监听配置已改变，请先通过 xm openlist update 对齐。'; return 1;
     }
     service_start "$SBM_OPENLIST_SERVICE" && openlist_ready "$(openlist_port)" || return 1
   fi
@@ -263,7 +263,7 @@ _reality_site_setup() (
   rm -f "$SBM_REALITY_SITE_DIR/current"/*.log
   log_ok "OpenList 与 VLESS Vision Reality 已共用 443：https://$domain"
   log_info "节点：$id；网站程序：$server；更新客户端订阅以使用新的 SNI。"
-  log_info "初始管理员信息：$SBM_SECRETS/openlist-admin.txt；节点分享：sb share $id"
+  log_info "初始管理员信息：$SBM_SECRETS/openlist-admin.txt；节点分享：xm share $id"
 )
 
 reality_site_setup() {
@@ -319,10 +319,10 @@ reality_site_cli() {
   local action=${1:-status} domain server=nginx id='' security=false
   (($# == 0)) || shift
   case "$action" in
-    status) (($# == 0)) || usage_die '用法：sb reality status'; reality_site_status;;
-    detach) (($# == 0)) || usage_die '用法：sb reality detach'; reality_site_detach;;
+    status) (($# == 0)) || usage_die '用法：xm reality status'; reality_site_status;;
+    detach) (($# == 0)) || usage_die '用法：xm reality detach'; reality_site_detach;;
     setup)
-      (($# >= 1)) || usage_die '用法：sb reality setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]'
+      (($# >= 1)) || usage_die '用法：xm reality setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]'
       domain=$1; shift
       if [[ ${1:-} == nginx || ${1:-} == caddy ]]; then server=$1; shift; fi
       while (($#)); do
@@ -333,6 +333,6 @@ reality_site_cli() {
         esac
       done
       reality_site_setup "$domain" "$server" "$id" "$security";;
-    *) usage_die '用法：sb reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach';;
+    *) usage_die '用法：xm reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach';;
   esac
 }

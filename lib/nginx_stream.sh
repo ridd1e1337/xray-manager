@@ -169,7 +169,7 @@ nginx_stream_prepare_binary_for_backend() {
       mkdir -p "$(dirname "$managed")"
       if [[ "$target" != "$managed" ]]; then install -m 0755 "$target" "$managed"; fi
       if ! command_exists setcap && declare -F dependency_require_feature >/dev/null 2>&1; then
-        dependency_require_feature low-port || die 'OpenRC Nginx Stream 需要 libcap；请运行 sb deps install low-port。'
+        dependency_require_feature low-port || die 'OpenRC Nginx Stream 需要 libcap；请运行 xm deps install low-port。'
       fi
       command_exists setcap || die 'OpenRC Nginx Stream 需要 setcap；请安装 Alpine 的 libcap 包。'
       setcap 'cap_net_bind_service=+ep' "$managed" || die "无法为托管 Nginx 设置低端口能力：$managed"
@@ -272,7 +272,7 @@ nginx_stream_write_service() {
       mkdir -p "$SBM_SYSTEMD_DIR"
       cat >"$SBM_SYSTEMD_DIR/$SBM_NGINX_STREAM_SERVICE" <<EOF_UNIT
 [Unit]
-Description=sb-manager Nginx Stream SNI multiplexer
+Description=xray-manager Nginx Stream SNI multiplexer
 Documentation=https://nginx.org/en/docs/stream/ngx_stream_ssl_preread_module.html
 After=network-online.target $SBM_SERVICE
 Wants=network-online.target
@@ -287,7 +287,7 @@ ExecStart=$SBM_NGINX_STREAM_BIN -c $SBM_NGINX_STREAM_CONFIG -g 'daemon off;'
 ExecReload=$SBM_NGINX_STREAM_BIN -s reload -c $SBM_NGINX_STREAM_CONFIG
 Restart=on-failure
 RestartSec=3s
-RuntimeDirectory=sb-manager-nginx
+RuntimeDirectory=xray-manager-nginx
 RuntimeDirectoryMode=0750
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -316,7 +316,7 @@ EOF_UNIT
       start_pre="checkpath --directory --mode 0750 --owner \"$SBM_SERVICE_USER:$SBM_SERVICE_USER\" \"$SBM_NGINX_STREAM_RUNTIME_DIR\""
       write_openrc_supervised_service \
         "$SBM_OPENRC_DIR/$(service_native_name "$SBM_NGINX_STREAM_SERVICE")" \
-        'sb-manager Nginx Stream' 'sb-manager Nginx Stream SNI multiplexer' \
+        'xray-manager Nginx Stream' 'xray-manager Nginx Stream SNI multiplexer' \
         "$service_binary" "-c $SBM_NGINX_STREAM_CONFIG" \
         "$SBM_SERVICE_USER" "$SBM_NGINX_STREAM_LOG" "$SBM_NGINX_STREAM_ERROR_LOG" \
         "need $(service_native_name "$SBM_SERVICE")" \
@@ -412,7 +412,7 @@ _nginx_stream_route_remove() {
   website_mux_managed && { log_error '网站自动接入会随节点启停自动维护路由，请停用或删除对应节点。'; return 1; }
   jq -e --arg id "$node_id" '.nginx_stream.routes[]? | select(.node_id==$id)' "$SBM_STATE" >/dev/null || { log_error "TCP/SNI 路由不存在：$node_id"; return 1; }
   if nginx_stream_state_enabled "$SBM_STATE" && [[ $(jq '.nginx_stream.routes|length' "$SBM_STATE") == 1 ]]; then
-    log_error '不能删除启用中的最后一条路由；请先执行 sb mux disable。'; return 1
+    log_error '不能删除启用中的最后一条路由；请先执行 xm mux disable。'; return 1
   fi
   candidate=$(state_candidate)
   jq --arg id "$node_id" '.nginx_stream.routes |= map(select(.node_id!=$id))' "$SBM_STATE" >"$candidate"
@@ -427,12 +427,12 @@ _nginx_stream_enable() {
   local public_port=${1:-} backend=${2:-} candidate
   if website_mux_managed; then
     [[ -z "$public_port" || "$public_port" == 443 ]] || { log_error '网站自动接入固定使用 443。'; return 1; }
-    [[ -z "$backend" || "$backend" == "$(mux_backend)" ]] || { log_error '请先 sb mux detach 再切换方式。'; return 1; }
+    [[ -z "$backend" || "$backend" == "$(mux_backend)" ]] || { log_error '请先 xm mux detach 再切换方式。'; return 1; }
     _website_mux_setup; return $?
   fi
   case "$backend" in ''|sing-box|nginx|caddy) ;; *) usage_die '复用方式只能是 sing-box、nginx 或 caddy。';; esac
   if [[ $(jq '.nginx_stream.routes|length' "$SBM_STATE") == 0 ]]; then
-    log_error '请先添加至少一条 SNI 路由：sb mux route add NODE_ID SNI。'; return 1
+    log_error '请先添加至少一条 SNI 路由：xm mux route add NODE_ID SNI。'; return 1
   fi
   candidate=$(state_candidate)
   [[ -n "$public_port" ]] || public_port=$(jq -r '.nginx_stream.port' "$SBM_STATE")
@@ -482,7 +482,7 @@ nginx_stream_status() {
   printf 'TCP/SNI 复用：%s，方式：%s，公网端口：%s/TCP，路由：%s 条\n' "$([[ "$enabled" == true ]] && echo '启用' || echo '停用')" "$(mux_backend_label)" "$port" "$routes"
   if [[ $(mux_backend) == sing-box ]]; then printf '复用现有 sing-box 核心，无需额外代理进程；仅转发已登记的 TLS SNI。\n'; fi
   if website_mux_managed; then printf '网站自动接入已启用；节点变化会自动同步网站分流，后端只监听本机。\n'
-  elif [[ $(mux_backend) == caddy ]]; then printf '公网由现有 Caddy 管理；节点只监听 loopback。使用 sb mux caddy 导出分流配置，变更路由后需同步并重载 Caddy。\n'; fi
+  elif [[ $(mux_backend) == caddy ]]; then printf '公网由现有 Caddy 管理；节点只监听 loopback。使用 xm mux caddy 导出分流配置，变更路由后需同步并重载 Caddy。\n'; fi
   if [[ "$enabled" == true && "$SBM_SKIP_INIT" != 1 && ("$backend" == systemd || "$backend" == openrc) ]] && service_exists "$service"; then
     service_status_text "$service" || true
   fi

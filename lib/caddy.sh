@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-SBM_CADDY_STORE="${SBM_CADDY_STORE:-$SBM_PREFIX/lib/sb-manager-web/managed}"
+SBM_CADDY_STORE="${SBM_CADDY_STORE:-$SBM_PREFIX/lib/xray-manager-web/managed}"
 
 caddy_managed() {
   jq -e '.caddy.managed == true' "$SBM_STATE" >/dev/null
@@ -26,7 +26,7 @@ _caddy_apt_enroll() {
   jq --arg config "$config" '.caddy_apt={enabled:true,config:$config}' "$SBM_STATE" >"$candidate" || return 1
   apply_candidate_state "$candidate" caddy-apt-enroll || { rm -f "$candidate"; return 1; }
   rm -f "$candidate"
-  log_ok '官方 APT Caddy 已接入 sb update 和现有每日任务。'
+  log_ok '官方 APT Caddy 已接入 xm update 和现有每日任务。'
 }
 
 caddy_version() {
@@ -65,7 +65,7 @@ caddy_store_binary() {
   target="$directory/caddy"
   # install -d can leave intermediate directories subject to the caller's
   # restrictive umask. The service account must traverse this program tree.
-  install -d -m 0755 "$SBM_PREFIX/lib/sb-manager-web" "$SBM_CADDY_STORE" "$directory" || return 1
+  install -d -m 0755 "$SBM_PREFIX/lib/xray-manager-web" "$SBM_CADDY_STORE" "$directory" || return 1
   if [[ -e "$target" ]]; then
     [[ ! -L "$target" && "$(sha256sum "$target" | awk '{print $1}')" == "$digest" ]] || {
       log_error '已有 Caddy 版本目录摘要不匹配，请先检查文件。'; return 1;
@@ -122,7 +122,7 @@ caddy_context() {
   elif website_mux_managed && [[ $(jq -r '.nginx_stream.website.server' "$SBM_STATE") == caddy ]]; then
     jq -c '.nginx_stream.website | {binary:.binary,config:.config,init:.init,managed:false}' "$SBM_STATE"
   else
-    log_error '请先通过 sb mux setup 接入现有 Caddy 网站。'; return 1
+    log_error '请先通过 xm mux setup 接入现有 Caddy 网站。'; return 1
   fi
 }
 
@@ -205,7 +205,7 @@ _caddy_switch() {
   fi
   if [[ "$managed" == true ]]; then
     [[ "$(sha256sum "$old" | awk '{print $1}')" == "$(jq -r '.sha256' <<<"$context")" ]] || {
-      log_error '现有 Caddy 程序被外部替换，请先核对版本；请使用 sb caddy update 管理升级。'; return 1;
+      log_error '现有 Caddy 程序被外部替换，请先核对版本；请使用 xm caddy update 管理升级。'; return 1;
     }
   fi
   [[ "$target" =~ ^/[A-Za-z0-9_./+-]+$ && "$config" =~ ^/[A-Za-z0-9_./+-]+$ ]] || return 1
@@ -228,7 +228,7 @@ _caddy_switch() {
       && [[ $(dpkg-query -W '-f=${Status}' caddy 2>/dev/null || true) == 'install ok installed' ]]; then
       method=debian-alternatives; canonical=/usr/bin/caddy
     fi
-    if [[ "$backend" == systemd ]]; then service_file="$SBM_SYSTEMD_DIR/caddy.service.d/90-sb-manager-caddy.conf"
+    if [[ "$backend" == systemd ]]; then service_file="$SBM_SYSTEMD_DIR/caddy.service.d/90-xray-manager-caddy.conf"
     else service_file="$SBM_OPENRC_DIR/caddy"; fi
     previous=null
   fi
@@ -265,7 +265,7 @@ _caddy_switch() {
 
 _caddy_manage() {
   local context reference target
-  if caddy_managed; then log_info 'Caddy 已接入程序维护，可运行 sb caddy update 升级。'; return 0; fi
+  if caddy_managed; then log_info 'Caddy 已接入程序维护，可运行 xm caddy update 升级。'; return 0; fi
   context=$(caddy_context) || return 1
   reference=$(jq -r '.binary' <<<"$context")
   target=$(caddy_store_binary "$reference") || return 1
@@ -302,7 +302,7 @@ caddy_prune_versions() {
 _caddy_update() {
   local context latest current target digest
   if caddy_apt_managed; then caddy_apt_run update; return "$?"; fi
-  caddy_managed || { log_error '请先运行 sb caddy manage。'; return 1; }
+  caddy_managed || { log_error '请先运行 xm caddy manage。'; return 1; }
   context=$(caddy_context) || return 1
   [[ "$(sha256sum "$(jq -r '.target' <<<"$context")" | awk '{print $1}')" == "$(jq -r '.sha256' <<<"$context")" ]] || {
     log_error '受管 Caddy 程序摘要已改变，请先核对手工修改。'; return 1;
@@ -354,40 +354,40 @@ caddy_status() {
     if [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then running=$(caddy_version "/proc/$pid/exe" 2>/dev/null || printf '未知'); fi
   elif service_active caddy.service; then running='OpenRC 服务运行中'; fi
   printf 'Caddy 命令入口：%s\n定制程序版本：%s\n实际服务版本：%s\n官方包程序版本：%s\n' "$binary" "$version" "$running" "$official"
-  printf '程序维护：%s\n' "$(jq -r 'if .managed then .method else "尚未接入；运行 sb caddy manage" end' <<<"$context")"
+  printf '程序维护：%s\n' "$(jq -r 'if .managed then .method else "尚未接入；运行 xm caddy manage" end' <<<"$context")"
   printf '可回滚版本：%s\n' "$(jq -r '.previous.version // "无"' <<<"$context")"
-  printf '官方源继续管理官方包；受管程序随 sb update 和每日更新维护。\n'
+  printf '官方源继续管理官方包；受管程序随 xm update 和每日更新维护。\n'
 }
 
 caddy_cli() {
   local action=${1:-status}
   (($# == 0)) || shift
   case "$action" in
-    status) (($# == 0)) || usage_die '用法：sb caddy status'; caddy_status;;
+    status) (($# == 0)) || usage_die '用法：xm caddy status'; caddy_status;;
     apt)
-      (($# == 0)) || usage_die '用法：sb caddy apt'
+      (($# == 0)) || usage_die '用法：xm caddy apt'
       [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die 'APT 接入不接受 --dry-run。'
       with_state_transaction caddy-apt-enroll _caddy_apt_enroll;;
-    manage) (($# == 0)) || usage_die '用法：sb caddy manage'; caddy_manage;;
+    manage) (($# == 0)) || usage_die '用法：xm caddy manage'; caddy_manage;;
     update)
       if [[ ${1:-} == --check ]]; then
-        (($# == 1)) || usage_die '用法：sb caddy update [--check]'
+        (($# == 1)) || usage_die '用法：xm caddy update [--check]'
         if caddy_apt_managed; then caddy_apt_run check; return "$?"; fi
         caddy_status
         local latest
         latest=$(caddy_latest_version) || return 1
         printf '官方最新正式版本：%s\n' "$latest"
-        printf '此查询仅比较 Caddy 主版本；运行 sb update 获取当前官方插件构建。\n'
+        printf '此查询仅比较 Caddy 主版本；运行 xm update 获取当前官方插件构建。\n'
       else
-        (($# == 0)) || usage_die '用法：sb caddy update [--check]'
-        [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '请使用 sb caddy update --check 查看更新。'
+        (($# == 0)) || usage_die '用法：xm caddy update [--check]'
+        [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '请使用 xm caddy update --check 查看更新。'
         with_lock _caddy_update
       fi;;
     rollback)
-      (($# == 0)) || usage_die '用法：sb caddy rollback'
+      (($# == 0)) || usage_die '用法：xm caddy rollback'
       [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die 'Caddy 回滚不接受 --dry-run。'
       with_state_transaction caddy-rollback _caddy_rollback || return 1
       with_lock caddy_prune_versions;;
-    *) usage_die '用法：sb caddy status|apt|manage|update [--check]|rollback';;
+    *) usage_die '用法：xm caddy status|apt|manage|update [--check]|rollback';;
   esac
 }

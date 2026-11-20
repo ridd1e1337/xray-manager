@@ -332,7 +332,7 @@ traffic_apply_unlocked() {
     return 0
   fi
   if [[ "$SBM_SKIP_INIT" != 1 ]] && ! command_exists nft && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature traffic || die '流量控制需要 nftables；请运行 sb deps install traffic。'
+    dependency_require_feature traffic || die '流量控制需要 nftables；请运行 xm deps install traffic。'
   fi
   require_command nft; require_command sha256sum
   script=$(mktemp "$SBM_RUN/traffic-rules.XXXXXX")
@@ -432,7 +432,7 @@ _traffic_set() {
     esac
   done
   if [[ "$SBM_SKIP_INIT" != 1 ]] && ! command_exists nft && declare -F dependency_require_feature >/dev/null 2>&1; then
-    dependency_require_feature traffic || die '流量控制需要 nftables；请运行 sb deps install traffic。'
+    dependency_require_feature traffic || die '流量控制需要 nftables；请运行 xm deps install traffic。'
   fi
   [[ "$SBM_SKIP_INIT" == 1 ]] || { require_command nft; require_command sha256sum; }
   if [[ ${SBM_DRY_RUN:-0} != 1 ]]; then
@@ -592,6 +592,6 @@ traffic_doctor_check() {
       check_line FAIL "流量控制服务定义缺失：$SBM_TRAFFIC_SERVICE"; failures=$((failures + 1))
     fi
     if traffic_runtime_complete; then check_line PASS "流量控制 nftables 表已加载：$SBM_TRAFFIC_TABLE"
-    else check_line FAIL '流量控制规则未加载；运行 sb traffic reconcile'; failures=$((failures + 1)); fi
+    else check_line FAIL '流量控制规则未加载；运行 xm traffic reconcile'; failures=$((failures + 1)); fi
   fi
 }

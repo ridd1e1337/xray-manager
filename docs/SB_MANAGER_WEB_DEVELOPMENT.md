@@ -1,4 +1,4 @@
-# sb-manager-web 完整开发文档
+# xray-manager-web 完整开发文档
 
 ## 文档状态
 
@@ -7,13 +7,13 @@
 - 实现语言：Go
 - 第一版目标：单服务器 WebUI
 - 第二版目标：多服务器主动连接 Agent
-- 当前仓库关系：新项目已创建为 [`sb-manager-web`](https://github.com/ridd1e1337/sb-manager-web)；本文件仍是完整设计基线，新项目稳定后同步维护其 `docs/` 目录。
+- 当前仓库关系：新项目已创建为 [`xray-manager-web`](https://github.com/ridd1e1337/sb-manager-web)；本文件仍是完整设计基线，新项目稳定后同步维护其 `docs/` 目录。
 
 ## 1. 项目定位
 
-`sb-manager-web` 是 `sb-manager` 的 Web 控制层，不是新的 sing-box 管理器，也不是对现有 Bash 项目的重写。
+`xray-manager-web` 是 `xray-manager` 的 Web 控制层，不是新的 sing-box 管理器，也不是对现有 Bash 项目的重写。
 
-现有 `sb-manager` 继续负责所有实际变更：
+现有 `xray-manager` 继续负责所有实际变更：
 
 - `state.json` 和状态迁移
 - 节点、用户和凭据管理
@@ -67,7 +67,7 @@
 
 ### 3.1 单服务器安装
 
-前提是服务器已经安装 `sb-manager`：
+前提是服务器已经安装 `xray-manager`：
 
 ```bash
 curl -fsSL https://github.com/ridd1e1337/sb-manager-web/raw/main/install.sh | sudo bash
@@ -77,7 +77,7 @@ sb-web enable
 安装器需要完成：
 
 1. 检测本机 `/usr/local/bin/sb`。
-2. 检查 `sb-manager` 最低兼容版本。
+2. 检查 `xray-manager` 最低兼容版本。
 3. 下载对应架构的 `sb-web` 二进制并验证 SHA256。
 4. 创建 WebUI 服务用户、配置目录和数据目录。
 5. 生成管理员初始凭据。
@@ -161,7 +161,7 @@ sb-web join https://panel.example.com <一次性令牌>
        sb CLI runner       mTLS Agent channel
                │                   │
                ▼                   ▼
-       本机 sb-manager      远程 sb-web agent
+       本机 xray-manager      远程 sb-web agent
                                    │
                                    ▼
                            远程 sb CLI runner
@@ -183,14 +183,14 @@ sb-web join      使用一次性令牌注册 Agent
 
 | 数据 | 所有者 | WebUI 是否直接写入 |
 |---|---|---|
-| `state.json` | sb-manager | 否 |
-| 生成的 `config.json` | sb-manager | 否 |
+| `state.json` | xray-manager | 否 |
+| 生成的 `config.json` | xray-manager | 否 |
 | 节点密码、PSK、token | 目标服务器 | 否，临时读取 |
 | 证书私钥 | 目标服务器 | 否 |
-| WebUI 账号 | sb-manager-web | 是 |
-| 服务器清单 | 控制端 sb-manager-web | 是 |
+| WebUI 账号 | xray-manager-web | 是 |
+| 服务器清单 | 控制端 xray-manager-web | 是 |
 | Agent 私钥 | 对应服务器 | 是，仅本机 |
-| 审计日志 | 控制端 sb-manager-web | 是 |
+| 审计日志 | 控制端 xray-manager-web | 是 |
 | 加密备份密文 | 可选控制端 | 是，密文形式 |
 
 ## 5. 仓库和代码组织
@@ -198,16 +198,16 @@ sb-web join      使用一次性令牌注册 Agent
 ### 5.1 仓库边界
 
 ```text
-sb-manager/       现有 Bash 项目，独立发布
-sb-manager-web/   新 Go 项目，独立发布
+xray-manager/       现有 Bash 项目，独立发布
+xray-manager-web/   新 Go 项目，独立发布
 ```
 
-不建议把整个 `sb-manager` 作为 Git 子模块复制进 WebUI。WebUI 只依赖安装后的 `sb` CLI。
+不建议把整个 `xray-manager` 作为 Git 子模块复制进 WebUI。WebUI 只依赖安装后的 `sb` CLI。
 
 ### 5.2 推荐目录
 
 ```text
-sb-manager-web/
+xray-manager-web/
 ├── cmd/
 │   └── sb-web/
 │       └── main.go
@@ -248,7 +248,7 @@ sb-manager-web/
 - 不在运行时依赖 Node、Python 或外部前端服务
 - 前端使用 Go 模板和少量原生 JavaScript
 
-## 6. 与 sb-manager 的集成契约
+## 6. 与 xray-manager 的集成契约
 
 ### 6.1 CLI 调用规则
 
@@ -272,14 +272,14 @@ exec.Command("sh", "-c", userInput)
 WebUI 启动或添加服务器时执行：
 
 ```bash
-sb version
-sb status --json
-sb core capabilities --json
+xm version
+xm status --json
+xm core capabilities --json
 ```
 
 检查内容：
 
-- sb-manager 版本
+- xray-manager 版本
 - state schema 版本
 - sing-box 版本
 - CPU 架构
@@ -298,7 +298,7 @@ sb core capabilities --json
 诊断：doctor、probe、health check
 ```
 
-未来如需新功能，先在 `sb-manager` 增加机器可读输出，再在 WebUI 中接入。不要在 WebUI 解析普通中文输出作为长期协议。
+未来如需新功能，先在 `xray-manager` 增加机器可读输出，再在 WebUI 中接入。不要在 WebUI 解析普通中文输出作为长期协议。
 
 ### 6.4 兼容性策略
 
@@ -340,7 +340,7 @@ sb-web（普通用户，HTTP/API/UI）
 sb-web-helper（root，固定动作）
     │
     ▼
-sb-manager CLI
+xray-manager CLI
 ```
 
 Helper 只接受动作名和结构化参数，例如：
@@ -534,7 +534,7 @@ Agent 必须：
 }
 ```
 
-中央端下发任务时携带期望修订号。如果用户刚刚在服务器本地执行了 `sb node set`，修订号变为 38，则中央任务拒绝执行并显示：
+中央端下发任务时携带期望修订号。如果用户刚刚在服务器本地执行了 `xm node set`，修订号变为 38，则中央任务拒绝执行并显示：
 
 ```text
 配置已在本地发生变化，请刷新后重新预览。
@@ -564,15 +564,15 @@ audit
 建议：
 
 ```text
-/etc/sb-manager-web/config.json
-/var/lib/sb-manager-web/web.db
-/var/lib/sb-manager-web/agent-identity/
-/var/lib/sb-manager-web/backups/
-/var/log/sb-manager-web/
-/run/sb-manager-web/
+/etc/xray-manager-web/config.json
+/var/lib/xray-manager-web/web.db
+/var/lib/xray-manager-web/agent-identity/
+/var/lib/xray-manager-web/backups/
+/var/log/xray-manager-web/
+/run/xray-manager-web/
 ```
 
-WebUI 数据库备份不能替代 sb-manager 的配置备份。两者需要分别备份。
+WebUI 数据库备份不能替代 xray-manager 的配置备份。两者需要分别备份。
 
 ### 11.3 密码和密钥
 
@@ -635,7 +635,7 @@ WebUI 不应在用户未确认时自动绑定 `0.0.0.0` 或修改防火墙。
   → 返回成功或错误
 ```
 
-实际的候选配置、sing-box 校验、服务切换和回滚由 sb-manager 完成。
+实际的候选配置、sing-box 校验、服务切换和回滚由 xray-manager 完成。
 
 ### 13.2 多服务器任务
 
@@ -704,10 +704,10 @@ latest → 具体版本 → SHA256 → 任务
 ```json
 {
   "listen": "127.0.0.1:9091",
-  "sb_path": "/usr/local/bin/sb",
-  "data_dir": "/var/lib/sb-manager-web",
-  "database": "/var/lib/sb-manager-web/web.db",
-  "log_dir": "/var/log/sb-manager-web",
+  "sb_path": "/usr/local/bin/xm",
+  "data_dir": "/var/lib/xray-manager-web",
+  "database": "/var/lib/xray-manager-web/web.db",
+  "log_dir": "/var/log/xray-manager-web",
   "tls": {
     "enabled": false,
     "cert_file": "",
@@ -735,7 +735,7 @@ latest → 具体版本 → SHA256 → 任务
 服务名称：
 
 ```text
-sb-manager-web.service
+xray-manager-web.service
 ```
 
 要求：
@@ -754,14 +754,14 @@ sb-manager-web.service
 服务名称：
 
 ```text
-sb-manager-web
+xray-manager-web
 ```
 
 要求：
 
 - 使用 `supervise-daemon`
 - 支持 `respawn`
-- 日志写入 `/var/log/sb-manager-web/`
+- 日志写入 `/var/log/xray-manager-web/`
 - Agent 网络断开时自动重连
 - 不依赖容器中的伪 OpenRC PID 1
 
@@ -778,11 +778,11 @@ sb-manager-web
 
 卸载 WebUI 时：
 
-- 不删除 `sb-manager`。
+- 不删除 `xray-manager`。
 - 默认保留 WebUI 数据库和审计日志。
 - `--purge` 才删除 WebUI 数据。
 - 撤销本机 Agent 身份或提示用户在控制端撤销。
-- 不删除 sb-manager 的配置、证书和节点数据。
+- 不删除 xray-manager 的配置、证书和节点数据。
 
 ## 17. 日志、监控和审计
 
@@ -847,10 +847,10 @@ Agent 离线判定：
 WebUI 调用：
 
 ```bash
-sb backup ...
+xm backup ...
 ```
 
-备份密文由 sb-manager 负责生成。WebUI 只负责触发、下载和记录备份索引。
+备份密文由 xray-manager 负责生成。WebUI 只负责触发、下载和记录备份索引。
 
 ### 18.2 控制端备份
 
@@ -859,7 +859,7 @@ sb backup ...
 - 只上传 age 加密后的备份文件。
 - 控制端不保存解密私钥，除非用户明确配置。
 - 下载和删除操作写入审计日志。
-- 控制端数据库备份与 sb-manager 备份分开处理。
+- 控制端数据库备份与 xray-manager 备份分开处理。
 
 ### 18.3 恢复前确认
 
@@ -889,7 +889,7 @@ PROVENANCE-SHA256SUMS
 - Git commit
 - Go 版本
 - 构建参数
-- 支持的最低 sb-manager 版本
+- 支持的最低 xray-manager 版本
 - API 版本
 - SHA256
 
@@ -898,8 +898,8 @@ PROVENANCE-SHA256SUMS
 WebUI 使用独立版本号，但发布说明必须明确：
 
 ```text
-sb-manager-web 0.1.0
-最低 sb-manager 0.1.0-alpha.27
+xray-manager-web 0.1.0
+最低 xray-manager 0.1.0-alpha.27
 支持 state schema v2
 ```
 
@@ -939,13 +939,13 @@ sb-manager-web 0.1.0
 
 ### Phase 0：基础契约
 
-- 创建 `sb-manager-web` 仓库。
+- 创建 `xray-manager-web` 仓库。
 - 初始化 Go 模块和目录。
 - 实现配置加载、日志、版本输出。
 - 实现 `sb` 路径检测。
 - 实现安全 CLI runner。
 
-完成标准：可以安全调用 `sb status --json` 并返回结构化结果。
+完成标准：可以安全调用 `xm status --json` 并返回结构化结果。
 
 ### Phase 1：单服务器 WebUI
 
@@ -994,7 +994,7 @@ sb-manager-web 0.1.0
 ## 24. 关键设计决策总结
 
 1. Go 只负责 Web、Agent 和编排，不重写 Bash 管理逻辑。
-2. `sb-manager` 仍然是状态和配置的唯一真相源。
+2. `xray-manager` 仍然是状态和配置的唯一真相源。
 3. 单服务器优先，多服务器通过主动 Agent 扩展。
 4. 默认 loopback，公网暴露必须由用户主动选择。
 5. 不使用 SSH 作为用户必须理解的配置项。
@@ -1009,8 +1009,8 @@ sb-manager-web 0.1.0
 - Go 代码保持统一格式，沿用项目现有接口和错误处理约定。
 - 所有外部输入先校验，再转换为固定 CLI 参数。
 - 任何新增 Web API 都必须记录审计事件。
-- 任何新增 sb-manager CLI 依赖都必须更新兼容性矩阵。
-- 不在 WebUI 中复制协议字段默认值；默认值由 sb-manager 决定。
+- 任何新增 xray-manager CLI 依赖都必须更新兼容性矩阵。
+- 不在 WebUI 中复制协议字段默认值；默认值由 xray-manager 决定。
 - 不提交真实凭据、证书、Agent 私钥或生产数据库。
 - 发布前生成 SHA256 和 provenance 文件。
 
@@ -1019,7 +1019,7 @@ sb-manager-web 0.1.0
 新项目正式开始时，建议按以下顺序创建首个迭代：
 
 ```text
-1. 已创建 sb-manager-web 仓库
+1. 已创建 xray-manager-web 仓库
 2. 已搭建 Go module 和 cmd/internal/web 目录
 3. 已实现 sb CLI runner、status 页面和 SQLite 存储
 4. 已加入登录、CSRF、session 和节点/系统操作
@@ -1028,4 +1028,4 @@ sb-manager-web 0.1.0
 7. 继续完善远程 mTLS、备份下载和更完整的页面交互
 ```
 
-在此之前，不修改现有 `sb-manager` 的协议和状态逻辑，避免 WebUI 项目尚未稳定时影响当前服务器脚本。
+在此之前，不修改现有 `xray-manager` 的协议和状态逻辑，避免 WebUI 项目尚未稳定时影响当前服务器脚本。

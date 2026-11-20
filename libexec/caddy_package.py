@@ -30,7 +30,7 @@ def read(path, default=None):
 def atomic(path, value, mode=0o600):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix='.sb-caddy-', dir=path.parent)
+    fd, temporary = tempfile.mkstemp(prefix='.xm-caddy-', dir=path.parent)
     try:
         with os.fdopen(fd, 'w') as handle:
             handle.write(value)
@@ -47,7 +47,7 @@ def save_json(path, value):
 
 def link(target, path):
     path = Path(path)
-    temporary = path.with_name('.' + path.name + '.sb-caddy-' + str(os.getpid()))
+    temporary = path.with_name('.' + path.name + '.xm-caddy-' + str(os.getpid()))
     temporary.unlink(missing_ok=True)
     try:
         temporary.symlink_to(target)
@@ -140,9 +140,9 @@ def install(plan, snapshot):
         service = Path(plan['service_file'])
         journal['files'][str(service)] = file_snapshot(service)
         if plan['init'] == 'systemd':
-            if service.exists() and not service.read_text().startswith('# Managed by sb-manager Caddy lifecycle\n'):
+            if service.exists() and not service.read_text().startswith('# Managed by xray-manager Caddy lifecycle\n'):
                 fail('Caddy 生命周期服务覆盖文件已由其他工具占用。')
-            service_text = ('# Managed by sb-manager Caddy lifecycle\n[Service]\nExecStart=\nExecStart=' + canonical
+            service_text = ('# Managed by xray-manager Caddy lifecycle\n[Service]\nExecStart=\nExecStart=' + canonical
                             + ' run --environ --config ' + plan['config'] + ' --adapter caddyfile\nExecReload=\nExecReload='
                             + canonical + ' reload --config ' + plan['config'] + ' --adapter caddyfile --force\n')
         else:

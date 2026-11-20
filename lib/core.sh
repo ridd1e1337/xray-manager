@@ -58,7 +58,7 @@ github_api() {
     if output=$(curl --fail --silent --show-error --location \
       --connect-timeout 15 --max-time 120 \
       -H 'Accept: application/vnd.github+json' \
-      -H 'User-Agent: sb-manager' "$url"); then
+      -H 'User-Agent: xray-manager' "$url"); then
       if [[ -n "$output" ]]; then
         printf '%s\n' "$output"
         return 0
@@ -105,7 +105,7 @@ core_latest_version() {
     return 0
   fi
   latest=$(core_fallback_version)
-  log_warn "无法获取 sing-box 最新 Release，回退到 $latest；如需确认最新版本，请稍后运行 sb core check。"
+  log_warn "无法获取 sing-box 最新 Release，回退到 $latest；如需确认最新版本，请稍后运行 xm core check。"
   printf '%s\n' "$latest"
 }
 
@@ -269,7 +269,7 @@ core_download_version() (
   archive_bytes=$(jq -r --arg n "$asset_name" 'first(.assets[]|select(.name==$n)).size // 40000000' <<<"$json") || return 1
   [[ "$archive_bytes" =~ ^[1-9][0-9]*$ ]] || return 1
   core_check_free_space "$SBM_DOWNLOAD_TMP" "$((archive_bytes + 8388608))" || return 1
-  tmpdir=$(mktemp -d "$SBM_DOWNLOAD_TMP/sb-manager-sing-box.XXXXXX") || return 1
+  tmpdir=$(mktemp -d "$SBM_DOWNLOAD_TMP/xray-manager-sing-box.XXXXXX") || return 1
   trap 'rm -rf -- "$tmpdir"; [[ "$complete" == true || -z "$install_dir" ]] || rm -rf -- "$install_dir"' EXIT
   archive="$tmpdir/$asset_name"
   log_info "下载 sing-box $version ($arch)…"
@@ -457,7 +457,7 @@ core_auto_update() {
   mkdir -p "$SBM_VAR/updates"
   jq -n --arg now "$(now_iso)" --arg current "$current" --arg latest "$latest" --arg policy "$policy" '{checked_at:$now,current:$current,latest:$latest,policy:$policy}' >"$SBM_VAR/updates/sing-box.json"
   case "$policy" in
-    notify) log_warn "发现 sing-box 更新：$current → $latest。运行 sb core update。" ;;
+    notify) log_warn "发现 sing-box 更新：$current → $latest。运行 xm core update。" ;;
     patch)
       IFS=. read -r cmj cmi _ <<<"$current"; IFS=. read -r lmj lmi _ <<<"$latest"
       if [[ "$cmj.$cmi" == "$lmj.$lmi" ]]; then _core_update "$latest"; else log_warn "发现跨 minor 更新 $latest；patch 策略不自动安装。"; fi
@@ -466,7 +466,7 @@ core_auto_update() {
       if [[ $(core_version_series "$current" 2>/dev/null || true) == "$(core_version_series "$latest" 2>/dev/null || true)" ]]; then
         _core_update "$latest"
       else
-        log_warn "发现跨 minor 版本 $latest；为避免配置迁移风险，仅通知并保留当前 $current。请手动运行 sb core update $latest。"
+        log_warn "发现跨 minor 版本 $latest；为避免配置迁移风险，仅通知并保留当前 $current。请手动运行 xm core update $latest。"
       fi
       ;;
   esac
@@ -489,13 +489,13 @@ cloudflared_auto_update() {
   jq -n --arg now "$(now_iso)" --arg current "$current" --arg latest "$latest" --arg policy "$policy" \
     '{checked_at:$now,current:$current,latest:$latest,policy:$policy}' >"$SBM_VAR/updates/cloudflared.json"
   case "$policy" in
-    notify) log_warn "发现 cloudflared 更新：$current → $latest。运行 sb cloudflared update。" ;;
+    notify) log_warn "发现 cloudflared 更新：$current → $latest。运行 xm cloudflared update。" ;;
     patch|stable)
       current_series=${current%%.*}; latest_series=${latest%%.*}
       if [[ "$policy" == patch && "$current_series" == "$latest_series" ]] || [[ "$policy" == stable && "$current_series" == "$latest_series" ]]; then
         cloudflared_install
       else
-        log_warn "发现跨系列 cloudflared 更新 $latest；请手动运行 sb cloudflared update。"
+        log_warn "发现跨系列 cloudflared 更新 $latest；请手动运行 xm cloudflared update。"
       fi
       ;;
   esac
@@ -514,7 +514,7 @@ _core_rollback() {
   if [[ -z ${candidate:-} ]]; then
     candidate=$(find "$SBM_CORE_DIR/sing-box" -mindepth 2 -maxdepth 2 -type f -name sing-box -perm -u+x -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk -v cur="$current" '$2!=cur {print $2; exit}')
   fi
-  [[ -n "$candidate" ]] || { log_error '默认仅保留当前核心；如需旧版，请运行 sb core update VERSION 指定官方版本。'; return 1; }
+  [[ -n "$candidate" ]] || { log_error '默认仅保留当前核心；如需旧版，请运行 xm core update VERSION 指定官方版本。'; return 1; }
   version=$(basename "$(dirname "$candidate")")
   core_switch_to "$version"
 }
@@ -610,7 +610,7 @@ cloudflared_prune_cached_versions() {
 }
 
 cloudflared_require() {
-  [[ -x "$SBM_CLOUDFLARED_BIN" ]] || die 'Cloudflare Tunnel 组件尚未安装；请先运行：sb cloudflared install'
+  [[ -x "$SBM_CLOUDFLARED_BIN" ]] || die 'Cloudflare Tunnel 组件尚未安装；请先运行：xm cloudflared install'
   validate_runtime_binary_path cloudflared "$SBM_CLOUDFLARED_BIN"
 }
 
