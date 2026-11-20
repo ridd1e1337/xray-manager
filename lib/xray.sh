@@ -167,6 +167,11 @@ xray_protocol_inbound() {
     http)
       clients=$(jq '[.[] | {user:.username,pass:.password}]' <<<"$credentials") || return 1
       jq --argjson a "$clients" '. + {protocol:"http",settings:{accounts:$a}}' <<<"$base";;
+    wireguard)
+      # Userspace stack only: never create a host interface or routes.
+      clients=$(jq --arg n "$id" '[.[] | {publicKey:.public_key,allowedIPs:[.address+"/32"],email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
+      jq --argjson c "$clients" --arg sk "$(jq -r '.private_key' <<<"$secret")" --argjson mtu "$(jq -r '.mtu // 1420' <<<"$node")" \
+        '. + {protocol:"wireguard",settings:{secretKey:$sk,mtu:$mtu,noKernelTun:true,peers:$c}}' <<<"$base";;
     tunnel)
       jq --argjson n "$node" '. + {protocol:"tunnel",settings:{address:$n.target_address,port:$n.target_port,network:$n.network,followRedirect:($n.follow_redirect // false)}}' <<<"$base";;
     *) log_error "Xray 不支持此协议：$protocol"; return 1;;

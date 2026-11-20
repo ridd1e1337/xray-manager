@@ -6,6 +6,7 @@ node_transport_kinds() {
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
     vmess-ws-cf|http|socks|mixed) printf 'tcp\n' ;;
+    wireguard) printf 'udp\n' ;;
     tunnel) case "$(jq -r '.network' <<<"$node")" in tcp) printf 'tcp\n';; udp) printf 'udp\n';; *) printf 'tcp\nudp\n';; esac ;;
     vless|vmess|trojan) vless_node_listener_kinds "$node" ;;
     hysteria2) printf 'udp\n' ;;
@@ -101,7 +102,7 @@ validate_state_semantics() {
     port=$(jq -r '.port' <<<"$node")
     validate_node_id "$id" || die "节点 ID 不规范：$id"
     validate_port "$port" || die "节点 $id 的端口无效：$port"
-    case "$protocol" in vmess-ws-cf|vmess|shadowsocks|hysteria2|trojan|vless|socks|http|mixed|tunnel) ;; *) die "节点 $id 使用未知协议：$protocol" ;; esac
+    case "$protocol" in vmess-ws-cf|vmess|shadowsocks|hysteria2|trojan|vless|socks|http|mixed|tunnel|wireguard) ;; *) die "节点 $id 使用未知协议：$protocol" ;; esac
     if [[ $(jq -r '.enabled' <<<"$node") == true ]]; then
       if [[ "$protocol" != vmess-ws-cf ]]; then
         local endpoint_address

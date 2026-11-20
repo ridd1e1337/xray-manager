@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
+# WireGuard client parameters shared by wg-quick, mihomo and Xray exports.
+wireguard_client_profile() {
+  local id=$1 user_id=$2 node secret node_secret
+  node=$(state_get_node "$id") || return 1
+  secret=$(state_get_user_secret "$id" "$user_id") || return 1
+  node_secret=$(state_get_secret "$id") || return 1
+  jq -n --argjson n "$node" --argjson u "$secret" --argjson s "$node_secret" '
+    {server:$n.server_address,port:$n.port,mtu:($n.mtu // 1420),address:$u.address,private_key:$u.private_key,
+     server_public_key:$s.public_key,name:$n.name}'
+}
+
+wireguard_quick_conf() {
+  jq -r '"[Interface]\nPrivateKey = \(.private_key)\nAddress = \(.address)/32\nMTU = \(.mtu)\nDNS = 1.1.1.1\n\n[Peer]\nPublicKey = \(.server_public_key)\nAllowedIPs = 0.0.0.0/0, ::/0\nEndpoint = \(if (.server|contains(":")) then "[\(.server)]" else .server end):\(.port)\nPersistentKeepalive = 25"' <<<"$1"
+}
+
 node_share_uri() {
   local id=$1 user_id=${2:-} node user secret node_secret='{}' protocol
   node=$(state_get_node "$id"); [[ -n "$node" ]] || die "节点不存在：$id"
@@ -87,6 +102,16 @@ node_share() {
   [[ -n "$user_id" ]] || die "节点没有启用用户：$id"
   state_user_exists "$id" "$user_id" || die "用户不存在：$id/$user_id"
   protocol=$(jq -r '.protocol' <<<"$node")
+  if [[ "$protocol" == wireguard ]]; then
+    local profile conf
+    profile=$(wireguard_client_profile "$id" "$user_id") || return 1
+    conf=$(wireguard_quick_conf "$profile") || return 1
+    out_dir="$SBM_EXPORTS/nodes/$id/$user_id"; mkdir -p "$out_dir"; chmod 0700 "$out_dir" 2>/dev/null || true
+    printf '%s\n' "$conf" >"$out_dir/wireguard.conf"; chmod 0600 "$out_dir/wireguard.conf"
+    printf '\n%sWireGuard 客户端配置（节点/用户：%s/%s）%s\n\n%s\n\n已保存：%s\n' "$C_BOLD" "$id" "$user_id" "$C_RESET" "$conf" "$out_dir/wireguard.conf"
+    if [[ "$qr" == 1 ]] && command_exists qrencode; then qrencode -t ANSIUTF8 <<<"$conf"; fi
+    return 0
+  fi
   if [[ "$protocol" == tunnel ]]; then
     printf '\n%s端口转发%s %s：本机 %s/%s → %s\n' "$C_BOLD" "$C_RESET" "$id" "$(jq -r '.port' <<<"$node")" "$(jq -r '.network' <<<"$node")" \
       "$(jq -r '"\(.target_address):\(.target_port)"' <<<"$node")"
@@ -286,7 +311,14 @@ export_client_config() {
 node_xray_client_outbound() {
   local id=$1 user_id=${2:-} node user secret node_secret='{}' outbound
   node=$(state_get_node "$id") || return 1
-  [[ -n "$node" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$node")" || { log_warn '原生 Xray 客户端导出支持 VLESS、VMess、Trojan 与 Shadowsocks。'; return 1; }
+  if [[ $(jq -r '.protocol // ""' <<<"$node") == wireguard ]]; then
+    [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
+    wireguard_client_profile "$id" "$user_id" | jq --arg tag "proxy-$id-$user_id" '{tag:$tag,protocol:"wireguard",settings:{
+      secretKey:.private_key,address:[.address+"/32"],mtu:.mtu,noKernelTun:true,domainStrategy:"ForceIP",
+      peers:[{publicKey:.server_public_key,endpoint:((if (.server|contains(":")) then "[\(.server)]" else .server end)+":"+(.port|tostring)),allowedIPs:["0.0.0.0/0","::/0"],keepAlive:25}]}}'
+    return
+  fi
+  [[ -n "$node" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$node")" || { log_warn '原生 Xray 客户端导出支持 VLESS、VMess、Trojan、Shadowsocks 与 WireGuard。'; return 1; }
   if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node") || return 1; fi
   [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
   [[ -n "$user_id" ]] || return 1
@@ -311,6 +343,10 @@ node_mihomo_client_outbound() {
   [[ ! -r "$(state_secret_path "$id")" ]] || node_secret=$(state_get_secret "$id") || return 1
   case "$(jq -r '.protocol' <<<"$node")" in
     vless|vmess|trojan|shadowsocks) native=$(protocol_vless_mihomo_outbound "$node" "$secret" "$node_secret") || return 1;;
+    wireguard)
+      native=$(wireguard_client_profile "$id" "$user_id" | jq -c '{type:"wireguard",server:.server,port:.port,ip:.address,
+        "private-key":.private_key,"public-key":.server_public_key,"allowed-ips":["0.0.0.0/0","::/0"],mtu:.mtu,udp:true}') || return 1;;
+    tunnel) log_warn "端口转发节点 $id 没有客户端配置。"; return 1;;
     *)
       # Other protocols: convert the effective sing-box client outbound.
       local outbound result

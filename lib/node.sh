@@ -5,6 +5,7 @@ node_protocol_label() {
   case "$1" in
     vmess) printf 'VMess' ;;
     tunnel) printf 'Tunnel' ;;
+    wireguard) printf 'WireGuard' ;;
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
     shadowsocks) printf 'Shadowsocks 2022' ;;
     hysteria2) printf 'Hysteria2' ;;
@@ -169,7 +170,7 @@ _node_add() {
   local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' obfs_host='' obfs_min_packet_size=512 obfs_max_packet_size=1200 disable_chrome_parrot=false bbr_profile='' brutal_debug=false masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 congestion_control='cubic' strict_mode=true wildcard_sni='off' snell_version=5 snell_mode=default realm_id='' realm_ip_version=0 realm_port_mapping=false inbound_json='{}' outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
   local remark='' region='' purpose='' line='' tags='' proxy_listen='127.0.0.1' proxy_listen_supplied=0 vless_preview='' vless_network='' vless_listen='::'
   local -a vless_options=()
-  local security_supplied=0 tunnel_target='' follow_redirect=false
+  local security_supplied=0 tunnel_target='' follow_redirect=false wg_subnet='' wg_mtu=1420
   while (($#)); do
     case "$1" in
       --listen) proxy_listen=${2:?}; proxy_listen_supplied=1; shift 2;;
@@ -179,6 +180,7 @@ _node_add() {
       --obfs) obfs=${2:?}; shift 2;; --obfs-host) obfs_host=${2:?}; shift 2;; --obfs-min-packet-size) obfs_min_packet_size=${2:?}; shift 2;; --obfs-max-packet-size) obfs_max_packet_size=${2:?}; shift 2;; --disable-chrome-parrot) disable_chrome_parrot=true; shift;; --bbr-profile) bbr_profile=${2:?}; shift 2;; --brutal-debug) brutal_debug=true; shift;; --masquerade) masquerade=${2:?}; shift 2;; --disabled) enabled=false; shift;;
       --security) security=${2:?}; security_supplied=1; shift 2;;
       --target) tunnel_target=${2:?}; shift 2;; --follow-redirect) follow_redirect=true; shift;;
+      --subnet) wg_subnet=${2:?}; shift 2;; --mtu) wg_mtu=${2:?}; shift 2;;
       --flow) (($# >= 2)) || usage_die '缺少 flow 值；可显式传空字符串。'; flow=$2; shift 2;;
       --transport|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol)
         (($# >= 2)) || usage_die "缺少参数值：$1"
@@ -296,6 +298,14 @@ _node_add() {
       secret=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}')
       if [[ "$address_supplied" == 0 && ( "$proxy_listen" == 127.0.0.1 || "$proxy_listen" == ::1 ) ]]; then address=$proxy_listen; address_supplied=1; address_source=manual; fi
       ;;
+    wireguard|wg)
+      protocol=wireguard; base=wireguard; transport=udp; port=${port:-$(node_choose_port udp)}; name=${name:-WireGuard}
+      [[ -n "$wg_subnet" ]] || wg_subnet="10.66.$((RANDOM % 250 + 1)).0/24"
+      [[ "$wg_subnet" =~ ^10\.([0-9]{1,3})\.([0-9]{1,3})\.0/24$ ]] && (( BASH_REMATCH[1] <= 255 && BASH_REMATCH[2] <= 255 )) || die 'WireGuard 子网须为 10.x.y.0/24。'
+      [[ "$wg_mtu" =~ ^[0-9]+$ ]] && (( wg_mtu >= 1280 && wg_mtu <= 1500 )) || die 'WireGuard MTU 须为 1280-1500。'
+      node_secret=$(wireguard_keypair) || return 1
+      secret=$(jq --arg address "${wg_subnet%.0/24}.2" '. + {address:$address}' <<<"$(wireguard_keypair)") || return 1
+      ;;
     tunnel|dokodemo|dokodemo-door)
       # Xray tunnel (dokodemo-door): forward a local port to one target.
       protocol=tunnel; base=tunnel; port=${port:?端口转发必须指定 --port。}; name=${name:-Tunnel}
@@ -365,6 +375,10 @@ _node_add() {
       ;;
     vless)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg security "$security" --arg flow "$flow" --arg hs "$handshake_server" --argjson hp "$handshake_port" --arg now "$created_at" --argjson enabled "$enabled" --arg listen "$vless_listen" '{id:$id,name:$name,protocol:"vless",enabled:$enabled,listen:$listen,port:$port,domain:$domain,server_address:$address,security:$security,flow:(if $flow=="" then null else $flow end),handshake_server:(if $hs=="" then null else $hs end),handshake_port:$hp,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
+      ;;
+    wireguard)
+      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg address "$address" --arg subnet "$wg_subnet" --argjson mtu "$wg_mtu" --arg now "$created_at" --argjson enabled "$enabled" \
+        '{id:$id,name:$name,protocol:"wireguard",enabled:$enabled,listen:"::",port:$port,server_address:$address,subnet:$subnet,mtu:$mtu,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
     tunnel)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg target "$tunnel_target" --arg network "$network" --argjson follow "$follow_redirect" --arg address "$address" --arg listen "$([[ $proxy_listen_supplied == 1 ]] && printf %s "$proxy_listen" || printf '::')" --arg now "$created_at" --argjson enabled "$enabled" \
@@ -582,11 +596,36 @@ node_set() {
   if [[ ${SBM_DRY_RUN:-0} == 1 ]]; then with_lock _node_set "$id" "$@"; else with_state_transaction node-edit _node_set "$id" "$@"; fi
 }
 
+# WireGuard keys come from Xray; peers get the next free host in the node
+# subnet (the server keeps .1).
+wireguard_keypair() {
+  local out private public
+  [[ -x "$SBM_XRAY_BIN" ]] || _xray_install_binary >&2 || return 1
+  out=$("$SBM_XRAY_BIN" wg 2>/dev/null) || return 1
+  private=$(awk -F': *' 'tolower($1) ~ /private/ {print $2; exit}' <<<"$out")
+  public=$(awk -F': *' 'tolower($1) ~ /public/ {print $2; exit}' <<<"$out")
+  [[ "$private" =~ ^[A-Za-z0-9+/]{43}=$ && "$public" =~ ^[A-Za-z0-9+/]{43}=$ ]] || { log_error '无法生成 WireGuard 密钥。'; return 1; }
+  jq -n --arg private "$private" --arg public "$public" '{private_key:$private,public_key:$public}'
+}
+
+wireguard_next_address() {
+  local node=$1 prefix used host user_id file
+  prefix=$(jq -r '.subnet' <<<"$node" | sed -E 's#\.[0-9]+/24$##')
+  used=' 1 '
+  while IFS= read -r user_id; do
+    file=$(state_user_secret_path "$(jq -r '.id' <<<"$node")" "$user_id")
+    [[ -r "$file" ]] && used+="$(jq -r '.address // ""' "$file" | awk -F. '{print $4}') "
+  done < <(jq -r '.users[]?.id' <<<"$node")
+  for ((host=2; host<255; host++)); do [[ "$used" == *" $host "* ]] || { printf '%s.%s\n' "$prefix" "$host"; return 0; }; done
+  log_error 'WireGuard 子网地址已用尽。'; return 1
+}
+
 node_user_generate_secret() {
   local node=$1 user_id=${2:-default} protocol
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
     vmess|vmess-ws-cf) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
+    wireguard) jq --arg address "$(wireguard_next_address "$node")" '. + {address:$address}' <<<"$(wireguard_keypair)" ;;
     shadowsocks) jq -n --arg password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{password:$password}' ;;
     hysteria2|trojan) jq -n --arg password "$(random_password 24)" '{password:$password}' ;;
     vless) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
