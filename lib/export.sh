@@ -63,20 +63,11 @@ node_client_outbound() {
 }
 
 node_substore_line() {
-  local id=$1 user_id=${2:-} node user secret node_secret='{}' protocol
+  local id=$1 user_id=${2:-} node
   node=$(state_get_node "$id"); [[ -n "$node" ]] || die "节点不存在：$id"
-  if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node"); fi
   [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[] | select(.enabled==true) | .id) // empty' <<<"$node")
   [[ -n "$user_id" ]] || die "节点没有启用用户：$id"
-  protocol=$(jq -r '.protocol' <<<"$node")
-  if [[ "$protocol" != snell ]]; then
-    node_share_uri "$id" "$user_id"
-    return
-  fi
-  user=$(state_get_user "$id" "$user_id")
-  secret=$(jq -s '.[0]+.[1]' <(printf '%s\n' "$user") <(state_get_user_secret "$id" "$user_id"))
-  [[ ! -r $(state_secret_path "$id") ]] || node_secret=$(state_get_secret "$id")
-  protocol_snell_surge_share "$node" "$secret" "$node_secret"
+  node_share_uri "$id" "$user_id"
 }
 
 export_substore_links() {
@@ -95,7 +86,7 @@ export_substore_links() {
 }
 
 node_share() {
-  local id=$1 qr=${2:-0} user_id=${3:-} uri out_dir outbound node user secret node_secret protocol native substore_line profile_ready=0 surge_ready=0
+  local id=$1 qr=${2:-0} user_id=${3:-} out_dir node protocol
   node=$(state_get_node "$id"); [[ -n "$node" ]] || die "节点不存在：$id"
   if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node"); fi
   [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[] | select(.enabled==true) | .id) // empty' <<<"$node")
@@ -117,101 +108,27 @@ node_share() {
       "$(jq -r '"\(.target_address):\(.target_port)"' <<<"$node")"
     return 0
   fi
-  user=$(state_get_user "$id" "$user_id")
-  secret=$(jq -s '.[0]+.[1]' <(printf '%s\n' "$user") <(state_get_user_secret "$id" "$user_id"))
-  node_secret='{}'; [[ ! -r $(state_secret_path "$id") ]] || node_secret=$(state_get_secret "$id")
   out_dir="$SBM_EXPORTS/nodes/$id/$user_id"; mkdir -p "$out_dir"; chmod 0700 "$out_dir" 2>/dev/null || true
-  rm -f "$out_dir/surge.conf" "$out_dir/mihomo.json" "$out_dir/mihomo.yaml"
-  if [[ "$protocol" == vless ]]; then
-    node_share_vless "$id" "$user_id" "$qr" "$out_dir"
-    return
-  fi
-  if [[ "$protocol" == snell ]]; then
-    if native=$(protocol_snell_surge_share "$node" "$secret" "$node_secret"); then
-      printf '%s\n' "$native" >"$out_dir/surge.conf"; chmod 0600 "$out_dir/surge.conf"
-      surge_ready=1
-      # Print the usable native entry before ancillary exports or diagnostics.
-      printf '\n%sSurge 原生配置（复制到配置文件的 [Proxy] 段）%s\n\n%s\n\n' "$C_BOLD" "$C_RESET" "$native"
-      printf '节点/用户：%s/%s；已保存：%s\n' "$id" "$user_id" "$out_dir/surge.conf"
-      if [[ $(jq -r '.snell_version // 5' <<<"$node") == 6 ]]; then
-        printf 'Snell v6 需要支持 v6 的 Surge 版本。\n'
-      else
-        printf '服务端 Snell v5 使用 Surge 兼容的 version=4。\n'
-      fi
-    else
-      printf '\n该 Snell 节点未生成 Surge 配置（多用户模式不受支持）；请使用下方 sing-box 配置。\n'
-    fi
-    if native=$(protocol_snell_mihomo_share "$node" "$secret" "$node_secret"); then
-      printf '{"proxies":[%s]}\n' "$native" | jq . >"$out_dir/mihomo.json"; chmod 0600 "$out_dir/mihomo.json"
-      cp "$out_dir/mihomo.json" "$out_dir/mihomo.yaml"; chmod 0600 "$out_dir/mihomo.yaml"
-    fi
-  fi
-  uri=$(node_share_uri "$id" "$user_id") || return 1
-  printf '%s\n' "$uri" >"$out_dir/share.txt"; chmod 0600 "$out_dir/share.txt"
-  outbound=$(node_client_outbound "$id" "$user_id") || return 1
-  printf '%s\n' "$outbound" | jq . >"$out_dir/outbound.json"; chmod 0600 "$out_dir/outbound.json"
-  if export_node_client_config "$id" "$user_id" "$out_dir/client.json" >/dev/null; then
-    profile_ready=1
-  else
-    rm -f "$out_dir/client.json"
-    log_warn '完整 sing-box 配置未能生成；已经显示的分享内容和已生成文件仍可使用。'
-  fi
-  if substore_line=$(node_substore_line "$id" "$user_id" 2>/dev/null); then
-    printf '%s\n' "$substore_line" >"$out_dir/substore.txt"; chmod 0600 "$out_dir/substore.txt"
-  else
-    rm -f "$out_dir/substore.txt"
-  fi
-  if [[ "$protocol" != snell ]]; then
-    printf '\n%s节点/用户：%s/%s%s\n\n%s\n\n' "$C_BOLD" "$id" "$user_id" "$C_RESET" "$uri"
-  elif (( surge_ready == 0 )); then
-    printf '节点/用户：%s/%s\n' "$id" "$user_id"
-  fi
-  printf 'sing-box 客户端节点 JSON：%s\n' "$out_dir/outbound.json"
-  if (( profile_ready )); then printf 'sing-box 完整客户端配置：%s\n' "$out_dir/client.json"; fi
-  if [[ "$protocol" == shadowtls ]]; then
-    printf 'ShadowTLS 文件包含 Shadowsocks 内层与 ShadowTLS 外层两个 outbound，须一起导入；分享链接需要客户端支持 shadow-tls 插件。\n'
-  fi
-  if [[ -r "$out_dir/mihomo.yaml" ]]; then printf 'mihomo 配置：%s\n' "$out_dir/mihomo.yaml"; fi
-  if [[ "$protocol" != snell && -r "$out_dir/substore.txt" ]]; then
-    printf '\nSub-Store 单节点内容（复制下面这一行到本地订阅）：\n%s\n' "$(<"$out_dir/substore.txt")"
-  fi
-  if [[ "$qr" == 1 && "$protocol" != snell ]]; then
-    if command_exists qrencode; then qrencode -t ANSIUTF8 "$uri"; else log_info '未安装二维码工具；可直接复制上面的分享链接导入客户端。'; fi
-  fi
+  rm -f "$out_dir/mihomo.json" "$out_dir/mihomo.yaml"
+  node_share_files "$id" "$user_id" "$qr" "$out_dir"
 }
 
 node_share_all() (
-  local node id user_id uri native protocol file="$SBM_EXPORTS/links.txt" substore_file="$SBM_EXPORTS/substore.txt" tmp='' surge_tmp='' display_tmp=''
-  local surge_file="$SBM_EXPORTS/snell-surge.conf" unsupported=''
-  trap 'rm -f -- "$tmp" "$surge_tmp" "$display_tmp"' EXIT
+  local node id user_id uri file="$SBM_EXPORTS/links.txt" substore_file="$SBM_EXPORTS/substore.txt" tmp=''
+  trap 'rm -f -- "$tmp"' EXIT
   mkdir -p "$SBM_EXPORTS" || return 1
   tmp=$(mktemp "$SBM_EXPORTS/.links.XXXXXX") || return 1
-  surge_tmp=$(mktemp "$SBM_EXPORTS/.snell-surge.XXXXXX") || return 1
-  display_tmp=$(mktemp "$SBM_EXPORTS/.share-display.XXXXXX") || return 1
   while IFS= read -r node; do
     id=$(jq -r '.id' <<<"$node")
-    protocol=$(jq -r '.protocol' <<<"$node")
     while IFS= read -r user_id; do
-      if uri=$(node_share_uri "$id" "$user_id"); then
-        printf '%s\n' "$uri" >>"$tmp" || return 1
-        if [[ "$protocol" != snell ]]; then printf '%s\n' "$uri" >>"$display_tmp" || return 1; fi
+      if uri=$(node_share_uri "$id" "$user_id"); then printf '%s\n' "$uri" >>"$tmp" || return 1
       else log_warn "链接文件已排除无法完整表达的节点：$id/$user_id。"; fi
-      if [[ "$protocol" == snell ]]; then
-        if native=$(node_substore_line "$id" "$user_id" 2>/dev/null); then
-          printf '%s\n' "$native" >>"$surge_tmp" || return 1
-        else unsupported+=" $id/$user_id"; fi
-      fi
     done < <(jq -r '.users[] | select(.enabled==true) | .id' <<<"$node")
   done < <(jq -c '.nodes[]? | select(.enabled==true)' "$SBM_STATE")
-  chmod 0600 "$tmp" "$surge_tmp" "$display_tmp" || return 1
-  mv "$tmp" "$file" && mv "$surge_tmp" "$surge_file" || return 1
-  if [[ -s "$surge_file" ]]; then
-    printf 'Surge 原生 Snell 配置（复制到 [Proxy] 段；v6 需客户端支持）：\n\n'
-    cat "$surge_file"
-    printf '\n已保存：%s\n\n' "$surge_file"
-  fi
-  if [[ -s "$display_tmp" ]]; then printf '节点分享链接：\n'; cat "$display_tmp"; fi
-  if [[ -n "$unsupported" ]]; then printf '\n以下 Snell 节点未生成 Surge 配置（多用户模式不受支持），请检查节点并使用 sing-box 导出：%s\n' "$unsupported"; fi
+  chmod 0600 "$tmp" && mv "$tmp" "$file" || return 1
+  # Old sb-manager exports may have left a Snell Surge file behind.
+  rm -f "$SBM_EXPORTS/snell-surge.conf"
+  if [[ -s "$file" ]]; then printf '节点分享链接：\n'; cat "$file"; fi
   export_substore_links "$substore_file" || return 1
   printf '\n通用链接文件：%s\nSub-Store 兼容订阅文件：%s\n' "$file" "$substore_file"
 )
@@ -465,32 +382,46 @@ export_vless_compatibility_json() {
   } | jq -s .
 }
 
-node_share_vless() {
-  local id=$1 user_id=$2 qr=$3 out_dir=$4 uri='' native outbound
+# Share page for one user. The link (and QR) comes first; every client
+# format is then exported independently, so a format that cannot express the
+# node (reason logged) never hides the others.
+node_share_files() {
+  local id=$1 user_id=$2 qr=$3 out_dir=$4 uri='' native outbound shown=0
   rm -f "$out_dir/share.txt" "$out_dir/substore.txt" "$out_dir/outbound.json" "$out_dir/client.json" \
     "$out_dir/xray-outbound.json" "$out_dir/xray-client.json" "$out_dir/mihomo.json" "$out_dir/mihomo.yaml"
-  native=$(node_xray_client_outbound "$id" "$user_id") || return 1
-  printf '%s\n' "$native" >"$out_dir/xray-outbound.json" && chmod 0600 "$out_dir/xray-outbound.json" || return 1
-  printf '\n节点/用户：%s/%s\nXray 原生 outbound：%s\n' "$id" "$user_id" "$out_dir/xray-outbound.json"
-  if export_xray_client_config "$out_dir/xray-client.json" "$id" "$user_id" >/dev/null; then
-    printf 'Xray 完整客户端配置：%s\n' "$out_dir/xray-client.json"
-  else log_warn '该节点需要额外客户端配置，请将原生 outbound 接入自己的 Xray 配置。'; fi
-  if uri=$(node_share_uri "$id" "$user_id"); then
+  printf '\n%s节点/用户：%s/%s%s\n' "$C_BOLD" "$id" "$user_id" "$C_RESET"
+  if uri=$(node_share_uri "$id" "$user_id" 2>/dev/null); then
     printf '%s\n' "$uri" >"$out_dir/share.txt" && chmod 0600 "$out_dir/share.txt" || return 1
     cp "$out_dir/share.txt" "$out_dir/substore.txt" && chmod 0600 "$out_dir/substore.txt" || return 1
-    printf '\nVLESS 分享链接：\n%s\n' "$uri"
-    if [[ "$qr" == 1 ]] && command_exists qrencode; then qrencode -t ANSIUTF8 "$uri"; fi
-  else log_warn '此配置无法完整写入通用链接；已提供原生 Xray JSON。'; fi
-  if outbound=$(node_client_outbound "$id" "$user_id"); then
-    printf '%s\n' "$outbound" >"$out_dir/outbound.json" && chmod 0600 "$out_dir/outbound.json" || return 1
-    printf 'sing-box outbound：%s\n' "$out_dir/outbound.json"
-    if export_node_client_config "$id" "$user_id" "$out_dir/client.json" >/dev/null; then
-      printf 'sing-box 完整客户端配置：%s\n' "$out_dir/client.json"
-    else rm -f "$out_dir/client.json"; log_warn '当前 sing-box 核心无法加载该客户端配置，保留 Xray 导出。'; fi
+    printf '\n分享链接：\n%s\n\n' "$uri"; shown=1
+    if [[ "$qr" == 1 ]]; then
+      if command_exists qrencode; then qrencode -t ANSIUTF8 "$uri"; else log_info '未安装二维码工具；可直接复制上面的分享链接。'; fi
+    fi
+  else
+    log_info '该节点没有通用分享链接格式，请使用下方客户端配置文件。'
   fi
-  if export_mihomo_client_config "$out_dir/mihomo.json" "$id" "$user_id" >/dev/null; then
+  if native=$(node_xray_client_outbound "$id" "$user_id" 2>/dev/null); then
+    printf '%s\n' "$native" >"$out_dir/xray-outbound.json" && chmod 0600 "$out_dir/xray-outbound.json" || return 1
+    shown=1
+    if export_xray_client_config "$out_dir/xray-client.json" "$id" "$user_id" >/dev/null 2>&1; then
+      printf 'Xray 客户端配置（v2rayN/v2rayNG 可导入）：%s\n' "$out_dir/xray-client.json"
+    else printf 'Xray 原生 outbound：%s\n' "$out_dir/xray-outbound.json"; fi
+  fi
+  if export_mihomo_client_config "$out_dir/mihomo.json" "$id" "$user_id" >/dev/null 2>&1; then
     cp "$out_dir/mihomo.json" "$out_dir/mihomo.yaml" && chmod 0600 "$out_dir/mihomo.yaml" || return 1
-    printf 'mihomo 完整客户端配置：%s\n' "$out_dir/mihomo.yaml"
+    printf 'mihomo 客户端配置（Clash Verge/FlClash）：%s\n' "$out_dir/mihomo.yaml"; shown=1
   fi
-  return 0
+  if jq -e '.protocol=="hysteria2" and (.obfs.type // "")=="salamander"' <<<"$(state_get_node "$id")" >/dev/null; then
+    # Verified: sing-box's Salamander does not interoperate with Xray's (mihomo does).
+    printf 'sing-box：sing-box 的 Hysteria2 Salamander 与 Xray 不互通，已跳过（mihomo 可用）。\n'
+  elif outbound=$(node_client_outbound "$id" "$user_id" 2>/dev/null); then
+    printf '%s\n' "$outbound" >"$out_dir/outbound.json" && chmod 0600 "$out_dir/outbound.json" || return 1
+    if export_node_client_config "$id" "$user_id" "$out_dir/client.json" >/dev/null 2>&1; then
+      printf 'sing-box 客户端配置：%s\n' "$out_dir/client.json"
+    else rm -f "$out_dir/client.json"; printf 'sing-box outbound：%s\n' "$out_dir/outbound.json"; fi
+    shown=1
+  else
+    printf 'sing-box：该节点组合无法由 sing-box 客户端完整表达，已跳过。\n'
+  fi
+  (( shown )) || { log_error "节点 $id 没有可用的客户端导出。"; return 1; }
 }
