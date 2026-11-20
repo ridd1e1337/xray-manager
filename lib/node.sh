@@ -166,11 +166,44 @@ node_validate_json_object() {
   jq -e 'type == "object" and ((.by_tag // {}) | type == "object") and all(.by_tag[]?; type == "object")' <<<"$value" >/dev/null 2>&1 || die "$label 必须是 JSON 对象，by_tag 的每项也必须是对象；支持直接传 JSON 或 @FILE。"
 }
 
+# 3x-ui fields with first-class flags. Each maps to an Xray inbound fragment
+# that is deep-merged into .xray.inbound, the same store --xray-inbound-json uses.
+node_native_fragment() {
+  local protocol=$1 flag=$2 value=$3 int='^[0-9]{1,4}$'
+  case "$flag" in
+    --udp-idle-timeout|--quic-congestion|--quic-idle-timeout|--quic-keepalive)
+      [[ "$protocol" == hysteria2 ]] || die "$flag 仅用于 Hysteria2 节点。";;
+    --allow-transparent) [[ "$protocol" == http ]] || die '--allow-transparent 仅用于 HTTP 节点。';;
+    --port-map) [[ "$protocol" == tunnel ]] || die '--port-map 仅用于 Tunnel 节点。';;
+  esac
+  case "$flag" in
+    --udp-idle-timeout)
+      [[ "$value" =~ $int ]] && (( value >= 2 && value <= 600 )) || die 'UDP 空闲超时须为 2-600 秒。'
+      jq -cn --argjson v "$value" '{streamSettings:{hysteriaSettings:{version:2,udpIdleTimeout:$v}}}';;
+    --quic-congestion)
+      case "$value" in reno|bbr|brutal|force-brutal) ;; *) die '拥塞控制须为 reno|bbr|brutal|force-brutal。';; esac
+      jq -cn --arg v "$value" '{streamSettings:{finalmask:{quicParams:{congestion:$v}}}}';;
+    --quic-idle-timeout|--quic-keepalive)
+      [[ "$value" =~ $int ]] && (( value >= 1 && value <= 600 )) || die "$flag 须为 1-600 秒。"
+      jq -cn --argjson v "$value" --arg k "$([[ "$flag" == --quic-idle-timeout ]] && echo maxIdleTimeout || echo keepAlivePeriod)" \
+        '{streamSettings:{finalmask:{quicParams:{($k):$v}}}}';;
+    --allow-transparent)
+      [[ "$value" == true || "$value" == false ]] || die '--allow-transparent 须为 true 或 false。'
+      jq -cn --argjson v "$value" '{settings:{allowTransparent:$v}}';;
+    --port-map)
+      # LISTEN_PORT=HOST:PORT[,...]; "none" clears the map.
+      if [[ "$value" == none ]]; then printf '{"settings":{"portMap":{}}}\n'; return; fi
+      [[ "$value" =~ ^[0-9]{1,5}=[^,=[:space:]]+:[0-9]{1,5}(,[0-9]{1,5}=[^,=[:space:]]+:[0-9]{1,5})*$ ]] || die '--port-map 格式：端口=主机:端口[,…]，或 none。'
+      jq -cn --arg v "$value" '{settings:{portMap:($v|split(",")|map(split("=")|{key:.[0],value:.[1]})|from_entries)}}';;
+    *) return 1;;
+  esac
+}
+
 _node_add() {
   local type=$1; shift
   local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' obfs_host='' obfs_min_packet_size=512 obfs_max_packet_size=1200 disable_chrome_parrot=false bbr_profile='' brutal_debug=false masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 congestion_control='cubic' strict_mode=true wildcard_sni='off' snell_version=5 snell_mode=default realm_id='' realm_ip_version=0 realm_port_mapping=false inbound_json='{}' outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
   local remark='' region='' purpose='' line='' tags='' proxy_listen='127.0.0.1' proxy_listen_supplied=0 vless_preview='' vless_network='' vless_listen='::'
-  local -a vless_options=()
+  local -a vless_options=() native_flags=()
   local security_supplied=0 tunnel_target='' follow_redirect=false wg_subnet='' wg_mtu=1420
   while (($#)); do
     case "$1" in
@@ -182,6 +215,8 @@ _node_add() {
       --security) security=${2:?}; security_supplied=1; shift 2;;
       --target) tunnel_target=${2:?}; shift 2;; --follow-redirect) follow_redirect=true; shift;;
       --subnet) wg_subnet=${2:?}; shift 2;; --mtu) wg_mtu=${2:?}; shift 2;;
+      --udp-idle-timeout|--quic-congestion|--quic-idle-timeout|--quic-keepalive|--allow-transparent|--port-map)
+        (($# >= 2)) || usage_die "缺少参数值：$1"; native_flags+=("$1" "$2"); shift 2;;
       --flow) (($# >= 2)) || usage_die '缺少 flow 值；可显式传空字符串。'; flow=$2; shift 2;;
       --transport|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol)
         (($# >= 2)) || usage_die "缺少参数值：$1"
@@ -410,6 +445,11 @@ _node_add() {
     | .metadata={remark:$remark,region:$region,purpose:$purpose,line:$line,tags:($tags | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)) | unique)}
   ' <<<"$node")
   node=$(jq --argjson inbound "$inbound_json" --argjson outbound "$outbound_json" ".singbox={inbound:\$inbound,outbound:\$outbound}" <<<"$node")
+  local i frag
+  for ((i = 0; i < ${#native_flags[@]}; i += 2)); do
+    frag=$(node_native_fragment "$protocol" "${native_flags[i]}" "${native_flags[i+1]}") || return 1
+    xray_inbound_json=$(jq -c --argjson f "$frag" '. * $f' <<<"$xray_inbound_json")
+  done
   node=$(jq --argjson inbound "$xray_inbound_json" --argjson outbound "$xray_outbound_json" ".xray={inbound:\$inbound,outbound:\$outbound}" <<<"$node")
   if [[ "$protocol" == vless ]]; then
     node=$(jq --argjson xray "$(jq -c '.xray' <<<"$vless_preview")" '.xray=$xray' <<<"$node") || return 1
@@ -557,9 +597,17 @@ _node_set() {
       --address) validate_address "$value" || die "无效地址"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="vmess-ws-cf" then .client_address=$v else .server_address=$v | .server_address_source="manual" end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --domain) validate_domain "$value" || die "无效域名：$value"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.domain)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --path) value=$(normalize_ws_path "$value"); tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.ws_path)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --method) case "$value" in 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305) ;; *) rm -f "$candidate"; die "无效 Shadowsocks 2022 方法：$value";; esac; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.method)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
+      --method)
+        case "$value" in 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305|aes-128-gcm|aes-256-gcm|chacha20-poly1305|chacha20-ietf-poly1305|xchacha20-poly1305|xchacha20-ietf-poly1305) ;; *) rm -f "$candidate"; die "无效 Shadowsocks 方法：$value";; esac
+        # 2022 keys have fixed lengths; switching family or key size needs new credentials.
+        [[ "$(jq -r '.method' <<<"$node")" == "$value" || ( "$value" != 2022-* && "$(jq -r '.method' <<<"$node")" != 2022-* ) ]] || { rm -f "$candidate"; die '更换 2022 方法会改变密钥长度；请新建节点。'; }
+        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.method)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --network) [[ "$value" == tcp || "$value" == udp ]] || { rm -f "$candidate"; die "network 必须是 tcp 或 udp"; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.network)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --obfs) [[ "$value" == salamander || "$value" == none || -z "$value" ]] || { rm -f "$candidate"; die "无效 obfs 类型"; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="hysteria2" then .obfs=(if ($v=="" or $v=="none") then {} elif $v=="gecko" then (.obfs // {}) + {type:$v} else {type:$v} end) elif .protocol=="snell" then .obfs_mode=(if $v=="" then "none" else $v end) else . end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
+      --obfs) [[ "$value" == salamander || "$value" == none || -z "$value" ]] || { rm -f "$candidate"; die "无效 obfs 类型"; }
+        if [[ "$value" == salamander && -z "$(state_get_secret "$id" 2>/dev/null | jq -r '.obfs_password // ""')" ]]; then
+          state_write_secret "$id" "$( (state_get_secret "$id" 2>/dev/null || echo '{}') | jq -c --arg p "$(random_password 18)" '(. // {}) + {obfs_password:$p}')" || { rm -f "$candidate"; return 1; }
+        fi
+        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="hysteria2" then .obfs=(if ($v=="" or $v=="none") then {} elif $v=="gecko" then (.obfs // {}) + {type:$v} else {type:$v} end) elif .protocol=="snell" then .obfs_mode=(if $v=="" then "none" else $v end) else . end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --obfs-host) validate_domain "$value" || die "无效 obfs Host：$value"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.obfs_host)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --masquerade) [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || die 'masquerade 不能包含控制字符'; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.masquerade)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --security) [[ "$value" == "$(jq -r --arg id "$id" '.nodes[]|select(.id==$id)|.security' "$candidate")" ]] || { rm -f "$candidate"; die 'VLESS security 创建后不可直接切换；请新建目标类型节点。'; };;
@@ -578,6 +626,12 @@ _node_set() {
         tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.singbox.inbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --sing-box-outbound-json|--outbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.singbox.outbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --xray-inbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.xray.inbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
+      --udp-idle-timeout|--quic-congestion|--quic-idle-timeout|--quic-keepalive|--allow-transparent|--port-map)
+        value=$(node_native_fragment "$(jq -r '.protocol' <<<"$node")" "$key" "$value") || { rm -f "$candidate"; return 1; }
+        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX")
+        # portMap is replaced, not merged, so "none" and new maps drop old entries.
+        jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.xray.inbound) |=
+          ((. // {}) | if $v.settings.portMap != null then .settings.portMap = {} else . end | . * $v)' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --xray-outbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.xray.outbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --remark|--region|--purpose|--line)
         local field=${key#--}

@@ -13,12 +13,12 @@ AmneziaWG（amneziawg-go）、TUIC（内置 Go 服务）不在范围内；TUIC �
 | VLESS | vless | ✅ | decryption（X25519/ML-KEM，含 xorpub/random 变体）、flow、fallbacks、reverse |
 | VMess | vmess | ✅ | 任意传输，none/TLS；另有 WS + CF Tunnel 模板 |
 | Trojan | trojan | ✅ | 任意传输，TLS/REALITY，fallbacks |
-| Shadowsocks | shadowsocks | ✅ | 2022 多用户与 AEAD、network、传输与 TLS；ivCheck 🟡（JSON） |
-| Hysteria2 | hysteria | ✅ | Salamander、masquerade；udpIdleTimeout、quicParams 🟡（JSON） |
+| Shadowsocks | shadowsocks | ✅ | 2022 多用户与 AEAD、network、传输与 TLS；ivCheck 在 Xray 26 中已不解析（3x-ui 写入也无效） |
+| Hysteria2 | hysteria | ✅ | Salamander、masquerade、`--udp-idle-timeout`、quicParams（`--quic-congestion/--quic-idle-timeout/--quic-keepalive`，其余字段 JSON） |
 | WireGuard | wireguard | ✅ | secretKey、mtu、noKernelTun、每用户一个 peer |
-| HTTP | http | ✅ | accounts；allowTransparent 🟡（JSON） |
+| HTTP | http | ✅ | accounts、`--allow-transparent` |
 | Mixed/SOCKS | socks | ✅ | auth、accounts、udp、ip |
-| Tunnel（dokodemo-door） | tunnel | ✅ | 目标地址/端口、network、followRedirect；portMap 🟡（JSON） |
+| Tunnel（dokodemo-door） | tunnel | ✅ | 目标地址/端口、network、followRedirect、`--port-map` |
 | MASQUE | masque | ✅ | address、mtu、users(pass)、masqueSettings.path，TLS h3 |
 | TUN | tun | ⬜ | 主机网络入口，默认不提供（会改动主机路由） |
 

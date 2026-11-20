@@ -160,6 +160,9 @@ xray_protocol_inbound() {
           '. + {protocol:"shadowsocks",settings:{method:$method,password:$u.password,email:($n+":"+$u.id),level:0,network:$network}}' <<<"$base"
       fi;;
     hysteria2)
+      if [[ $(jq -r '.obfs.type // ""' <<<"$node") == salamander && -z $(jq -r '.obfs_password // ""' <<<"$secret") ]]; then
+        log_error "Hysteria2 节点 $id 启用了 Salamander 但缺少混淆密码；请重新执行 xm node set $id --obfs salamander。"; return 1
+      fi
       clients=$(jq --arg n "$id" '[.[] | {auth:.password,email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1
       jq --argjson c "$clients" --argjson tls "$(xray_tls_settings "$domain" h3)" --arg obfs "$(jq -r '.obfs.type // ""' <<<"$node")" \
         --arg obfs_password "$(jq -r '.obfs_password // ""' <<<"$secret")" --arg masquerade "$(jq -r '.masquerade // ""' <<<"$node")" '

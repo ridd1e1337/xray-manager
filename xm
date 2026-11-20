@@ -188,10 +188,12 @@ sb_help_full() {
   VMess-WS-CF：--path PATH（配合 Cloudflare Tunnel）
   SS:    --method 2022-blake3-aes-128-gcm|2022-blake3-aes-256-gcm|2022-blake3-chacha20-poly1305
          |aes-128-gcm|aes-256-gcm|chacha20-ietf-poly1305|xchacha20-ietf-poly1305 --network tcp|udp
-  HY2:   --obfs salamander --masquerade URL
+  HY2:   --obfs salamander --masquerade URL --udp-idle-timeout 2-600
+         --quic-congestion reno|bbr|brutal|force-brutal --quic-idle-timeout N --quic-keepalive N
+  HTTP:  --allow-transparent true|false
   WireGuard：--subnet 10.x.y.0/24 --mtu 1420（每个用户一个 peer）
   MASQUE：--domain DOMAIN --subnet 10.x.y.0/24 --mtu 1280（HTTP/3 connect-ip）
-  Tunnel：--target HOST:PORT --network tcp|udp|tcp,udp [--follow-redirect]
+  Tunnel：--target HOST:PORT --network tcp|udp|tcp,udp [--follow-redirect] [--port-map 端口=主机:端口,…|none]
   SOCKS5/HTTP/mixed: --listen 127.0.0.1|::1|0.0.0.0|::（默认本机，自动生成认证）
   Xray 扩展：--xray-inbound-json JSON|@FILE 可写入任意 Xray 入站字段（sniffing、streamSettings、
              sockopt、finalmask 等）；protocol、tag、端口、用户和凭据由管理器保护。

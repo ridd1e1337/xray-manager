@@ -326,7 +326,25 @@ node_xray_client_outbound() {
       peers:[{publicKey:.server_public_key,endpoint:((if (.server|contains(":")) then "[\(.server)]" else .server end)+":"+(.port|tostring)),allowedIPs:["0.0.0.0/0","::/0"],keepAlive:25}]}}'
     return
   fi
-  [[ -n "$node" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$node")" || { log_warn '原生 Xray 客户端导出支持 VLESS、VMess、Trojan、Shadowsocks 与 WireGuard。'; return 1; }
+  case "$(jq -r '.protocol // ""' <<<"$node")" in
+    hysteria2|socks|http|mixed)
+      [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
+      [[ -n "$user_id" ]] || return 1
+      [[ ! -r "$(state_secret_path "$id")" ]] || node_secret=$(state_get_secret "$id") || return 1
+      jq -n --argjson n "$node" --argjson u "$(state_get_user_secret "$id" "$user_id")" --argjson s "$node_secret" --arg tag "proxy-$id-$user_id" '
+        ($n.server_address // "" | if .=="" then "127.0.0.1" else . end) as $addr |
+        if $n.protocol=="hysteria2" then
+          {tag:$tag,protocol:"hysteria",settings:{version:2,address:$addr,port:$n.port},
+           streamSettings:({network:"hysteria",hysteriaSettings:{version:2,auth:$u.password},
+             security:"tls",tlsSettings:{serverName:$n.domain,alpn:["h3"]}}
+             + (if ($n.obfs.type // "")=="salamander" then {finalmask:{udp:[{type:"salamander",settings:{password:$s.obfs_password}}]}} else {} end))}
+        else
+          {tag:$tag,protocol:(if $n.protocol=="http" then "http" else "socks" end),
+           settings:{address:$addr,port:$n.port,user:$u.username,pass:$u.password}}
+        end'
+      return;;
+  esac
+  [[ -n "$node" ]] && xray_stream_protocol "$(jq -r '.protocol' <<<"$node")" || { log_warn "节点 $id 的协议没有 Xray 客户端配置。"; return 1; }
   if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node") || return 1; fi
   [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
   [[ -n "$user_id" ]] || return 1
