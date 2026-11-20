@@ -247,10 +247,10 @@ Caddy，沿用原有 `xm-manager-update.timer` 或 OpenRC periodic 任务、每�
 
 ## Xray 核心
 
-`xm core check|update [VERSION]|rollback|policy` 和面板 `7 → 2` 管理官方 Xray。
+`xm core check|update [VERSION]|policy` 和面板 `7 → 2` 管理官方 Xray。
 支持两位年份版本号（如 v26.11.9），核对 Release SHA-256 或官方 .dgst，只提取 Xray
 程序，不安装 geoip/geosite 数据库。新版本先用当前配置校验，再原子切换并重启服务，
-失败恢复旧版本；保留上一版供回滚。systemd 以低权限 `xraymanager` 用户运行并只授予
+失败恢复旧版本；成功后只保留当前版本。systemd 以低权限 `xraymanager` 用户运行并只授予
 绑定低端口的 capability。TLS 证书续签会重新加载 Xray。
 
 ## VLESS 原生 Xray 参数（alpha.73）

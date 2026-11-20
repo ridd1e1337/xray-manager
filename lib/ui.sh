@@ -1115,25 +1115,24 @@ ui_update_menu() {
 ui_xray_menu() {
   local choice policy
   xray_status
-  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 回滚上一版 Xray\n4. 生成并校验 Xray 配置\n5. 设置 Xray 自动更新策略\n6. 入站/出站流量统计\n7. 出站、WARP、负载均衡与路由\n8. 出站连通性测试\n9. 工具：生成密钥、REALITY 目标检查、证书哈希\n10. DNS、路由域名策略与访问日志\n0. 返回\n'
-  ui_menu_choice choice '选择 Xray 操作' 10
+  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 生成并校验 Xray 配置\n4. 设置 Xray 自动更新策略\n5. 入站/出站流量统计\n6. 出站、WARP、负载均衡与路由\n7. 出站连通性测试\n8. 工具：生成密钥、REALITY 目标检查、证书哈希\n9. DNS、路由域名策略与访问日志\n0. 返回\n'
+  ui_menu_choice choice '选择 Xray 操作' 9
   case "$choice" in
     1) core_update latest;;
     2) prompt_value policy 'Xray 版本号，如 26.11.9' '' || return 1; core_update "$policy";;
-    3) core_rollback;;
-    4)
+    3)
       [[ -x "$SBM_XRAY_BIN" ]] || { log_error '请先安装 Xray。'; return 1; }
       with_lock xray_render_validate || return 1
       log_ok "Xray 配置已生成：$SBM_CONFIG";;
-    5)
+    4)
       printf 'manual / notify / patch（同年月）/ stable（任意新版）\n'
       prompt_value policy '更新策略' "$(jq -r '.settings.core_update_policy // "notify"' "$SBM_STATE")"
       core_set_policy "$policy";;
-    6) xray_traffic;;
-    7) ui_open_submenu ui_xray_routing_menu;;
-    8) xray_outbound_test || true;;
-    9) ui_open_submenu ui_tools_menu;;
-    10) ui_open_submenu ui_xray_basics_menu;;
+    5) xray_traffic;;
+    6) ui_open_submenu ui_xray_routing_menu;;
+    7) xray_outbound_test || true;;
+    8) ui_open_submenu ui_tools_menu;;
+    9) ui_open_submenu ui_xray_basics_menu;;
   esac
 }
 

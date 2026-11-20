@@ -84,12 +84,11 @@ xray_prune_versions() {
   [[ -z $(find "$SBM_BACKUPS" -name .recovery-pending -print -quit 2>/dev/null) ]] || return 0
   active=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
   [[ "$active" == "$SBM_CORE_DIR/xray/"* ]] || return 0
-  # Keep the active build and the newest other build for xm core rollback.
-  local keep=''
-  keep=$(find "$SBM_CORE_DIR/xray" -mindepth 1 -maxdepth 1 -type d ! -path "$(dirname "$active")" -printf '%T@ %p\n' 2>/dev/null | sort -rn | awk 'NR==1{print $2}')
+  # Only the active build is kept; an update removes the old one once the new
+  # build runs (a failed update switches back before this is reached).
   for directory in "$SBM_CORE_DIR/xray"/*; do
     [[ -d "$directory" && ! -L "$directory" ]] || continue
-    [[ "$active" == "$directory/xray" || "$directory" == "$keep" ]] || rm -rf -- "$directory" || return 1
+    [[ "$active" == "$directory/xray" ]] || rm -rf -- "$directory" || return 1
   done
 }
 
@@ -441,7 +440,11 @@ _xray_install_binary() {
 _xray_install() {
   local version=${1:-latest} target
   target=$(xray_download_version "$version") || return 1
-  _xray_switch_to "$target"
+  if ! _xray_switch_to "$target"; then
+    # Do not leave a build that is not in use on disk.
+    [[ "$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)" == "$target" ]] || rm -rf -- "$(dirname "$target")"
+    return 1
+  fi
 }
 xray_install() { require_root; with_lock _xray_install "${1:-latest}"; }
 

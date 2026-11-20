@@ -167,7 +167,7 @@ sb_help_full() {
   xm firewall status|ports|clear-iptables|ufw-allow [--yes]
   xm firewall fail2ban|ufw [--yes] [--dry-run]
 
-  xm core check|update [VERSION]|rollback|capabilities|policy <manual|notify|patch|stable>|auto   Xray-core 管理
+  xm core check|update [VERSION]|capabilities|policy <manual|notify|patch|stable>|auto   Xray-core 管理
   xm xray status|config [文件]|api-port PORT
   xm xray traffic [--json|reset]  Xray 入站/出站累计流量
   xm xray routing [--json]         查看 Xray 出站、负载均衡与路由
@@ -612,7 +612,6 @@ main() {
       case "$action" in
         check) local rc=0; core_check_update || rc=$?; [[ "$rc" == 0 || "$rc" == 10 ]] || return "$rc" ;;
         update) core_update "${3:-latest}" ;;
-        rollback) core_rollback ;;
         capabilities) (($# <= 3)) || usage_die '用法：xm core capabilities'; core_capabilities ;;
         policy) core_set_policy "${3:?缺少策略}" ;;
         auto) core_auto_update ;;

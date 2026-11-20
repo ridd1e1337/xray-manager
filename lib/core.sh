@@ -183,15 +183,6 @@ cloudflared_auto_update() {
   esac
 }
 
-_core_rollback() {
-  local active previous
-  active=$(readlink -f "$SBM_XRAY_BIN" 2>/dev/null || true)
-  previous=$(find "$SBM_CORE_DIR/xray" -mindepth 2 -maxdepth 2 -type f -name xray ! -path "$active" -printf '%T@ %p\n' 2>/dev/null | sort -rn | awk 'NR==1{print $2}')
-  [[ -n "$previous" && -x "$previous" ]] || { log_error '没有可回滚的上一版 Xray。'; return 1; }
-  _xray_switch_to "$previous"
-}
-core_rollback() { require_root; with_lock _core_rollback; }
-
 cloudflared_release_json() { github_api 'https://api.github.com/repos/cloudflare/cloudflared/releases/latest'; }
 cloudflared_latest_version() {
   local json tag
