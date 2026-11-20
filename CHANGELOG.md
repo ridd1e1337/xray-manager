@@ -4,6 +4,16 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.2
+
+- 3x-ui 参数：`--udp-idle-timeout`、`--quic-congestion/--quic-idle-timeout/--quic-keepalive`（Hysteria2）、
+  `--allow-transparent`（HTTP）、`--port-map`（Tunnel）；Xray 客户端导出新增 Hysteria2 与 SOCKS/HTTP/mixed。
+- 修复：已有 Hysteria2 节点后启用 Salamander 时生成混淆密码（之前为空，`xray -test` 不报错但运行时监听失败）；
+  `node set --method` 支持 AEAD；VLESS/Trojan REALITY 未给握手目标时默认使用 SNI 站点，客户端地址用公网 IP。
+- 面板：VLESS 向导首项为“推荐 REALITY + Vision”，只需选端口；向导步骤回车即取推荐值。
+- 性能（23 节点）：添加节点 22.6→5.0 秒；渲染按内容缓存 3.1→0.36 秒；状态校验 2.9→0.76 秒；
+  流量页 5.6→0.7 秒；节点选择 2.6→0.45 秒；面板 20 个页面均在 0.8 秒内打开（完整状态页 1.6 秒）。
+
 ## 0.1.0-alpha.1
 
 - 只使用 Xray-core：单核心候选配置 → 校验 → 原子安装 → 回滚；命令 `xm`，配置 `/etc/xray-manager`，
