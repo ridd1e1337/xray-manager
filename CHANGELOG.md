@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.8
+
+- `xm xray dns set SERVERS [--strategy UseIP|UseIPv4|UseIPv6] [--fakedns]|clear`：Xray 内置 DNS 与 FakeDNS。
+- `xm xray route strategy AsIs|IPIfNonMatch|IPOnDemand`：路由域名策略。
+- 访问日志默认关闭（此前 Xray 会把每条连接写入日志）；`xm xray log access on|off`，`xm logs access` 查看。
+- 面板：Xray 菜单 10。
+
 ## 0.1.0-alpha.7
 
 - 订阅（3x-ui 对齐）：不带 `?format` 时按 User-Agent 自动选择——Clash/mihomo/Stash/FlClash → mihomo，

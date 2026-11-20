@@ -175,6 +175,9 @@ sb_help_full() {
   xm tools uuid|x25519|wg|mldsa65|mlkem768|vlessenc|ech DOMAIN   用当前 Xray 生成密钥/参数
   xm tools reality-check DOMAIN    检查网站是否适合作为 REALITY 目标
   xm tools cert-hash FILE|HOST[:PORT]  证书 SHA-256（用于 --pinned-cert-sha256）
+  xm xray dns show|set SERVERS [--strategy UseIP|UseIPv4|UseIPv6] [--fakedns]|clear   Xray 内置 DNS
+  xm xray route strategy AsIs|IPIfNonMatch|IPOnDemand   路由域名策略（geoip 规则匹配域名请求时用 IPIfNonMatch）
+  xm xray log access on|off|status   访问日志（默认关闭）；xm logs access 查看
   xm xray geo status|update|remove  geoip/geosite 数据（约 28 MiB，按需下载），启用 geosite:/geoip: 规则
   xm openlist status|install|update|setup DOMAIN [caddy|nginx]|detach DOMAIN
   xm reality status|setup DOMAIN [nginx|caddy] [--node ID] [--init-vps]|detach
@@ -186,7 +189,7 @@ sb_help_full() {
   xm acme update
   xm doctor [--repair|--network]
   xm repair                      修复权限、配置与服务状态
-  xm logs [all|xray|tunnel|mux|nginx|follow] [行数]
+  xm logs [all|xray|access|tunnel|mux|nginx|follow] [行数]
   xm backup [文件] [--recipient AGE_RECIPIENT]
   xm restore <文件> [--identity AGE_PRIVATE_KEY] [--yes]
   xm restart
@@ -660,6 +663,8 @@ main() {
         outbound|balancer|route) shift 1; xray_routing_cli "$@" ;;
         warp) shift 2; xray_warp_cli "$@" ;;
         geo) shift 2; xray_geo_cli "$@" ;;
+        dns) shift 2; xray_dns_cli "$@" ;;
+        log) [[ "${3:-}" == access ]] || usage_die '用法：xm xray log access on|off|status'; xray_access_log_cli "${4:-status}" ;;
         traffic)
           case "${3:-}" in
             ''|--json) xray_traffic "$([[ ${3:-} == --json ]] && echo 1 || echo 0)" ;;

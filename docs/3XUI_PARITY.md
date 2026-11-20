@@ -60,7 +60,7 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | Xray | 出站、WARP、负载均衡、分流规则 | ✅ | `xm xray outbound/warp/balancer/route` |
 | Xray | geoip/geosite 数据下载与 `geosite:`/`geoip:` 规则 | ✅ | `xm xray geo update` |
 | Xray | 出站连通性测试、路由测试 | ✅ | `xm xray outbound test`、`xm xray route test DOMAIN|IP[:PORT]` |
-| Xray | Observatory、DNS / FakeDNS、日志级别与访问日志查看 | ⬜ / ⬜ / 部分 | 日志级别已有 |
+| Xray | Observatory、DNS / FakeDNS、路由域名策略、日志级别与访问日志 | 自动 / ✅ / ✅ / ✅ | leastPing/leastLoad 负载均衡自动启用 burstObservatory；`xm xray dns`、`xm xray route strategy`、`xm xray log access` |
 | Xray | NordVPN / PIA 账号出站 | ➖ | 需第三方账号 API；可用 `xm xray outbound add` 导入 WireGuard 出站 |
 | Xray | 出站订阅（远程链接池作为出站） | ⬜ | |
 | Xray | 核心版本切换、回滚、自动更新 | ✅ | `xm core` |

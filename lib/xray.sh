@@ -286,8 +286,8 @@ xray_render_config() {
     prefer_ipv6) ip_strategy=UseIPv6v4;; ipv4_only) ip_strategy=UseIPv4;; *) ip_strategy=UseIPv4v6;;
   esac
   routing=$(jq -c --arg s "$ip_strategy" '.outbounds |= map(if .tag=="direct" then .settings=((.settings // {})+{domainStrategy:$s}) else . end)' <<<"$routing") || return 1
-  jq -n --argjson inbounds "$inbounds" --argjson routing "$routing" --arg loglevel "$loglevel" --arg api "127.0.0.1:$(jq -r '.settings.xray_api_port // 10085' "$state")" '{
-    log:{loglevel:$loglevel},
+  jq -n --argjson access "$(jq -r '.settings.xray_access_log // false' "$state")" --argjson inbounds "$inbounds" --argjson routing "$routing" --arg loglevel "$loglevel" --arg api "127.0.0.1:$(jq -r '.settings.xray_api_port // 10085' "$state")" '{
+    log:({loglevel:$loglevel} + (if $access then {} else {access:"none"} end)),
     api:{tag:"api",listen:$api,services:["StatsService"]},
     stats:{},
     policy:{levels:{"0":{statsUserUplink:true,statsUserDownlink:true,statsUserOnline:true}},

@@ -22,7 +22,7 @@ ui_clear() { [[ -t 1 && -n ${TERM:-} && ${TERM:-} != dumb ]] && command_exists c
 # would disable it inside the backend and could let failed actions continue.
 ui_worker_allowed() {
   case "$1" in
-    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_stream_node_add|ui_wireguard_add|ui_tunnel_add|ui_tools_menu|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
+    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_stream_node_add|ui_wireguard_add|ui_tunnel_add|ui_tools_menu|ui_xray_basics_menu|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
     *) return 1;;
   esac
 }
@@ -1087,8 +1087,8 @@ ui_update_menu() {
 ui_xray_menu() {
   local choice policy
   xray_status
-  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 回滚上一版 Xray\n4. 生成并校验 Xray 配置\n5. 设置 Xray 自动更新策略\n6. 入站/出站流量统计\n7. 出站、WARP、负载均衡与路由\n8. 出站连通性测试\n9. 工具：生成密钥、REALITY 目标检查、证书哈希\n0. 返回\n'
-  ui_menu_choice choice '选择 Xray 操作' 9
+  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 回滚上一版 Xray\n4. 生成并校验 Xray 配置\n5. 设置 Xray 自动更新策略\n6. 入站/出站流量统计\n7. 出站、WARP、负载均衡与路由\n8. 出站连通性测试\n9. 工具：生成密钥、REALITY 目标检查、证书哈希\n10. DNS、路由域名策略与访问日志\n0. 返回\n'
+  ui_menu_choice choice '选择 Xray 操作' 10
   case "$choice" in
     1) core_update latest;;
     2) prompt_value policy 'Xray 版本号，如 26.11.9' '' || return 1; core_update "$policy";;
@@ -1105,6 +1105,27 @@ ui_xray_menu() {
     7) ui_open_submenu ui_xray_routing_menu;;
     8) xray_outbound_test || true;;
     9) ui_open_submenu ui_tools_menu;;
+    10) ui_open_submenu ui_xray_basics_menu;;
+  esac
+}
+
+ui_xray_basics_menu() {
+  local choice value strategy
+  xray_dns_cli show; xray_access_log_cli status
+  printf '\n1. 设置 DNS 服务器\n2. 恢复系统 DNS\n3. 路由域名策略\n4. 开启访问日志\n5. 关闭访问日志\n6. 查看最近访问日志\n0. 返回\n'
+  ui_menu_choice choice '选择操作' 6 || return 0
+  case "$choice" in
+    1)
+      prompt_value value 'DNS 服务器（逗号分隔，如 1.1.1.1,https://dns.google/dns-query）' '1.1.1.1,8.8.8.8' || return 1
+      prompt_value strategy '查询策略 UseIP/UseIPv4/UseIPv6' UseIP || return 1
+      xray_dns_cli set "$value" --strategy "$strategy";;
+    2) xray_dns_cli clear;;
+    3)
+      printf 'AsIs：只按域名匹配（默认）；IPIfNonMatch：域名未命中时解析后再按 IP 规则匹配；IPOnDemand：遇到 IP 规则就解析。\n'
+      prompt_value value '域名策略' IPIfNonMatch || return 1; xray_route_strategy "$value";;
+    4) xray_access_log_cli on;;
+    5) xray_access_log_cli off;;
+    6) show_logs access 50;;
   esac
 }
 

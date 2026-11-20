@@ -55,6 +55,11 @@ xray_routing_validate_state() {
     and all($rules[]; type=="object" and target_ok
       and ([.node,.user,.domain,.ip,.network,.port]|map(select(.!=null))|length)>0)
     and (($r.default // null)==null or ($r.default|target_ok))
+    and (($r.domain_strategy // "AsIs")|IN("AsIs","IPIfNonMatch","IPOnDemand"))
+    and (($r.dns // null)==null or ($r.dns|type=="object"
+      and (.servers|type=="array" and length>0 and length<=8 and all(.[]; type=="string" and length<=200)))
+      and ((.query_strategy // "UseIP")|IN("UseIP","UseIPv4","UseIPv6"))
+      and ((.fakedns // false)|type=="boolean"))
   ' "$state" >/dev/null || { log_error 'Xray 出站/路由状态无效：请检查出站、负载均衡、规则与默认出口引用。'; return 1; }
 }
 
@@ -72,7 +77,7 @@ xray_routing_render() {
     ($r.balancers // []) as $balancers |
     {
       outbounds: ([{tag:"direct",protocol:"freedom"}] + $custom + [{tag:"block",protocol:"blackhole"}]),
-      routing: ({domainStrategy:"AsIs",
+      routing: ({domainStrategy:($r.domain_strategy // "AsIs"),
         rules: (
           [($r.rules // [])[] |
             ({type:"field"}
@@ -93,6 +98,11 @@ xray_routing_render() {
           pingConfig:{destination:"https://www.gstatic.com/generate_204",interval:"1m",sampling:3,timeout:"5s"}}
       else . end
     | del(.observatory_tags)
+    # Built-in DNS (3x-ui DNS tab); FakeDNS adds a pool and serves it first.
+    | if ($r.dns // null)==null then . else
+        .dns=({servers:((if $r.dns.fakedns then ["fakedns"] else [] end) + $r.dns.servers), queryStrategy:($r.dns.query_strategy // "UseIP")})
+        | if $r.dns.fakedns then .fakedns=[{ipPool:"198.18.0.0/15",poolSize:65535}] else . end
+      end
   ' "$state"
 }
 
@@ -324,6 +334,7 @@ xray_routing_cli() {
         remove) [[ -n "${3:-}" ]] || usage_die '用法：xm xray route remove INDEX'; require_root; with_state_transaction xray-route _xray_route_remove "$3";;
         default) [[ -n "${3:-}" ]] || usage_die '用法：xm xray route default direct|OUTBOUND|balancer:TAG'; require_root; with_state_transaction xray-route _xray_route_default "$3";;
         test) shift 2; require_root; xray_route_test "$@";;
+        strategy) xray_route_strategy "${3:-}";;
         *) usage_die '用法：xm xray route add|remove|default|test ...';;
       esac;;
     *) usage_die '用法：xm xray routing|outbound|balancer|route ...';;
@@ -391,3 +402,53 @@ xray_route_test() (
   [[ -n "$line" ]] || { log_error "未能得到路由结果；日志：$(tail -1 "$dir/log" 2>/dev/null)"; return 1; }
   printf '%s:%s → %s\n' "$host" "$port" "$(sed -E 's/.*\[route-test (->|>>) ([^]]+)\].*/\2/' <<<"$line")"
 )
+
+
+xray_dns_cli() {
+  local action=${1:-show} servers strategy=UseIP fakedns=false server
+  case "$action" in
+    show) jq '(.xray_routing.dns // "未设置（使用系统 DNS）"), {domain_strategy:(.xray_routing.domain_strategy // "AsIs")}' "$SBM_STATE";;
+    set)
+      servers=${2:?用法：xm xray dns set SERVER[,SERVER] [--strategy UseIP|UseIPv4|UseIPv6] [--fakedns]}; shift 2
+      while (($#)); do case "$1" in --strategy) strategy=${2:?}; shift 2;; --fakedns) fakedns=true; shift;; *) usage_die "未知参数：$1";; esac; done
+      [[ "$strategy" =~ ^(UseIP|UseIPv4|UseIPv6)$ ]] || die '查询策略只能是 UseIP、UseIPv4 或 UseIPv6。'
+      for server in ${servers//,/ }; do
+        [[ "$server" =~ ^((https|https\+local|tcp|tcp\+local|quic\+local)://[^[:space:]]+|localhost|[0-9a-fA-F.:]+)$ ]] \
+          || die "无效 DNS 服务器：$server（示例：1.1.1.1、https://1.1.1.1/dns-query、localhost）"
+      done
+      require_root
+      with_state_transaction xray-dns _xray_routing_commit '.xray_routing.dns={servers:($s|split(",")),query_strategy:$q,fakedns:$f}' '' \
+        --arg s "$servers" --arg q "$strategy" --argjson f "$fakedns" || return 1
+      log_ok "Xray DNS：$servers（$strategy$([[ "$fakedns" == true ]] && echo '，FakeDNS')）";;
+    clear) require_root; with_state_transaction xray-dns _xray_routing_commit 'del(.xray_routing.dns)' '' || return 1; log_ok '已恢复系统 DNS。';;
+    *) usage_die '用法：xm xray dns show|set SERVERS [--strategy UseIP|UseIPv4|UseIPv6] [--fakedns]|clear';;
+  esac
+}
+
+xray_route_strategy() {
+  local value=${1:?用法：xm xray route strategy AsIs|IPIfNonMatch|IPOnDemand}
+  [[ "$value" =~ ^(AsIs|IPIfNonMatch|IPOnDemand)$ ]] || die '域名策略只能是 AsIs、IPIfNonMatch 或 IPOnDemand。'
+  require_root
+  with_state_transaction xray-route _xray_routing_commit '.xray_routing.domain_strategy=$v' '' --arg v "$value" || return 1
+  log_ok "路由域名策略：$value"
+}
+
+# Access log is off by default: without it Xray prints every connection to
+# stdout (the journal), which costs disk and keeps users' destinations.
+xray_access_log_cli() {
+  local value=${1:-status} candidate
+  case "$value" in
+    status) jq -r 'if .settings.xray_access_log==true then "访问日志：开启（xm logs access 查看）" else "访问日志：关闭" end' "$SBM_STATE";;
+    on|off)
+      require_root
+      _xray_access_log_set() {
+        candidate=$(state_candidate) || return 1
+        jq --argjson v "$([[ "$1" == on ]] && echo true || echo false)" '.settings.xray_access_log=$v' "$SBM_STATE" >"$candidate" || { rm -f "$candidate"; return 1; }
+        apply_candidate_state "$candidate" xray-access-log || { rm -f "$candidate"; return 1; }
+        rm -f "$candidate"
+      }
+      with_state_transaction xray-access-log _xray_access_log_set "$value" || return 1
+      log_ok "访问日志已$([[ "$value" == on ]] && echo 开启 || echo 关闭)。";;
+    *) usage_die '用法：xm xray log access on|off|status';;
+  esac
+}

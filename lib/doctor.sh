@@ -608,6 +608,9 @@ show_logs() {
   [[ "$SBM_SKIP_INIT" != 1 ]] || { log_warn '未接管服务管理器，无法读取服务日志。'; return; }
   case "$target" in
     xray|core|singbox) service_logs "$SBM_SERVICE" "$lines" 0 ;;
+    access)
+      [[ $(jq -r '.settings.xray_access_log // false' "$SBM_STATE") == true ]] || log_warn '访问日志未开启；运行 xm xray log access on。'
+      service_logs "$SBM_SERVICE" "$((lines * 20))" 0 | grep -E ' (accepted|rejected) ' | tail -n "$lines" ;;
     tunnel|cloudflared) service_logs "$SBM_TUNNEL_SERVICE" "$lines" 0 ;;
     mux) service_logs "$(mux_service)" "$lines" 0 ;;
     nginx|nginx-stream) service_logs "$SBM_NGINX_STREAM_SERVICE" "$lines" 0 ;;
