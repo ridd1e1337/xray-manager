@@ -166,7 +166,6 @@ sb_help_full() {
   xm settings outbound-ip <prefer_ipv4|prefer_ipv6|ipv4_only>
   xm firewall status|ports|clear-iptables|ufw-allow [--yes]
   xm firewall fail2ban|ufw [--yes] [--dry-run]
-  xm probe NODE_ID                探测节点 DNS、监听和 TLS/UDP 可达性
 
   xm core check|update [VERSION]|rollback|capabilities|policy <manual|notify|patch|stable>|auto   Xray-core 管理
   xm xray status|config [文件]|api-port PORT
@@ -194,8 +193,6 @@ sb_help_full() {
   xm cloudflared status|install|update|policy <manual|notify|patch|stable>
   xm deps status [--json]|install <low-port|traffic|subscription|bbr|probe|scheduler|logrotate|benchmark|shaping|substore>
   xm acme update
-  xm doctor [--repair|--network]
-  xm repair                      修复权限、配置与服务状态
   xm logs [all|xray|access|tunnel|mux|nginx|follow] [行数]
   xm restart
   xm uninstall [--purge] [--yes]
@@ -221,7 +218,7 @@ sb_help_full() {
 EOF_HELP
 }
 
-SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network probe vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config tools doctor repair logs restart uninstall'
+SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config tools logs restart uninstall'
 
 sb_help_overview() {
   cat <<EOF_OVERVIEW
@@ -237,7 +234,6 @@ xray-manager ${SBM_VERSION}：状态驱动的 Xray-core 多协议管理器
   share         显示节点分享链接、二维码或客户端配置
   user          管理多用户节点的用户
   update        更新管理脚本与受管 Caddy
-  doctor        诊断问题；xm repair 尝试自动修复
   logs          查看运行日志
 
 节点与客户端：export  subscription  substore  tunnel  cert
@@ -257,7 +253,7 @@ EOF_OVERVIEW
 sb_help_canonical_topic() {
   case "$1" in
     hysteria2) printf 'hy2';; nginx-stream) printf 'mux';; quick) printf 'node';;
-    repair) printf 'doctor';; *) printf '%s' "$1";;
+    *) printf '%s' "$1";;
   esac
 }
 
@@ -707,25 +703,6 @@ main() {
       esac
       ;;
     acme) [[ ${2:-} == update ]] || usage_die '用法：xm acme update'; acme_update ;;
-    doctor)
-      case ${2:-} in
-        --repair) doctor_run 1 ;;
-        --repair-safe) doctor_run 0 0 1 ;;
-        --network) doctor_run 0 1 ;;
-        '') doctor_run ;;
-        *) usage_die '用法：xm doctor [--repair|--repair-safe|--network]' ;;
-      esac
-      ;;
-    probe) doctor_probe "${2:?缺少节点 ID}" ;;
-    repair)
-      if [[ ${2:-} == --safe ]]; then
-        (($# == 2)) || usage_die '用法：xm repair [--safe]'
-        doctor_run 0 0 1
-      else
-        (($# == 1)) || usage_die '用法：xm repair [--safe]'
-        doctor_run 1
-      fi
-      ;;
     config)
       local action=${2:-validate}; shift 2 || true
       case "$action" in
