@@ -83,7 +83,7 @@ user_usage_collect_unlocked() {
     def bucket($kind):
       [(.stat // [])[] | (.name|split(">>>")) as $p
         | select(($p|length)==4 and $p[0]==$kind and $p[2]=="traffic")
-        | {key:$p[1],dir:$p[3],value:((.value // 0)|tonumber)}]
+        | {key:($p[1]|sub("@";":")),dir:$p[3],value:((.value // 0)|tonumber)}]
       | group_by(.key) | map({key:.[0].key,value:{
           up:([.[]|select(.dir=="uplink").value]|add // 0),
           down:([.[]|select(.dir=="downlink").value]|add // 0)}}) | from_entries;
@@ -108,6 +108,8 @@ user_usage_collect_unlocked() {
 # Online IPs come from Xray's statsUserOnline policy (activity in the last 20s).
 user_limits_online_ips() {
   local email=$1 output
+  # MASQUE nodes register "<node>@<user>" with Xray.
+  if [[ $(jq -r --arg n "${email%%:*}" '.nodes[]?|select(.id==$n)|.protocol' "$SBM_STATE") == masque ]]; then email=${email/:/@}; fi
   output=$(user_limits_xray_api statsonlineiplist -email "$email") || { printf '[]\n'; return 0; }
   jq -c '(.ips // .ipList // .ip_list // {}) | if type=="object" then keys elif type=="array" then map(if type=="object" then (.ip // .key // empty) else . end) else [] end' <<<"$output" 2>/dev/null || printf '[]\n'
 }

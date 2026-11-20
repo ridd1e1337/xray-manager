@@ -6,7 +6,7 @@ node_transport_kinds() {
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
     vmess-ws-cf|http|socks|mixed) printf 'tcp\n' ;;
-    wireguard) printf 'udp\n' ;;
+    wireguard|masque) printf 'udp\n' ;;
     tunnel) case "$(jq -r '.network' <<<"$node")" in tcp) printf 'tcp\n';; udp) printf 'udp\n';; *) printf 'tcp\nudp\n';; esac ;;
     vless|vmess|trojan) vless_node_listener_kinds "$node" ;;
     hysteria2) printf 'udp\n' ;;
@@ -102,7 +102,7 @@ validate_state_semantics() {
     port=$(jq -r '.port' <<<"$node")
     validate_node_id "$id" || die "节点 ID 不规范：$id"
     validate_port "$port" || die "节点 $id 的端口无效：$port"
-    case "$protocol" in vmess-ws-cf|vmess|shadowsocks|hysteria2|trojan|vless|socks|http|mixed|tunnel|wireguard) ;; *) die "节点 $id 使用未知协议：$protocol" ;; esac
+    case "$protocol" in vmess-ws-cf|vmess|shadowsocks|hysteria2|trojan|vless|socks|http|mixed|tunnel|wireguard|masque) ;; *) die "节点 $id 使用未知协议：$protocol" ;; esac
     if [[ $(jq -r '.enabled' <<<"$node") == true ]]; then
       if [[ "$protocol" != vmess-ws-cf ]]; then
         local endpoint_address
@@ -137,7 +137,7 @@ validate_state_semantics() {
         [[ -z ${occupied[$key]+x} ]] || die "端口冲突：$id 与 ${occupied[$key]} 同时占用 ${port}/${kind^^}。"
         occupied[$key]=$id
       done < <(node_transport_kinds "$node")
-      if { [[ "$protocol" == hysteria2 ]] || { xray_stream_protocol "$protocol" && [[ $(xray_node_security "$node") == tls ]]; }; } \
+      if { [[ "$protocol" == hysteria2 || "$protocol" == masque ]] || { xray_stream_protocol "$protocol" && [[ $(xray_node_security "$node") == tls ]]; }; } \
         && ! jq -e '(.xray.inbound.streamSettings.tlsSettings.certificates // [])|length>0' <<<"$node" >/dev/null; then
         domain=$(jq -r '.domain // ""' <<<"$node")
         validate_domain "$domain" || die "节点 $id 的 TLS 域名无效：$domain"

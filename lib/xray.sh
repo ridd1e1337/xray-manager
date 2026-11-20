@@ -173,6 +173,13 @@ xray_protocol_inbound() {
     http)
       clients=$(jq '[.[] | {user:.username,pass:.password}]' <<<"$credentials") || return 1
       jq --argjson a "$clients" '. + {protocol:"http",settings:{accounts:$a}}' <<<"$base";;
+    masque)
+      # MASQUE rejects ":" in emails; "@" is outside the id charset, and the
+      # Stats collector maps it back to "<node>:<user>".
+      clients=$(jq --arg n "$id" '[.[] | {pass:.password,email:($n+"@"+.id),level:0}]' <<<"$credentials") || return 1
+      jq --argjson c "$clients" --argjson tls "$(xray_tls_settings "$domain" h3)" --arg subnet "$(jq -r '.subnet' <<<"$node")" --argjson mtu "$(jq -r '.mtu // 1280' <<<"$node")" \
+        '. + {protocol:"masque",settings:{address:[($subnet|sub("\\.0/24$";".1/24"))],mtu:$mtu,users:$c},
+              streamSettings:({network:"masque",masqueSettings:{path:"/.well-known/masque/ip/*/*/"}} + $tls)}' <<<"$base";;
     wireguard)
       # Userspace stack only: never create a host interface or routes.
       clients=$(jq --arg n "$id" '[.[] | {publicKey:.public_key,allowedIPs:[.address+"/32"],email:($n+":"+.id),level:0}]' <<<"$credentials") || return 1

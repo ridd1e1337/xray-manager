@@ -853,14 +853,23 @@ ui_add_node() {
     '7. WireGuard' \
     '8. Tunnel 端口转发（dokodemo-door）' \
     '9. SOCKS5 / HTTP / mixed 认证代理' \
+    '10. MASQUE（HTTP/3 connect-ip）' \
     '0. 返回'
-  ui_menu_choice choice '选择协议' 9
+  ui_menu_choice choice '选择协议' 10
   case "$choice" in
     2) ui_stream_node_add vmess; return;;
     4) ui_stream_node_add trojan; return;;
     5) ui_stream_node_add shadowsocks; return;;
     7) ui_wireguard_add; return;;
     8) ui_tunnel_add; return;;
+    10)
+      local mq_name mq_domain mq_address mq_port
+      prompt_value mq_name '节点名称' MASQUE || return
+      ui_select_certificate_domain mq_domain || { ui_cancel; return; }
+      ui_prompt_server_address mq_address "$(ui_client_address_default "$mq_domain")" || return
+      ui_prompt_port mq_port udp 'UDP 端口（HTTP/3）' 443 8443 9443 10443 || return
+      ui_add_node_and_deliver masque --name "$mq_name" --domain "$mq_domain" --address "$mq_address" --port "$mq_port"
+      return;;
   esac
   # Map the remaining entries onto the shared wizard branches.
   case "$choice" in 1) choice=7;; 3) choice=1;; 6) choice=4;; 9) choice=11;; esac

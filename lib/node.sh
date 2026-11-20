@@ -6,6 +6,7 @@ node_protocol_label() {
     vmess) printf 'VMess' ;;
     tunnel) printf 'Tunnel' ;;
     wireguard) printf 'WireGuard' ;;
+    masque) printf 'MASQUE' ;;
     vmess-ws-cf) printf 'VMess-WS-CF' ;;
     shadowsocks) printf 'Shadowsocks' ;;
     hysteria2) printf 'Hysteria2' ;;
@@ -298,6 +299,17 @@ _node_add() {
       secret=$(jq -n --arg username "$(random_hex 12)" --arg password "$(random_password 24)" '{username:$username,password:$password}')
       if [[ "$address_supplied" == 0 && ( "$proxy_listen" == 127.0.0.1 || "$proxy_listen" == ::1 ) ]]; then address=$proxy_listen; address_supplied=1; address_source=manual; fi
       ;;
+    masque)
+      # Xray MASQUE (connect-ip over HTTP/3); TLS certificate required.
+      protocol=masque; base=masque; transport=udp; port=${port:-443}; name=${name:-MASQUE}
+      validate_domain "$domain" || die 'MASQUE 需要 --domain（TLS 证书域名）。'
+      address=${address:-${default_address:-$domain}}
+      [[ -n "$wg_subnet" ]] || wg_subnet="10.14.$((RANDOM % 250 + 1)).0/24"
+      [[ "$wg_subnet" =~ ^10\.[0-9]{1,3}\.[0-9]{1,3}\.0/24$ ]] || die 'MASQUE 子网须为 10.x.y.0/24。'
+      (( wg_mtu >= 1280 )) || die 'MASQUE MTU 至少 1280。'
+      [[ "$wg_mtu" != 1420 ]] || wg_mtu=1280
+      secret=$(jq -n --arg pass "$(random_password 24)" '{password:$pass}')
+      ;;
     wireguard|wg)
       protocol=wireguard; base=wireguard; transport=udp; port=${port:-$(node_choose_port udp)}; name=${name:-WireGuard}
       [[ -n "$wg_subnet" ]] || wg_subnet="10.66.$((RANDOM % 250 + 1)).0/24"
@@ -376,6 +388,10 @@ _node_add() {
     vless)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg security "$security" --arg flow "$flow" --arg hs "$handshake_server" --argjson hp "$handshake_port" --arg now "$created_at" --argjson enabled "$enabled" --arg listen "$vless_listen" '{id:$id,name:$name,protocol:"vless",enabled:$enabled,listen:$listen,port:$port,domain:$domain,server_address:$address,security:$security,flow:(if $flow=="" then null else $flow end),handshake_server:(if $hs=="" then null else $hs end),handshake_port:$hp,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
       ;;
+    masque)
+      node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg domain "$domain" --arg address "$address" --arg subnet "$wg_subnet" --argjson mtu "$wg_mtu" --arg now "$created_at" --argjson enabled "$enabled" \
+        '{id:$id,name:$name,protocol:"masque",enabled:$enabled,listen:"::",port:$port,domain:$domain,server_address:$address,subnet:$subnet,mtu:$mtu,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
+      ;;
     wireguard)
       node=$(jq -n --arg id "$id" --arg name "$name" --argjson port "$port" --arg address "$address" --arg subnet "$wg_subnet" --argjson mtu "$wg_mtu" --arg now "$created_at" --argjson enabled "$enabled" \
         '{id:$id,name:$name,protocol:"wireguard",enabled:$enabled,listen:"::",port:$port,server_address:$address,subnet:$subnet,mtu:$mtu,created_at:$now,users:[{id:"default",name:$name,enabled:true,created_at:$now}]}')
@@ -420,7 +436,7 @@ _node_add() {
   fi
   if [[ "$enabled" == true ]]; then
     case "$protocol" in
-      hysteria2) _cert_prepare_node_domain "$domain" || return 1;;
+      hysteria2|masque) _cert_prepare_node_domain "$domain" || return 1;;
       vless|vmess|trojan|shadowsocks)
         if [[ $(xray_node_security "$node") == tls ]] && ! jq -e '(.xray.inbound.streamSettings.tlsSettings.certificates // [])|length>0' <<<"$node" >/dev/null; then
           _cert_prepare_node_domain "$(jq -r '.domain' <<<"$node")" || return 1
@@ -626,6 +642,7 @@ node_user_generate_secret() {
   protocol=$(jq -r '.protocol' <<<"$node")
   case "$protocol" in
     vmess|vmess-ws-cf) jq -n --arg uuid "$(random_uuid)" '{uuid:$uuid}' ;;
+    masque) jq -n --arg pass "$(random_password 24)" '{password:$pass}' ;;
     wireguard) jq --arg address "$(wireguard_next_address "$node")" '. + {address:$address}' <<<"$(wireguard_keypair)" ;;
     shadowsocks) jq -n --arg password "$(ss2022_key "$(jq -r '.method' <<<"$node")")" '{password:$password}' ;;
     hysteria2|trojan) jq -n --arg password "$(random_password 24)" '{password:$password}' ;;

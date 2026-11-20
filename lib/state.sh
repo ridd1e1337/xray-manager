@@ -368,7 +368,7 @@ state_validate() {
       type == "object"
       and (.id | string and test("^[a-z0-9][a-z0-9._-]{0,47}$"))
       and (.name | nonempty and (explode | all(.[]; . >= 32 and . != 127)))
-      and (.protocol | IN("vmess-ws-cf", "vmess", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed", "tunnel", "wireguard"))
+      and (.protocol | IN("vmess-ws-cf", "vmess", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed", "tunnel", "wireguard", "masque"))
       and (.enabled | type == "boolean")
       and (.listen | nonempty)
       and (.port | port)
@@ -387,7 +387,10 @@ state_validate() {
       and (.tags | type == "array" and length <= 32)
       and all(.tags[]; type == "string" and length > 0 and length <= 48 and test("^[^,[:cntrl:]]+$"));
     def node_protocol:
-      if .protocol == "wireguard" then
+      if .protocol == "masque" then
+        (.domain | nonempty) and (.server_address | string) and (.subnet | test("^10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.0/24$"))
+        and (.mtu | type == "number" and . >= 1280 and . <= 65535)
+      elif .protocol == "wireguard" then
         (.server_address | string) and (.subnet | test("^10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.0/24$"))
         and (.mtu | type == "number" and . >= 1280 and . <= 1500)
       elif .protocol == "tunnel" then
@@ -558,7 +561,7 @@ state_validate() {
     and all(.node_templates[];
       type == "object"
       and (.name | string and test("^[a-z0-9][a-z0-9._-]{0,47}$"))
-      and (.protocol | IN("vmess-ws-cf", "vmess", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed", "tunnel", "wireguard"))
+      and (.protocol | IN("vmess-ws-cf", "vmess", "shadowsocks", "hysteria2", "trojan", "vless", "socks", "http", "mixed", "tunnel", "wireguard", "masque"))
       and (.defaults | type == "object"))
     and (.certificates | type == "array")
     and (if .openlist==null then true else

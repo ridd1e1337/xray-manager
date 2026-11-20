@@ -53,7 +53,7 @@ node_client_outbound() {
     trojan) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     vless) outbound=$(protocol_vless_client_outbound "$node" "$secret" "$node_secret") || return 1 ;;
     socks|http|mixed) outbound=$(protocol_proxy_client_outbound "$node" "$secret") ;;
-    tunnel|wireguard) return 1 ;;
+    tunnel|wireguard|masque) return 1 ;;
     *) die "不支持导出的协议：$protocol" ;;
   esac
   [[ -n "$outbound" ]] || return 1
@@ -311,6 +311,14 @@ export_client_config() {
 node_xray_client_outbound() {
   local id=$1 user_id=${2:-} node user secret node_secret='{}' outbound
   node=$(state_get_node "$id") || return 1
+  if [[ $(jq -r '.protocol // ""' <<<"$node") == masque ]]; then
+    [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
+    jq -n --argjson n "$node" --argjson u "$(state_get_user_secret "$id" "$user_id")" --arg tag "proxy-$id-$user_id" '
+      {tag:$tag,protocol:"masque",settings:{address:$n.server_address,port:$n.port},
+       streamSettings:{network:"masque",masqueSettings:{path:"/.well-known/masque/ip/{target}/{ipproto}/",user:($n.id+"@"+"'"$user_id"'"),pass:$u.password},
+         security:"tls",tlsSettings:{serverName:$n.domain,alpn:["h3"]}}}'
+    return
+  fi
   if [[ $(jq -r '.protocol // ""' <<<"$node") == wireguard ]]; then
     [[ -n "$user_id" ]] || user_id=$(jq -r 'first(.users[]|select(.enabled)|.id) // empty' <<<"$node")
     wireguard_client_profile "$id" "$user_id" | jq --arg tag "proxy-$id-$user_id" '{tag:$tag,protocol:"wireguard",settings:{
@@ -347,6 +355,7 @@ node_mihomo_client_outbound() {
       native=$(wireguard_client_profile "$id" "$user_id" | jq -c '{type:"wireguard",server:.server,port:.port,ip:.address,
         "private-key":.private_key,"public-key":.server_public_key,"allowed-ips":["0.0.0.0/0","::/0"],mtu:.mtu,udp:true}') || return 1;;
     tunnel) log_warn "端口转发节点 $id 没有客户端配置。"; return 1;;
+    masque) log_warn "MASQUE 节点 $id 目前只能导出 Xray 客户端配置。"; return 1;;
     *)
       # Other protocols: convert the effective sing-box client outbound.
       local outbound result
