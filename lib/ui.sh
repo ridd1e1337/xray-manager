@@ -22,7 +22,7 @@ ui_clear() { [[ -t 1 && -n ${TERM:-} && ${TERM:-} != dumb ]] && command_exists c
 # would disable it inside the backend and could let failed actions continue.
 ui_worker_allowed() {
   case "$1" in
-    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_api_menu|ui_realm_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_dns_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
+    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
     *) return 1;;
   esac
 }
@@ -1093,44 +1093,7 @@ ui_manager_auto_menu() {
   esac
 }
 
-ui_api_menu() {
-  local c port dashboard path command
-  printf 'sing-box API 是本机控制接口，Dashboard 是网页仪表盘；一般使用节点无需开启。\n'
-  printf '仅监听本机，远程访问通过 SSH 转发；API 令牌具有控制权限。\n'
-  api_status
-  printf '\n1. 启用 API\n2. 启用 API + Dashboard\n3. 停用 API/Dashboard\n4. 显示 API 令牌\n5. 查看 API 服务状态\n6. 查看 API outbounds\n7. 导出 sing-box JSON Schema\n0. 返回\n'
-  ui_menu_choice c '选择操作' 7
-  case "$c" in
-    1|2)
-      port=$(jq -r '.api.port // 9090' "$SBM_STATE")
-      prompt_value port 'API loopback 端口' "$port"
-      if [[ "$c" == 2 ]]; then api_enable "$port" true; else api_enable "$port" false; fi
-      ;;
-    3) confirm '确认停用 API/Dashboard？' N && api_disable;;
-    4) api_show_token;;
-    5) api_cli status;;
-    6) api_cli outbounds;;
-    7) path="$SBM_EXPORTS/sing-box-schema.json"; prompt_value path 'Schema 输出文件' "$path"; core_schema "$path";;
-  esac
-}
 
-ui_realm_menu() {
-  local c port url listen domain max token
-  printf 'Hysteria Realm 为 Hysteria2 提供 UDP 打洞协调；普通公网 VPS 直连节点通常无需开启。\n'
-  realm_status
-  printf '\n1. 启用/配置 Hysteria Realm\n2. 停用 Hysteria Realm\n3. 显示 Realm token\n4. 查看 Realm 配置 JSON\n0. 返回\n'
-  ui_menu_choice c '选择操作' 4
-  case "$c" in
-    1)
-      port=$(jq -r '.realm.port // 9443' "$SBM_STATE"); url=$(jq -r '.realm.public_url // ""' "$SBM_STATE"); listen=$(jq -r '.realm.listen // "::"' "$SBM_STATE"); domain=$(jq -r '.realm.tls_domain // ""' "$SBM_STATE"); max=$(jq -r '.realm.max_realms // 0' "$SBM_STATE")
-      prompt_value port 'Realm 监听端口' "$port"; prompt_value url 'Realm 公网 URL（http/https）' "$url"; prompt_value listen '监听地址' "$listen"; prompt_value domain 'TLS 域名（留空为明文 HTTP）' "$domain"; prompt_value max '每个用户最大 Realm 数（0 不限）' "$max"
-      realm_enable "$port" "$url" "$listen" "$domain" "$max"
-      ;;
-    2) confirm '确认停用 Hysteria Realm？' N && realm_disable;;
-    3) realm_show_token;;
-    4) realm_status 1;;
-  esac
-}
 
 ui_doctor_menu() {
   local c host count family
@@ -1267,18 +1230,6 @@ ui_config_menu() {
   case "$c" in 1) config_validate;; 2) config_diff;; 3) config_redact <"$SBM_STATE";; esac
 }
 
-ui_dns_menu() {
-  local c value
-  printf '乐观 DNS 缓存会先复用过期结果并后台刷新，可减少等待；需要 sing-box 1.14+。\n'
-  printf '1. 查看 DNS 缓存与超时设置\n2. 开启乐观 DNS 缓存\n3. 关闭乐观 DNS 缓存\n4. 设置过期结果可复用时长\n5. 设置 DNS 查询超时\n0. 返回\n'
-  ui_menu_choice c '选择操作' 5
-  case "$c" in
-    1) settings_show_addresses 1 | jq '{dns_optimistic,dns_optimistic_timeout,dns_timeout}';;
-    2) settings_set_dns optimistic true;; 3) settings_set_dns optimistic false;;
-    4) prompt_value value '缓存窗口（如 3d）' "$(jq -r '.settings.dns_optimistic_timeout // "3d"' "$SBM_STATE")"; settings_set_dns optimistic-timeout "$value";;
-    5) prompt_value value 'DNS 超时（如 10s）' "$(jq -r '.settings.dns_timeout // "10s"' "$SBM_STATE")"; settings_set_dns timeout "$value";;
-  esac
-}
 
 ui_bbr_menu() {
   local c
