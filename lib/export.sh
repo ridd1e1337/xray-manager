@@ -226,6 +226,13 @@ export_client_config() {
   mkdir -p "$(dirname "$output")"
   while IFS= read -r node; do
     while IFS= read -r user_id; do
+      # Verified 2026-11: sing-box 1.14/1.15 Hysteria2 + Salamander clients do
+      # not interoperate with Xray's Hysteria inbound (mihomo does).
+      if [[ $(jq -r '.protocol' <<<"$node") == hysteria2 && $(jq -r '.obfs.type // ""' <<<"$node") == salamander ]]; then
+        [[ -z "$selected_node" ]] || { log_error 'sing-box 客户端与 Xray 的 Hysteria2 Salamander 混淆实测不互通；请使用 mihomo 或关闭混淆。'; return 1; }
+        log_warn "sing-box 配置已排除 $(jq -r '.id' <<<"$node")/$user_id：Hysteria2 Salamander 与 Xray 不互通，请使用 mihomo。"
+        continue
+      fi
       if ! ob=$(node_client_outbound "$(jq -r '.id' <<<"$node")" "$user_id"); then
         [[ -z "$selected_node" ]] || return 1
         log_warn "sing-box 配置已排除不兼容节点：$(jq -r '.id' <<<"$node")/$user_id。"

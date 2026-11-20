@@ -22,7 +22,7 @@ ui_clear() { [[ -t 1 && -n ${TERM:-} && ${TERM:-} != dumb ]] && command_exists c
 # would disable it inside the backend and could let failed actions continue.
 ui_worker_allowed() {
   case "$1" in
-    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_api_menu|ui_realm_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_dns_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs) return 0;;
+    ui_issue_certificate|ui_node_finish_menu|node_share|ui_add_node|ui_vless_add|ui_vless_edit|ui_user_menu|ui_xray_routing_menu|ui_manage_nodes|ui_share_export_menu|ui_client_export_menu|ui_cert_menu|ui_tunnel_menu|ui_update_menu|ui_xray_menu|ui_manager_auto_menu|ui_api_menu|ui_realm_menu|ui_doctor_menu|ui_uninstall_menu|ui_backup_menu|ui_nginx_stream_menu|ui_settings_menu|ui_tcp_tuning_menu|ui_template_menu|ui_firewall_menu|ui_vps_menu|ui_vps_init_menu|ui_vps_network_menu|ui_caddy_menu|ui_openlist_menu|ui_reality_menu|ui_maintenance_menu|ui_substore_guide|ui_notification_health_menu|ui_traffic_menu|ui_network_benchmark_menu|ui_traffic_group_menu|ui_shaping_menu|ui_tunnel_routes_menu|ui_substore_menu|ui_config_menu|ui_dns_menu|ui_bbr_menu|ui_hy2_buffer_menu|ui_outbound_menu|ui_substore_sources_menu|ui_subscription_menu|status_summary|show_logs|xray_traffic) return 0;;
     *) return 1;;
   esac
 }
@@ -773,19 +773,16 @@ ui_add_node() {
   local hy2_obfs_choice hy2_min_packet_size hy2_max_packet_size hy2_disable_chrome hy2_bbr_profile hy2_brutal_debug hy2_realm_choice hy2_realm_id hy2_realm_ip hy2_realm_mapping
   local handshake_server handshake_port congestion_control network strict_mode wildcard_sni
   printf '%s\n' \
-    '1. VMess + WebSocket + Cloudflare Tunnel' \
-    '2. Shadowsocks 2022' \
-    '3. AnyTLS' \
-    '4. Hysteria2' \
-    '5. Trojan TLS' \
-    '6. TUIC' \
-    '7. VLESS' \
-    '8. NaiveProxy' \
-    '9. ShadowTLS v3' \
-    '10. Snell v5/v6' \
-    '11. SOCKS5 / HTTP / mixed 认证代理' \
+    '1. VLESS（RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP，TLS/Reality/VLESS 加密）' \
+    '2. VMess + WebSocket + Cloudflare Tunnel' \
+    '3. Trojan TLS' \
+    '4. Shadowsocks 2022' \
+    '5. Hysteria2' \
+    '6. SOCKS5 / HTTP / mixed 认证代理' \
     '0. 返回'
-  ui_menu_choice choice '选择协议' 11
+  ui_menu_choice choice '选择协议' 6
+  # Map the Xray protocol list onto the shared wizard branches.
+  case "$choice" in 1) choice=7;; 2) choice=1;; 3) choice=5;; 4) choice=2;; 5) choice=4;; 6) choice=11;; esac
   case "$choice" in
     1)
       prompt_value name '节点名称' 'VMess WS Cloudflare'; prompt_value domain '固定 Tunnel 域名（Quick Tunnel 可留空）' ''; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"
@@ -809,37 +806,14 @@ ui_add_node() {
       prompt_value name '节点名称' 'Hysteria2'; ui_select_certificate_domain domain || { ui_cancel; return; }; prompt_value address '客户端连接地址' "$(ui_client_address_default "$domain")"; ui_prompt_port port udp 'UDP 端口' 443 8443 9443 10443
       local -a hy2_args=(hy2 --name "$name" --domain "$domain" --address "$address" --port "$port")
       if ! ui_use_recommended; then
-        printf '1. 不启用混淆\n2. Salamander\n3. Gecko\n'; ui_menu_choice hy2_obfs_choice '选择 Hysteria2 混淆' 3
+        printf '1. 不启用混淆\n2. Salamander\n'; ui_menu_choice hy2_obfs_choice '选择 Hysteria2 混淆' 2
         case "$hy2_obfs_choice" in
           1) ;;
           2) hy2_args+=(--obfs salamander) ;;
-          3)
-            prompt_value hy2_min_packet_size 'Gecko 最小包长' '512'; prompt_value hy2_max_packet_size 'Gecko 最大包长' '1200'
-            hy2_args+=(--obfs gecko --obfs-min-packet-size "$hy2_min_packet_size" --obfs-max-packet-size "$hy2_max_packet_size") ;;
           *) log_error '选择无效'; return ;;
         esac
-        prompt_value hy2_disable_chrome '关闭 Chrome QUIC 指纹伪装？(y/N)' 'N'
-        [[ "$hy2_disable_chrome" =~ ^[Yy]$ ]] && hy2_args+=(--disable-chrome-parrot)
-        printf '1. standard\n2. conservative\n3. aggressive\n4. 不显式设置\n'; ui_menu_choice hy2_bbr_profile 'BBR profile' 4
-        case "$hy2_bbr_profile" in
-          1) hy2_args+=(--bbr-profile standard) ;;
-          2) hy2_args+=(--bbr-profile conservative) ;;
-          3) hy2_args+=(--bbr-profile aggressive) ;;
-          4) ;;
-          *) log_error '选择无效'; return ;;
-        esac
-        prompt_value hy2_brutal_debug '启用 Hysteria Brutal 调试日志？(y/N)' 'N'
-        [[ "$hy2_brutal_debug" =~ ^[Yy]$ ]] && hy2_args+=(--brutal-debug)
-      fi
-      if [[ $(jq -r '.realm.enabled // false' "$SBM_STATE") == true ]]; then
-        prompt_value hy2_realm_choice '启用 Hysteria Realm NAT 穿透？(y/N)' 'N'
-        if [[ "$hy2_realm_choice" =~ ^[Yy]$ ]]; then
-          prompt_value hy2_realm_id 'Realm slot ID' ''
-          prompt_value hy2_realm_ip 'Realm IP 版本（0/4/6）' '0'
-          prompt_value hy2_realm_mapping '启用 UPnP/NAT-PMP 端口映射？(y/N)' 'N'
-          hy2_args+=(--realm-id "$hy2_realm_id" --realm-ip-version "$hy2_realm_ip")
-          [[ "$hy2_realm_mapping" =~ ^[Yy]$ ]] && hy2_args+=(--realm-port-mapping)
-        fi
+        ui_prompt_optional hy2_realm_choice '伪装网站 URL（masquerade，可留空）' '' || return
+        [[ -z "$hy2_realm_choice" ]] || hy2_args+=(--masquerade "$hy2_realm_choice")
       fi
       ui_add_node_and_deliver "${hy2_args[@]}"
       ;;
@@ -1040,24 +1014,22 @@ ui_update_menu() {
 ui_xray_menu() {
   local choice policy
   xray_status
-  printf '\nXray 负责 VLESS，其他协议由 sing-box 运行；停用 Xray 仅暂停 VLESS。\n'
-  printf '1. 安装 Xray 最新版\n2. 更新 Xray\n3. 生成并校验 Xray 配置\n4. 启用 Xray\n5. 停用 Xray\n6. 设置 Xray 更新策略\n7. 入站/出站流量统计\n8. 出站、WARP、负载均衡与路由\n0. 返回\n'
-  ui_menu_choice choice '选择 Xray 操作' 8
+  printf '\n1. 更新 Xray 最新版\n2. 指定 Xray 版本\n3. 回滚上一版 Xray\n4. 生成并校验 Xray 配置\n5. 设置 Xray 自动更新策略\n6. 入站/出站流量统计\n7. 出站、WARP、负载均衡与路由\n0. 返回\n'
+  ui_menu_choice choice '选择 Xray 操作' 7
   case "$choice" in
-    1) xray_install;;
-    2) xray_update;;
-    3)
+    1) core_update latest;;
+    2) prompt_value policy 'Xray 版本号，如 26.11.9' '' || return 1; core_update "$policy";;
+    3) core_rollback;;
+    4)
       [[ -x "$SBM_XRAY_BIN" ]] || { log_error '请先安装 Xray。'; return 1; }
       with_lock xray_render_validate || return 1
-      log_ok "Xray 配置已生成：$SBM_XRAY_CONFIG";;
-    4) xray_enable;;
-    5) xray_disable;;
-    6)
-      printf 'manual / notify / patch / stable\n'
-      prompt_value policy '更新策略' "$(jq -r '.settings.xray_update_policy // "notify"' "$SBM_STATE")"
-      xray_set_policy "$policy";;
-    7) xray_traffic;;
-    8) ui_open_submenu ui_xray_routing_menu;;
+      log_ok "Xray 配置已生成：$SBM_CONFIG";;
+    5)
+      printf 'manual / notify / patch（同年月）/ stable（任意新版）\n'
+      prompt_value policy '更新策略' "$(jq -r '.settings.core_update_policy // "notify"' "$SBM_STATE")"
+      core_set_policy "$policy";;
+    6) xray_traffic;;
+    7) ui_open_submenu ui_xray_routing_menu;;
   esac
 }
 
@@ -1270,15 +1242,14 @@ ui_nginx_stream_menu() {
 
 ui_settings_menu() {
   local c v
-  printf '设置 sing-box 的地址、日志和 DNS。服务器防火墙、网站与网络调优在主菜单 15。\n'
-  printf '1. 默认客户端连接地址\n2. 日志详细程度\n3. 出站 IPv4/IPv6 优先级\n4. 配置校验与修改差异\n5. DNS 缓存与查询超时\n0. 返回\n'
-  ui_menu_choice c '选择设置' 5
+  printf '设置 Xray 的地址、日志与出站。服务器防火墙、网站与网络调优在主菜单 15。\n'
+  printf '1. 默认客户端连接地址\n2. 日志详细程度\n3. 出站 IPv4/IPv6 优先级\n4. 配置校验与修改差异\n0. 返回\n'
+  ui_menu_choice c '选择设置' 4
   case "$c" in
     1) prompt_value v '域名或 IP' "$(jq -r '.settings.default_server_address // ""' "$SBM_STATE")"; settings_set_default_address "$v";;
     2) prompt_value v '日志级别 (trace/debug/info/warn/error/fatal/panic)' "$(jq -r '.settings.log_level' "$SBM_STATE")"; settings_set_log_level "$v";;
     3) ui_open_submenu ui_outbound_menu;;
     4) ui_open_submenu ui_config_menu;;
-    5) ui_open_submenu ui_dns_menu;;
   esac
 }
 
@@ -1765,8 +1736,8 @@ ui_main_options() {
  7. CF Tunnel
 维护与扩展
  8. 更新管理器与核心
- 9. sing-box API 与网页仪表盘
-10. Hysteria Realm
+ 9. Xray 出站、WARP 与分流
+10. Xray 流量统计
 11. 运行日志
 12. 故障诊断与修复
 13. 备份与恢复
@@ -1807,7 +1778,7 @@ ui_main() {
       1) page=status_summary;;
       2) page=ui_add_node;; 3) page=ui_manage_nodes;; 4) page=ui_share_export_menu;;
       5) page=ui_client_export_menu;; 6) page=ui_cert_menu;; 7) page=ui_tunnel_menu;;
-      8) page=ui_update_menu;; 9) page=ui_api_menu;; 10) page=ui_realm_menu;;
+      8) page=ui_update_menu;; 9) page=ui_xray_routing_menu;; 10) page=xray_traffic;;
       11) page=show_logs; page_args=(all 100);; 12) page=ui_doctor_menu;; 13) page=ui_backup_menu;;
       14) page=ui_settings_menu;; 15) page=ui_vps_menu;; 16) page=ui_traffic_menu;;
       17) page=ui_notification_health_menu;; 18) page=ui_template_menu;;
