@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.23
+
+- 新增 `xm substore remote set|push|status|disable` 与面板 `18 → 13`：接入已有的中心 Sub-Store，与 sb-manager 相同。
+  本机节点作为中心的一个本地来源推送；首次创建时设置显示名和标签，之后只更新节点内容；每次成功的修改后按指纹判断，
+  有变化才在后台推送；中心不可达只记录并在状态中提示。
+- 修复：Sub-Store 链接导出会为无法表达的节点写入空行。
+
 ## 0.1.0-alpha.22
 
 - 移除节点模板与批量操作：面板“节点模板与批量操作”、`xm node template list|save|delete|add`、

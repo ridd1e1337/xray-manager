@@ -77,7 +77,7 @@ export_substore_links() {
   while IFS= read -r node; do
     id=$(jq -r '.id' <<<"$node")
     while IFS= read -r user_id; do
-      if line=$(node_substore_line "$id" "$user_id"); then printf '%s\n' "$line" >>"$tmp" || return 1
+      if line=$(node_substore_line "$id" "$user_id") && [[ -n "$line" ]]; then printf '%s\n' "$line" >>"$tmp" || return 1
       else log_warn "Sub-Store 链接已排除无法完整表达的节点：$id/$user_id；可导出原生 Xray JSON。"; fi
     done < <(jq -r '.users[] | select(.enabled==true) | .id' <<<"$node")
   done < <(jq -c '.nodes[]? | select(.enabled==true)' "$SBM_STATE")

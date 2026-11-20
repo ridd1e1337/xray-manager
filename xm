@@ -54,6 +54,7 @@ source "$SBM_LIB/lib/tunnel.sh"
 source "$SBM_LIB/lib/tunnel_routes.sh"
 source "$SBM_LIB/lib/subscription.sh"
 source "$SBM_LIB/lib/substore.sh"
+source "$SBM_LIB/lib/substore_remote.sh"
 source "$SBM_LIB/lib/bbr.sh"
 source "$SBM_LIB/lib/hysteria2_tuning.sh"
 source "$SBM_LIB/lib/tcp_tuning.sh"
@@ -150,6 +151,9 @@ sb_help_full() {
   xm cert issue <DOMAIN> [EMAIL]
   xm cert list [--json]|renew|inspect <DOMAIN>
 
+  xm substore remote set -|https://域名/后端路径 [--name 来源名] [--display 显示名] [--tag 主节点库]
+                                 接入已有的中心 Sub-Store：本机节点作为一个来源推送过去，节点变化后自动更新
+  xm substore remote push|status|disable
   xm substore install|update [--version VERSION] [--frontend-version VERSION] [--port PORT]
   xm substore enable|disable|status [--json]|access|sync [NAME]|backup FILE|restore FILE
   xm substore source add NAME URL [COLLECTION]|list [--json]|remove NAME|check NAME
