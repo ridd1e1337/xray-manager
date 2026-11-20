@@ -297,7 +297,14 @@ node_mihomo_client_outbound() {
   [[ ! -r "$(state_secret_path "$id")" ]] || node_secret=$(state_get_secret "$id") || return 1
   case "$(jq -r '.protocol' <<<"$node")" in
     vless) native=$(protocol_vless_mihomo_outbound "$node" "$secret" "$node_secret") || return 1;;
-    *) log_warn '本原生 mihomo 导出入口转换 VLESS/Snell；其他协议请使用 Sub-Store。'; return 1;;
+    *)
+      # Other protocols: convert the effective sing-box client outbound.
+      local outbound result
+      outbound=$(node_client_outbound "$id" "$user_id") || return 1
+      if ! result=$(jq -c --arg name "$(jq -r '.name' <<<"$node")" -f "$SBM_LIB/libexec/singbox_to_mihomo.jq" <<<"$outbound" 2>&1); then
+        log_warn "$(sed -n 's/.*"sb_reason":"\([^"]*\)".*/\1/p' <<<"$result" | head -1)"; return 1
+      fi
+      native=$result;;
   esac
   name=$(jq -r '.name' <<<"$node") || return 1
   # Keep stable unique identifiers even when different nodes share a display name.
@@ -349,7 +356,7 @@ export_mihomo_client_config() (
       else log_warn "mihomo 配置已排除无法转换的节点：$id/$user_id。"; fi
     done < <(jq -r --arg user "$selected_user" '.users[]|select(if $user=="" then .enabled else .id==$user end)|.id' <<<"$node")
   done < <(jq -c --arg id "$selected_node" '.nodes[]?|select(if $id=="" then .enabled else .id==$id end)' "$SBM_STATE")
-  [[ "$proxies" != '[]' ]] || { log_error '没有可导出的 mihomo VLESS/Snell 节点。'; return 1; }
+  [[ "$proxies" != '[]' ]] || { log_error '没有可导出的 mihomo 节点。'; return 1; }
   tmp=$(mktemp "$(dirname "$output")/.mihomo-client.XXXXXX") || return 1
   trap 'rm -f -- "$tmp"' EXIT
   jq -n --argjson proxies "$proxies" '{"mixed-port":2080,"allow-lan":false,mode:"rule","log-level":"warning",
