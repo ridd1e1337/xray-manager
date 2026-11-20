@@ -241,7 +241,7 @@ state_normalize_v2_file() {
             | if .obfs.type == "gecko" then .obfs = {} else . end
           else . end
       )
-  ' "$file" >"$tmp"
+  ' "$file" >"$tmp" || { rm -f "$tmp"; return 1; }
   chmod 0600 "$tmp"
   if cmp -s "$tmp" "$file"; then rm -f "$tmp"; else mv -f "$tmp" "$file"; fi
 }
