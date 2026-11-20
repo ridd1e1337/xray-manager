@@ -3,286 +3,95 @@
 ## Data flow
 
 ```text
-state.json + secret files + certificates
-             │
-             ▼
-      protocol renderers
-             │
-             ▼
-  complete candidate config.json
-             │
-             ▼
-       sing-box check
-             │
-             ▼
- snapshot → atomic replace → service reconcile → health check
-                                      │
-                                      └─ failure: rollback
+state.json + secrets/ + certs/
+        │  validate_state_semantics  (one jq pass: ports, users, files, profiles)
+        ▼
+xray_render_config  (per-node inbound, content-addressed cache)
+        │
+        ▼
+candidate config.json ──► xray run -test
+        │
+        ▼
+snapshot → atomic install → xm-xray reconcile → health check
+                                    └─ failure: restore snapshot
 ```
 
-The generated sing-box configuration is never treated as the source of truth. Users edit state only through `sb`; protocol modules render the complete configuration every time.
+`state.json` plus the protected secret and certificate files are the only source of
+truth. `generated/config.json` is rebuilt on every change and never parsed back.
+Every mutation runs under the manager lock (`with_lock`) as a state transaction:
+candidate state → semantic validation → render → `xray -test` → atomic install →
+service reconcile; any failure restores the full snapshot (state, secrets,
+certificates, subscriptions and service definitions).
 
-## Interactive panel lifecycle
+## Modules
 
-`lib/ui.sh` keeps each menu page in a loop and runs its selected action in a
-fresh Bash process through the internal, whitelisted `__ui-step` command.
-The worker performs the same dependency and state initialization as the CLI,
-and retains backend locking, validation, and rollback. Catching a function
-failure with `if` or `||` in the menu's own shell would suppress Bash errexit
-inside that function; the separate process preserves strict error handling.
+| Path | Role |
+|---|---|
+| `xm` | CLI entry point and help |
+| `lib/state.sh` | defaults, migrations (`state_normalize`), schema, snapshots, transactions |
+| `lib/node.sh` | node/user CLI; builds node objects and secrets |
+| `lib/render.sh` | semantic validation, shared jq socket model `SBM_JQ_NODE_KINDS`, candidate pipeline |
+| `lib/xray.sh` | Xray inbound renderer, service unit, binary install/switch/prune |
+| `lib/vless_config.sh` / `lib/vless_profile.sh` / `libexec/vless_export.jq` | stream protocols (VLESS/VMess/Trojan/SS): transports, TLS/REALITY, client profile derivation and exports |
+| `lib/export.sh`, `protocols/*.sh`, `libexec/singbox_to_mihomo.jq` | share links and Xray/mihomo/sing-box/wg-quick client configs |
+| `lib/user_limits.sh` | per-user quota, reset day, expiry and online-IP limits via the Stats API |
+| `lib/xray_routing.sh` | extra outbounds, WARP, balancers and routing rules |
+| `lib/ui.sh` | terminal panel |
 
-Worker statuses 200–206 distinguish back, EOF, completed uninstall, manager
-reload, cancellation, parent-page redraw, and return to the main menu from
-ordinary action failures. Nested loops propagate session-ending statuses and
-the main-menu return through every parent. Global
-yes/dry-run/quiet/no-color options survive worker launches and reloads.
-Selectors return IDs through caller variables, and edits load defaults from
-state. No persistent UI state or new runtime dependency is required.
+Protocol inbounds are built by `xray_protocol_inbound`; VLESS/VMess/Trojan/SS share a
+generic stream builder. `--xray-inbound-json` (stored in `nodes[].xray.inbound`) is
+deep-merged last; protocol, tag, listen, port and credentials stay manager-owned.
 
-Menu and selector Enter input always goes back; recommendations are displayed
-without selecting them. Result pages return to the main menu on Enter and
-only reopen the current page when the operator enters `r`. At the main menu,
-empty input stays at the prompt even when no nodes exist; exit requires an
-explicit `0`, `q`, or EOF. Configuration fields retain their displayed defaults,
-and invalid edits do not replace valid defaults in retrying prompts.
+## Performance model
 
-The main node-creation entry uses the complete protocol wizard and a final
-editable summary. It uses the same node CLI flags as the command line, so
-Hysteria2 obfuscation/BBR/Realm, VLESS security, TUIC congestion control and
-Snell versions are not silently discarded. Certificate selection can invoke a dedicated worker to issue
-or renew a certificate without nesting state locks or suppressing backend errors.
-Node creation commits before import rendering. A separate completion page keeps
-the node ID across export failures, so retries cannot create duplicate nodes.
+Bash startup is cheap; `jq` process launches dominate. Hot paths therefore use one
+jq pass for many nodes (`node list`, `status`, validation, port reservation, panel
+header and node picker, traffic table). Two content-addressed caches live under
+`/run/xray-manager/vless-cache` (root-only, pruned after a day):
 
-The panel keeps common labels short while the single node wizard retains the
-complete protocol options behind a single "use recommended values" prompt.
-`xm quick` opens that wizard; node creation goes through the explicit protocol
-and parameter flow.
-Full per-user client profiles include every required outbound and are validated
-before an atomic file replacement; the existing full-subscription export remains
-available. Advanced protocol parameters use the original creation wizard.
+- rendered inbounds, keyed by manager version, certificate directory, the effective
+  node JSON and the raw bytes of its secret files;
+- profile checks (`.valid`/`.ok` markers), keyed additionally by the Xray build.
 
-## Traffic control plane
+Any input change yields a new key, so stale entries are never used.
 
-```text
-state.json: nodes[].traffic                 /var/lib/xray-manager/traffic-usage.json
-              │                                           │
-              └──────────────┬────────────────────────────┘
-                             ▼
-                 candidate nftables transaction
-                             │
-                             ▼
-                inet xm_manager_traffic (owned table)
-                  ├─ input:  client → listener (upload)
-                  └─ output: listener → client (download)
-```
+## Interactive panel
 
-The traffic subsystem is separate from sing-box rendering but participates in the same manager lock, snapshots, state transitions, backup/restore, and rollback. Node state holds policy (`quota_bytes`, `quota_mode`, reset day, and directional bit rates); the protected runtime journal holds only cycle IDs and accumulated counters. Before replacing rules, live named counters are checkpointed and used as the initial values of the new atomic nftables transaction. A systemd lifecycle unit restores rules at boot and checkpoints at shutdown; a timer checkpoints and processes UTC billing-cycle rollover every five minutes without rebuilding an already-correct table. OpenRC uses an equivalent boot service and, when `dcron` is installed, a 15-minute periodic job.
+`lib/ui.sh` runs each menu action in a fresh worker process (`__ui-step`) so strict
+error handling and locking match the CLI. Menu prompts never act on a bare Enter;
+wizard steps pass a recommended default (`ui_menu_choice VAR LABEL MAX DEFAULT`).
+The VLESS wizard starts with a one-question REALITY + Vision path. The header caches
+the Xray version for the session and resets it after the update menu.
 
-Rules match the effective listener returned by the shared TCP/SNI topology layer. Direct nodes therefore match their public listener, routed nodes match the unique loopback backend, and Tunnel-backed VMess matches its loopback origin. Loopback listeners are matched on the `output` hook in both destination (client/Tunnel → sing-box) and source (sing-box → client/Tunnel) directions; direct listeners use `input` for upload and `output` for download. Each rule includes the protocol transport, so TCP and UDP nodes may retain the same numeric port without sharing counters.
+## Services
 
-The implementation deliberately does not install `tc` qdiscs. Rate enforcement uses nftables named byte-rate limits as a policer, which avoids replacing an operator's root qdisc and works uniformly for IPv4, IPv6, TCP, UDP, and loopback traffic. The owned table is not persisted in the host firewall configuration and never adds allow rules; boot reconciliation rebuilds it from manager state.
+`xm-xray.service` (systemd) or `/etc/init.d/xm-xray` (OpenRC supervise-daemon) runs
+`/usr/local/lib/xray-manager/bin/xray`, a symlink into `cores/xray/<version>/`. On
+systemd it runs as the unprivileged `xraymanager` user with only
+`CAP_NET_BIND_SERVICE`. Switching versions validates the current config with the
+candidate binary first; failure restores the previous link and snapshot. The active
+and the newest previous build are kept for `xm core rollback`.
 
-## Explicit host-firewall setup
-
-The firewall panel keeps host-security changes separate from proxy state. `xm firewall fail2ban` installs (when needed) and writes the manager-owned SSH jail at `SBM_FAIL2BAN_CONFIG`, with `findtime=180`, `maxretry=5`, and `bantime=-1`; it discovers effective SSH ports from the current connection, `sshd -T`, and listening sockets before validating and enabling/restarting Fail2ban. The action snapshots current iptables and the prior jail before replacement. `xm firewall ufw` first displays a dry-run plan, then snapshots current iptables and UFW status, idempotently allows detected SSH ports, TCP `22`, `80`, `443`, and every enabled protocol listener before enabling UFW. Neither action runs during ordinary installation, and neither removes unrelated rules or packages. Package installation uses the detected apk/apt/dnf/yum/pacman/zypper backend.
-
-## Status, notification, and health control plane
-
-`xm status --json` composes one machine-readable view from state, protected traffic usage, service-manager status, live listeners, certificate validity, firewall components, and health findings. It never parses generated sing-box configuration back into state. Human `xm status` renders the same object, keeping CLI and panel results consistent.
-
-Traffic checkpoints evaluate configured percentage thresholds and write successful-delivery keys to `notification-events.json`, so retries occur after failures but delivered alerts are not repeated within a billing cycle. The notification provider secret is isolated in `secrets/notifications.json`; state contains only the provider name, enabled bit, and thresholds. Telegram, WeCom, and generic JSON Webhooks share this delivery layer.
-
-The optional health timer runs every 15 minutes on systemd/OpenRC and no-ops while `health.enabled` is false. It checks expected service/listener state, certificate expiry, UFW, Fail2ban, and the owned nftables traffic table. `health-events.json` tracks active issue codes so only changes and recoveries trigger notifications; `health-report.json` stores the latest protected report.
-
-Resource health metrics use portable `/proc`, `df`, systemd, and Fail2ban interfaces. Thresholds live in `health.resources`; metrics are informational warnings and never trigger firewall, SSH, sysctl, or routing changes. `xm doctor --repair-safe` performs only permission/configuration/owned-rule recovery and a controlled restart of a service that is expected to be active but is stopped.
-
-Configuration previews render a candidate state and compare both state and generated config after redacting secret-shaped keys. Dry-run paths do not call `state_install_candidate`, do not write credentials or traffic journals, and do not reconcile services.
-
-## Service backends
-
-```text
-                    ┌─ systemd units + timers + journald
-xm service API ─────┤
-                    └─ OpenRC supervise-daemon + optional dcron periodic jobs + files
-```
-
-All lifecycle operations use a shared service abstraction: existence, enable/disable, start/stop/restart, active-state checks, logs, repair, and failure reporting. Logical names retain their systemd suffix for state compatibility; the OpenRC backend maps `xm-sing-box.service` to `/etc/init.d/xm-sing-box` and `xm-cloudflared.service` to `/etc/init.d/xm-cloudflared`.
-
-On OpenRC, sing-box runs through `supervise-daemon` as root so low ports remain usable on VPS/container kernels that do not apply file capabilities to unprivileged users. OpenRC logs are stored under `/var/log/xray-manager/`; the Cloudflared directory and logs are created only when the optional component is installed.
-
-From alpha.59, owned service units on systemd 245+ use a dedicated `xray-manager`
-journal namespace with a 23-hour retention window and a 16 MiB disk budget.
-Older shared journals retain the host policy. A 15-minute maintenance task also
-bounds OpenRC file logs and known temporary build/download directories while
-respecting setup/update/state locks. Persistent topology and recovery metadata
-are excluded. Caddy custom builds are normally downloaded from the publisher;
-explicit local builds isolate Go caches in the temporary build directory.
-
-## Minimal installation and optional dependencies
-
-The default installer uses the `minimal` profile. It installs the manager's small command-line base, the sing-box core and the Alpine `gcompat`/OpenRC runtime, but does not download Cloudflared or install Python, nftables, kmod or Nginx. Default-on manager updates install dcron on Alpine when needed. Other feature modules call the dependency resolver immediately before use (`subscription`, `traffic`, `bbr`, `probe`, `scheduler`, and `logrotate`). This keeps the first boot suitable for a roughly 1GB disk while preserving the full feature set for larger hosts.
-
-TCP tuning is an explicit host operation in `lib/tcp_tuning.sh`, independent of
-proxy state, BBR, and UDP tuning. It manages only `tcp_rmem`, `tcp_wmem`,
-`tcp_moderate_rcvbuf`, and `tcp_mtu_probing`. Under the manager lock, it saves
-the current values and owned file in a durable pending snapshot before
-atomically installing the candidate and verifying all runtime values. A
-separate original snapshot survives successful retuning; failed retuning
-restores the previous active configuration. Pending recovery runs before the
-next mutation. Restore never replays unrelated sysctl keys from a saved file.
-The OS sysctl boot service loads the manager-owned drop-in on both systemd
-and OpenRC. Read-only planning/status and `lib/network.sh` diagnostics bypass
-state initialization, require no root access, and install no dependencies.
-
-## Exposure model
-
-```text
-Cloudflare edge → cloudflared → 127.0.0.1:<VMess WS port>
-
-Internet → TCP/TLS <AnyTLS port>
-Internet → UDP/QUIC <Hysteria2 port>
-Internet → TCP <Shadowsocks 2022 port>
-Internet → TCP <Snell v5 port>
-```
-
-VMess-WS-CF never listens on a public interface. AnyTLS and Hysteria2 can share the same numeric port because one is TCP and the other UDP.
-
-### Optional TCP/SNI passthrough
-
-New mux configurations use the existing sing-box process. A TCP-only `direct`
-inbound tagged `sbm-mux-tcp` listens on the public port. Only that inbound runs
-TLS sniffing (300ms timeout), then exact SNI rules forward to fixed
-`127.0.0.1:<backend_port>` targets. A final reject prevents unknown, missing-SNI
-or non-TLS traffic from reaching the normal direct outbound. Backend inbounds
-have different tags, so their authenticated traffic cannot loop into the mux.
-TLS, Reality and ShadowTLS handshakes remain at the backend; no TLS termination,
-new keys, certificate-verification bypass, process or package is introduced.
-
-The feature remains opt-in. The historical `nginx_stream` state key and helper
-names retain shared routes and topology; `backend` selects `sing-box` or `nginx`.
-Missing backend values preserve Nginx when legacy routes exist or the feature
-is enabled. Empty configurations default to sing-box. Backend selection persists
-across disabling and upgrades. `lib/mux.sh` owns selection, built-in rendering
-and CLI dispatch; `lib/nginx_stream.sh` retains common route handling and the
-optional independent Nginx service.
-
-State keeps each node's independent listen/port. Active routes render unique
-loopback backends, exports use the public mux port, and traffic accounting
-continues on the loopback ports. Port reservations include the frontend,
-backends, nodes and enabled API/Realm/Sub-Store listeners plus subscriptions.
-UDP stays independent. Sniffing and connection buffers still consume resources;
-no fixed memory ceiling is promised.
-
-The panel and `xm mux auto all --port 443` batch eligible TLS/SNI nodes in one
-candidate transaction, allocating loopback ports and enabling the saved backend.
-Before a new frontend bind, the manager checks the actual TCP listener. A Caddy,
-Nginx, or other non-manager listener causes a clean refusal; the manager never
-stops, reloads, rewrites or replaces an existing website configuration.
-
-Candidate core validation occurs before stopping the old Nginx frontend.
-Installation then restarts sing-box and reconciles the selected backend. The
-built-in backend stops/disables only the manager's Nginx service; Nginx mode
-retains its systemd/OpenRC service and installs dependencies only when enabled.
-Rollback stops that service before restoring state/config and restarting the
-previous topology. Public-port exports and live subscriptions follow the same
-transaction. Health, status, logs and repair use the selected service. The
-compatibility `components.nginx_stream` JSON field includes the backend name.
+Other units (`xm-cloudflared`, `xm-traffic`, `xm-subscription`, `xm-substore`,
+`xm-telegram-bot`, …) are created only when their feature is enabled. Names, ports
+(subscription 9081, Sub-Store 3002), the nft table `xm_manager_traffic` and the
+service user differ from sb-manager so both managers can run on one host.
 
 ## Trust boundaries
 
 - `state.json`: topology and non-secret settings, mode `0600`.
-- `secrets/`: credentials and API tokens, directory mode `0700`/`0710` as required.
-- `generated/config.json`: contains runtime credentials and is readable only by root and the `sbmanager` service group.
-- `certs/`: certificate key mode `0640`, readable by the service group.
-- `exports/` and backups: mode `0600`; both contain credentials.
-- `traffic-usage.json`: runtime billing-cycle counters, mode `0600`; included in snapshots and backups.
-- `notification-events.json`, `health-events.json`, and `health-report.json`: protected runtime alert/health journals, mode `0600`.
-- OpenRC service scripts contain only paths and arguments; Tunnel tokens remain in a protected file.
+- `secrets/`: user and node credentials, API tokens, extra outbounds, mode `0600` files.
+- `generated/config.json`: contains credentials, readable by root and the service group.
+- `certs/`: private keys `0640` for the service group.
+- `exports/`, backups, subscriptions: `0600`; they contain credentials.
+- The Stats API listens only on `127.0.0.1`; ordinary operations never change the
+  host firewall (only explicit `xm vps init` / `--init-vps` does).
 
-## Update model
+## Runtime files
 
-Manager scripts use a default-on daily update policy in state. Each host keeps
-a staggered 03:00–05:59 local time. systemd supplies a persistent calendar timer;
-OpenRC supplies a 15-minute periodic job gated by the saved time and attempt day.
-The OpenRC scheduler installs/starts dcron when needed. Explicit opt-outs survive
-upgrades. With --no-start, new definitions stay inactive and existing scheduler
-activation is preserved.
-
-Manual and scheduled manager updates share a separate lock with uninstall.
-The installer child does not inherit that descriptor, so services it starts
-cannot retain the updater lock. Updates pin the GitHub main commit before
-download and invoke the installer with --keep-core. No new commit means no
-installation or proxy restart. The protected attempt journal is written before
-download to prevent repeated retries throughout the day; two private log files
-retain current and previous attempts. Scheduler policy changes use atomic state
-replacement and roll back their setting/definitions if reconciliation fails.
-
-Each sing-box version is kept under `cores/sing-box/<version>/`. `/usr/local/bin/sing-box` is an atomic symlink. A candidate binary must validate the current configuration before the symlink is switched. Service failure restores the previous target.
-
-Every switch records a known-good core/config/secret/certificate snapshot in
-`/var/lib/xray-manager/backups/snapshots/` and appends a paired entry to
-`core-history/sing-box.tsv`. If an older core rejects the current configuration,
-rollback restores that paired snapshot before switching, so the binary and
-configuration remain compatible.
-
-## Protected control plane
-
-Subscription profiles are materialized under `/var/lib/xray-manager/subscriptions`
-with SHA-256 token filenames. The Python service runs as `sbmanager`, binds only
-to loopback, refuses expired/revoked tokens, and never logs bearer paths. The
-optional sing-box 1.14 API/Dashboard is version-gated, loopback-only, and uses a
-separate secret file; stable 1.13 configurations never contain its `services`
-or `http_clients` fields.
-
-Live subscription metadata explicitly sets `live: true`; a null expiry is
-allowed only for this opt-in mode. A successful state transaction renders all
-active live modes and Sub-Store links into one `live.json` generation, then
-atomically replaces it with mode 0640 and the service group. Publication errors
-fail and roll back the transaction, including node secrets and the previous
-generation. The HTTP worker serves this bundle without reading manager state
-or executing privileged code. Snapshot subscriptions continue to use their
-token-specific files. Revocation works with the displayed short ID or token.
-
-Sub-Store sync registers a reusable local live URL; remote source registration
-adds a URL and collection membership through its API. URLs stay in protected
-Sub-Store data, while CLI lists expose only names and membership. Sources use
-the Sub-Store `noCache` URL option so each downstream refresh sees current
-upstream data. API registration retains processor/collection settings and
-compensates partial failures from protected before-images. Failed recovery
-retains those images for an operator; neither API unavailability nor remote
-source failure blocks ordinary node transactions.
-
-The optional sing-box 1.14 `hysteria-realm` service is rendered alongside the
-API service from the top-level `realm` state object. Its bearer token is kept in
-`secrets/realm.json`, never in `state.json` or generated client metadata. A
-Hysteria2 node references a Realm slot by `realm_id`; rendering resolves the
-current token at transaction time so rotating the Realm token cannot leave
-stale node credentials behind. Realm disable is refused while an enabled node
-still references it, preserving an atomic reachable configuration.
-
-## Release provenance
-
-`build-release.sh` emits the offline installer, `SHA256SUMS`,
-`RELEASE-MANIFEST.json`, and `PROVENANCE-SHA256SUMS`. Set
-`SBM_RELEASE_SIGNING_KEY` with a local GPG key to emit detached signatures for
-the manifest and checksums. Remote bootstrap installs require an immutable
-`SBM_INSTALL_REF` (tag or commit) and can enforce a source archive SHA-256.
-
-
-Optional operations in alpha.32 extend the existing lock and state model:
-`lib/expiry.sh` suspends expired nodes through state transactions from the traffic
-maintenance schedule; `lib/traffic_groups.sh` adds shared nft quota objects and
-group counters to the existing usage journal. `lib/shaping.sh` explicitly owns
-one interface's downstream HTB tree, preserves its original qdiscs, and retains
-nft policing for upstream, loopback, and other interfaces. No shaping runs by
-default. `lib/tunnel_routes.sh` renders locally managed Cloudflared ingress from
-state and validates it with the installed binary before activation.
-
-`lib/substore.sh` verifies official backend/frontend Release digests, uses a
-loopback listener with a protected random API path, and manages systemd/OpenRC
-services. Its transaction copies program/data/settings before replacement and
-restores them on failure. Dedicated and full manager backups pause the component
-for a consistent data snapshot. Archive extraction rejects links, special files,
-path traversal and oversized content. `lib/benchmark.sh` runs bounded iperf3
-clients and stores protected JSON history independently of proxy state.
+Everything lives under `/etc/xray-manager`, `/var/lib/xray-manager`,
+`/var/log/xray-manager`, `/run/xray-manager` and `/usr/local/lib/xray-manager`.
+Temporary files use `mktemp` inside these directories with traps; scratch files left
+by an aborted operation (older than ten minutes) are removed whenever the manager
+lock is taken. Logs and caches are kept for about a day. `xm uninstall --purge`
+removes all of it.

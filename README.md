@@ -9,7 +9,7 @@ Rocky、Alma、Fedora、Arch、openSUSE）。
 配置目录、服务名、端口和防火墙表互不重叠。TUIC、AnyTLS、NaiveProxy、ShadowTLS、Snell 等
 sing-box 协议请使用 sb-manager。
 
-当前版本：`0.1.0-alpha.2`
+当前版本：`0.1.0-alpha.3`
 
 ## 安装
 

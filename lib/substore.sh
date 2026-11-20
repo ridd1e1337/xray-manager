@@ -185,7 +185,7 @@ _substore_install_candidate() {
 }
 
 substore_install() {
-  local version=${1:-latest} frontend=${2:-latest} port=${3:-3001} stage backend_meta frontend_meta rc=0
+  local version=${1:-latest} frontend=${2:-latest} port=${3:-3002} stage backend_meta frontend_meta rc=0
   [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] && (( port >= 1024 && port <= 65535 )) || usage_die 'Sub-Store 端口必须为 1024–65535。'
   dependency_require_feature substore || return 1
   stage=$(mktemp -d "$SBM_RUN/substore-download.XXXXXX") || return 1

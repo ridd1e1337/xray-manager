@@ -1,341 +1,171 @@
 # State schema v2
 
+`/etc/xray-manager/state.json` holds topology and non-secret settings. Credentials
+live in protected files under `secrets/`. `generated/config.json` is derived and is
+never parsed back into state. States copied from sb-manager are normalized on load:
+sing-box-only fields (`api`, `realm`, DNS settings, `core_channel`, Hysteria2
+Realm/Gecko/BBR/Chrome options) are removed.
+
 Simplified example:
 
 ```json
 {
   "schema_version": 2,
-  "manager_version": "0.1.0-alpha.2",
+  "manager_version": "0.1.0-alpha.3",
   "settings": {
-    "log_level": "info",
-    "default_server_address": "edge.example.com",
+    "log_level": "warn",
+    "default_server_address": "",
+    "default_server_address_source": "auto",
+    "public_ipv4": "203.0.113.7",
+    "public_ipv6": "",
     "outbound_ip_strategy": "prefer_ipv4",
-    "core_channel": "stable",
     "core_update_policy": "notify",
+    "cloudflared_update_policy": "notify",
     "manager_auto_update": true,
-    "manager_update_minute": 47
+    "manager_update_minute": 47,
+    "xray_api_port": 10085
   },
-  "tunnel": {
-    "mode": "fixed",
-    "node_id": "vm-cf-main",
-    "domain": "cdn.example.com",
-    "client_address": "cdn.example.com",
-    "protocol": "http2"
-  },
-  "nginx_stream": {
-    "enabled": true,
-    "backend": "sing-box",
-    "listen": "::",
-    "port": 443,
-    "routes": [
-      {"node_id": "any-main", "sni": "edge.example.com", "backend_port": 20000}
-    ]
-  },
-  "notifications": {
-    "enabled": true,
-    "provider": "telegram",
-    "traffic_thresholds": [80, 90, 100]
-  },
-  "health": {
-    "enabled": true,
-    "certificate_warn_days": 21,
-    "resources": {
-      "disk_min_free_percent": 10,
-      "inode_max_percent": 90,
-      "memory_max_percent": 90,
-      "cpu_load_per_core_max": 2,
-      "file_descriptors_max_percent": 80,
-      "fail2ban_banned_warn": 10,
-      "service_restart_warn": 3
-    }
-  },
-  "certificates": [
-    {
-      "domain": "edge.example.com",
-      "provider": "acme.sh/dns_cf",
-      "key_type": "ec-256",
-      "certificate_path": "/etc/xray-manager/certs/edge.example.com/fullchain.pem",
-      "key_path": "/etc/xray-manager/certs/edge.example.com/key.pem"
-    }
-  ],
+  "tunnel": {"mode": "none"},
+  "nginx_stream": {"enabled": false, "backend": "nginx", "listen": "::", "port": 443, "routes": []},
+  "notifications": {"enabled": false, "provider": "none", "traffic_thresholds": [80, 90, 100]},
+  "health": {"enabled": false, "certificate_warn_days": 21, "resources": {}},
+  "certificates": [],
+  "node_templates": [],
   "nodes": [
     {
-      "id": "any-main",
-      "protocol": "anytls",
-      "metadata": {
-        "remark": "primary edge",
-        "region": "hk",
-        "purpose": "production",
-        "line": "cn2",
-        "tags": ["primary", "tls"]
-      },
-      "traffic": {
-        "configured": true,
-        "enabled": true,
-        "quota_bytes": 107374182400,
-        "quota_mode": "total",
-        "reset_day": 1,
-        "upload_rate_bps": 20000000,
-        "download_rate_bps": 100000000
-      },
+      "id": "vless-22ce8165",
+      "name": "VLESS Reality",
+      "protocol": "vless",
+      "enabled": true,
+      "listen": "::",
+      "port": 8443,
+      "domain": "www.apple.com",
+      "security": "reality",
+      "flow": "xtls-rprx-vision",
+      "handshake_server": "www.apple.com",
+      "handshake_port": 443,
+      "server_address": "203.0.113.7",
+      "server_address_source": "auto",
+      "metadata": {"remark": "", "region": "", "purpose": "", "line": "", "tags": []},
+      "traffic": {"configured": false, "enabled": false, "quota_bytes": null, "quota_mode": "total",
+                  "reset_day": 1, "upload_rate_bps": null, "download_rate_bps": null},
+      "xray": {"inbound": {}, "outbound": {}},
+      "singbox": {"outbound": {}},
       "users": [
-        {"id": "default", "name": "AnyTLS", "enabled": true,
-         "limits": {"quota_bytes": null, "reset_day": null, "expires_at": 1798761600,
-                    "ip_limit": null, "suspended": null, "suspended_until": null, "resume_enabled": false}}
-      ],
-      "singbox": {
-        "inbound": {"tcp_fast_open": true},
-        "outbound": {"tcp_multi_path": true}
-      }
+        {"id": "default", "name": "VLESS Reality", "enabled": true,
+         "limits": {"quota_bytes": 107374182400, "reset_day": 1, "expires_at": 1798761600,
+                    "ip_limit": 2, "suspended": null, "suspended_until": null, "resume_enabled": false}}
+      ]
     }
   ]
 }
 ```
 
-`users[].limits` is optional. `expires_at` (epoch seconds) works for every
-protocol; `quota_bytes`, `reset_day` (1-28, null = lifetime) and `ip_limit` are
-accepted only on VLESS nodes because the counters come from the Xray Stats API.
-`suspended` is `null`, `quota`, `expired` or `ip`; while suspended the user has
-`enabled: false` and `resume_enabled` stores the state to restore. A node whose
-users are all suspended stays enabled but is not rendered. Per-user counters live
-in `/var/lib/xray-manager/user-usage.json` (keys `<node-id>:<user-id>`, also used as
-the Xray client `email`). `settings.xray_api_port` (default 10085) is the
-loopback Stats API port and must not equal any node port.
+## Nodes
 
-`xray_routing` holds `outbounds[{tag,protocol,via}]`, `balancers[{tag,selectors,
-strategy,fallback}]`, `rules[{node?,user?,domain?,ip?,network?,port?,outbound|balancer}]`
-and `default`. The outbound objects themselves are in `secrets/xray-outbounds.json`.
-Reserved tags: `direct`, `block`, `api`. `notifications.bot` is
-`{enabled, admins:[telegram user ids]}` and requires the Telegram provider.
+Common fields: `id` (`^[a-z0-9][a-z0-9._-]{0,47}$`), `name`, `protocol`, `enabled`,
+`listen`, `port`, `server_address` (what clients connect to; `server_address_source`
+`auto` follows `xm settings detect-ip`), `metadata`, `traffic`, `users`, `xray`.
 
-Protocol credentials are excluded from the state file. User credentials live under `secrets/users/<node-id>/<user-id>.json`; protocol-level credentials live under `secrets/nodes/<node-id>.json`.
+| protocol | extra fields | user secret | node secret |
+|---|---|---|---|
+| `vless` | `security` none/tls/reality, `flow`, `domain`, `handshake_server/port` | `uuid` | REALITY keys, short id |
+| `vmess` | `security` none/tls, `domain` | `uuid` | — |
+| `vmess-ws-cf` | `ws_path`, `client_address` (Cloudflare Tunnel) | `uuid` | — |
+| `trojan` | `security` tls/reality, `domain`, `handshake_*` | `password` | REALITY keys |
+| `shadowsocks` | `method` (2022 or AEAD), `network` tcp/udp, `credential_mode` legacy/multi | `password` | `server_password` (2022 multi) |
+| `hysteria2` | `domain`, `obfs.type` ""/salamander, `masquerade` | `password` | `obfs_password` |
+| `wireguard` | `subnet` 10.x.y.0/24, `mtu` | `private_key`, `public_key`, `address` | server key pair |
+| `masque` | `domain`, `subnet`, `mtu` (≥1280) | `password` | — |
+| `tunnel` | `target_address`, `target_port`, `network`, `follow_redirect` | — | — |
+| `socks`/`http`/`mixed` | (default listen 127.0.0.1) | `username`, `password` | — |
 
-Cloudflare API credentials remain in `secrets/dns-cloudflare.env` (0600).
-Adding an enabled TLS node without a usable certificate prepares DNS-only
-A/AAAA records for the detected public addresses before DNS-01 issuance.
-The operation snapshot contains a `cloudflare-dns.json` journal (0600), written
-before each create request. Rollback attempts to delete only records bearing
-that operation's random comment and unchanged connection fields. Existing
-records are reused only when they already match; conflicts are never replaced.
-Remote cleanup failures are reported with the journal path for recovery.
-Successful DNS records live in Cloudflare; restoring local state or deleting
-a node does not remove them. The state schema version remains 2.
+The transport and TLS/REALITY parameters of VLESS/VMess/Trojan/SS live in
+`xray.inbound.streamSettings`, written by `--transport`, `--security`, `--path`,
+`--sniffing`, `--sockopt-json`, etc. Structured 3x-ui flags such as
+`--udp-idle-timeout`, `--quic-*`, `--allow-transparent` and `--port-map` are stored
+as fragments of the same object. `xray.inbound` is deep-merged into the generated
+inbound last; `protocol`, `tag`, `listen`, `port` and credentials always come from
+the manager. `xray.outbound` customizes the Xray client export; `singbox.outbound`
+customizes the sing-box client export.
 
-`settings.manager_auto_update` defaults to `true` only when missing/null;
-explicit `false` survives normalization and upgrades. `manager_update_minute`
-is an integer 0–179, generated once and retained, representing minutes after
-03:00 in the host's local timezone. Since alpha.63 these fields control both
-manager scripts and Caddy when `.caddy.managed == true`, using the same daily
-task and independent update transactions. No Caddy enrollment is implicit.
-`core_update_policy` and `cloudflared_update_policy` remain independent.
-Last-attempt state and logs live under `var/updates/`, not in topology state.
+User secrets live in `secrets/users/<node>/<user>.json`, node secrets in
+`secrets/nodes/<node>.json` (mode 0600). The Xray client `email` (Stats key) is
+`<node>:<user>`, or `<node>@<user>` for MASQUE, which rejects `:`.
 
-`settings.xray_update_policy` is `manual`, `notify`, `patch`, or `stable` and
-defaults to `notify`. Xray-core is an optional service provider managed by
-`xm xray`; downloaded binaries and generated configuration remain outside
-topology state. `settings.vless_engine` is `xray` or `disabled`. Legacy `sing-box` or missing
-values normalize to `xray`; sing-box never renders VLESS. Xray renders only
-VLESS; sing-box renders the other enabled nodes. `disabled` pauses VLESS without
-moving it into another engine. Both candidate configs validate before installation,
-and unchanged services keep running. The state schema version remains 2.
+## User limits
 
-Since alpha.64, optional `caddy_apt: {"enabled": true, "config": "/etc/caddy/Caddyfile"}`
-enrolls a standard official stable APT package in the same updater. It is
-mutually exclusive with `caddy` and managed website multiplexing. Enrollment
-is explicit (`xm caddy apt`), requires a standard Debian/Ubuntu systemd Caddy
-installation, and never removes an existing L4 deployment. APT continues to
-own `/usr/bin/caddy`; version and build hashes are obtained from the package,
-not pinned in topology state. This provider never invokes the plugin build
-service. The schema version remains 2; Alpine/OpenRC custom management is unchanged.
+`users[].limits` is optional. `expires_at` (epoch seconds), `quota_bytes`,
+`reset_day` (1–28, null = lifetime) and `ip_limit` apply to every protocol except
+socks/http/mixed/tunnel; counters come from the loopback Stats API on
+`settings.xray_api_port`. `suspended` is `null`, `quota`, `expired` or `ip`; while
+suspended the user has `enabled:false` and `resume_enabled` stores the state to
+restore. Per-user counters live in `/var/lib/xray-manager/user-usage.json`.
 
-Explicit VPS initialization is a host operation and does not add topology
-fields or change the schema version. Its protected `var/vps-init/last.json`
-records the completion timestamp, manager version, SSH ports and backup path.
-Per-operation host configuration/service before-images live in that directory;
-they are separate from node state rollback. Ordinary installation and upgrades
-never execute VPS initialization without the explicit `--init-vps` option.
+## Routing
 
-Alpha.57 reorganizes panel navigation, adds Sub-Store onboarding and system
-support information, and prioritizes native Surge entries when sharing Snell.
-It adds no state fields or migrations. Generated export files remain derived
-artifacts; Snell credentials and the schema version remain unchanged.
+`xray_routing` holds `outbounds[{tag,protocol,via}]`,
+`balancers[{tag,selectors,strategy,fallback}]`,
+`rules[{node?,user?,domain?,ip?,network?,port?,outbound|balancer}]` and `default`.
+The outbound objects themselves (including WARP keys) are in
+`secrets/xray-outbounds.json`. Reserved tags: `direct`, `block`, `api`.
 
-Notification provider choice and thresholds are non-secret state. Telegram tokens/chat IDs and Webhook URLs live only in `secrets/notifications.json` with mode `0600`. Delivery deduplication and the last health report are runtime journals under `/var/lib/xray-manager/`.
+## Traffic accounting
 
-Snell nodes require a sing-box 1.14.0-rc.1 or newer core. `snell_version` is 5 or 6 (existing schema-v2 nodes normalize to 5; new nodes default to 5). Version 5 uses `obfs_mode`/`obfs_host` and exports a compatible v4 client; version 6 uses `snell_mode` (`default`, `unshaped`, or `unsafe-raw`) and requires sing-box 1.14.0-rc.2 or newer. Their protocol-level secret stores the server `psk`; each user secret stores a Snell `userkey`.
+Every node has a normalized `traffic` object. `configured` distinguishes a never
+configured node from a disabled policy; `enabled` controls runtime nft rules.
+`quota_bytes` and directional rates (bit/s) may be `null` for unlimited;
+`quota_mode` is `total` or `download`; `reset_day` is 1–28 in UTC. Counters live in
+`/var/lib/xray-manager/traffic-usage.json`. `traffic_groups[{id,nodes,quota_bytes,
+quota_mode,reset_day}]` share one quota; `shaping:{enabled,interface,capacity_bps}`
+configures optional tc download shaping.
 
-Snell `credential_mode` is `single` or `multi`. Adding a second user changes it
-to `multi` permanently; disabling or deleting users never changes it back.
-Single-user rotation replaces both the node PSK and userkey; multi-user rotation
-replaces only the selected userkey. A `single` node must have exactly one user.
+## TCP/SNI sharing of 443
 
-Snell and ShadowTLS nodes carry `credential_revision:1`. New Snell nodes always
-start at revision 1, so routine manager updates do not rotate their credentials;
-only explicit rotate commands do. Missing/zero revision identifies legacy
-credentials. Under the manager lock, migration snapshots state, secrets, config
-and subscriptions, prepares new credentials, validates the candidate
-with the real installed core, installs it and publishes live feeds; failure restores
-the snapshot. Legacy Snell PSKs rotate once, including nodes with deleted former
-users. Existing total user count determines the initial mode. Migration is deferred
-until the core is available, and backup restoration applies the same preparation.
+`nginx_stream` keeps its historical key. `backend` is `nginx`, `caddy` or
+`nginx-site` (states from sb-manager with `sing-box` become `nginx`).
+`routes[{node_id,sni,backend_port}]` render each routed node on
+`127.0.0.1:<backend_port>` while exports use the public port. Node IDs, SNI values
+and backend ports are unique. `nginx_stream.website` (when `managed:true`) records an
+operator website integrated by `xm mux setup`; original files and hashes are
+journaled under `var/website-mux/` so `xm mux detach` can restore them.
 
-ShadowTLS node secrets hold `shadowsocks_server_password`; user secrets hold the
-outer `password` and independent `shadowsocks_password`. The inner method is fixed
-at `2022-blake3-aes-128-gcm` with 16-byte base64 keys. Its generated inbound uses
-`in-<id>:ss`, listens on `127.0.0.1:0` and receives the outer inbound's detour.
-Exports use the ordinary user proxy tag for the inner SS outbound and append
-`:tls` for the outer ShadowTLS outbound. Both outbounds are required. These
-generated tags and internal ports are not independent persistent nodes.
+`reality_site` records the VLESS REALITY + Vision listener that shares TCP/443 with a
+real HTTPS site (`node_id`, `domain`, `server`, `binary`, `config`, `backend_port`,
+`journal`). Overrides are refused for that node; detach restores the site and
+disables the node while keeping credentials.
 
-Hysteria2 nodes may set `obfs.type` to `salamander` or the sing-box 1.14-only `gecko`. Gecko stores `min_packet_size` and `max_packet_size` in the node state (defaults 512 and 1200); its password remains in the protected node secret. `disable_chrome_parrot` controls the 1.14 Hysteria2 client fingerprint option and defaults to `false`. `bbr_profile` accepts `conservative`, `standard`, or `aggressive`; `brutal_debug` enables Hysteria Brutal diagnostics. Enabled nodes using these 1.14 options require sing-box 1.14.0-rc.1 or newer.
+## Other components
 
-Multiple TLS nodes may reference the same `certificates[].domain` and certificate files. Certificate identity is independent from listener binding; transport/port validation still prevents two direct TCP listeners from using the same port.
+- `tunnel`: `mode` none/quick/fixed/managed; managed adds `tunnel_id` and
+  `routes[{id,hostname,service,path}]`; credentials in `secrets/cloudflared-credentials.json`.
+- `notifications`: provider and thresholds; tokens/URLs in `secrets/notifications.json`.
+  `notifications.bot:{enabled,admins}` enables the Telegram command bot.
+- `health`: certificate warning days and resource thresholds.
+- `substore:{enabled,port,version,frontend_version}`; its API path is a secret.
+- `openlist.sites[{domain,server,binary,config,port}]`; OpenList data lives in
+  `/var/lib/xm-openlist` and is not part of manager backups.
+- `caddy` / `caddy_apt`: explicit Caddy program lifecycle enrollment (mutually exclusive).
+- `node_templates`: non-secret defaults captured from nodes; credentials are always
+  regenerated.
+- `certificates[]`: issued certificates; Cloudflare credentials are in
+  `secrets/dns-cloudflare.env`. DNS records created for an operation are journaled so
+  a failed operation deletes only its own records.
 
-Every node has a normalized `traffic` object. `configured` distinguishes a never-configured node from a disabled policy; `enabled` controls runtime rules without discarding policy or usage. `quota_bytes` and either directional rate may be `null` for unlimited. `quota_mode` is `total` (upload plus download) or `download`; `reset_day` is an integer from 1 through 28 and is evaluated in UTC. Rate values are stored as bit/s. Accumulated counters are runtime data and live in `/var/lib/xray-manager/traffic-usage.json`, not in state or generated sing-box configuration.
+## Subscriptions
 
-`nginx_stream` retains its historical key for TCP/SNI mux backends.
-`backend` is `sing-box`, `nginx`, `caddy`, or `nginx-site`. The `caddy` backend represents an
-operator-owned Caddy L4 frontend: the manager renders loopback node listeners,
-exports the public port, and observes `caddy.service` (`caddy` on OpenRC).
-It does not install, stop, rewrite or reload Caddy. `xm mux caddy` emits a
-listener-wrapper snippet to integrate into that frontend after route changes.
-New empty configurations default to
-`sing-box`; legacy configurations missing `backend` keep `nginx` when enabled
-or when any routes were saved. Explicit choices survive upgrades and disabling.
-Older schema-v2 files without this section normalize to a disabled empty mux.
+Live subscriptions keep authorization metadata in
+`subscriptions/<token-sha256>.meta.json`; `subscriptions/live.json` is a derived
+bundle regenerated after changes. Per-user subscriptions return
+`Subscription-Userinfo` from the user limits above.
 
-`nginx_stream.website` is optional. When `managed:true`, it stores the website
-server (`nginx`/`caddy`), actual config/binary paths, init backend, optional
-service override and stream module paths, plus reserved `website_port` and
-`relay_port`. The frontend stays enabled at port 443 even without active nodes.
-Routes are derived from enabled SNI-capable nodes on each candidate operation;
-existing route backend ports are reused. `nginx-site` uses the host's Nginx
-service rather than the separate xray-manager Nginx service.
+## Settings
 
-The website source files remain operator-owned. Protected host journals under
-`var/website-mux/` store original file contents and installed hashes; operation
-snapshots hold immediate before-images. These journals are recovery metadata,
-not generated sing-box configuration or topology state. A detach verifies
-installed hashes and restores the original frontend/mux selection. Cross-host
-restore of managed website settings is refused, and external manual changes
-must be merged before detach. Plain `caddy` states without `managed:true`
-retain alpha.53's manual synchronization behavior.
+`manager_auto_update` defaults to `true` only when missing; `manager_update_minute`
+(0–179) is the minute after 03:00 local time for the daily manager/Caddy update.
+`core_update_policy` (Xray) and `cloudflared_update_policy` are `manual`, `notify`,
+`patch` (same year.month for Xray) or `stable`. Update attempts are recorded under
+`var/updates/`, not in state.
 
-The optional top-level `caddy` object records explicit program lifecycle
-enrollment: `managed:true`, canonical `binary`, immutable `target`, `config`,
-`init`, `method` (`debian-alternatives` or `standalone`), `service_file`, formal
-`version`, `sha256`, and nullable `previous:{target,version,sha256}`. Debian
-enrollment uses the publisher's diversion/alternatives convention; other
-systems retain the package binary and use a separate managed link. Package
-and service before-images are journaled under the operation snapshot's
-`caddy-package/`. These are recovery metadata, not disposable build cache.
-State restoration without that package journal requires matching lifecycle
-metadata so it cannot point at a different host package state. No schema
-version change or credential rotation is introduced.
-
-Retention epochs and last-run metadata live in `var/maintenance/`, outside
-topology state. Cleanup only owns known temporary downloads/builds and log
-files. It never purges credentials, certificates, subscriptions, rule data,
-manual backups, website recovery journals or the current/previous Caddy binary.
-
-`nginx_stream.routes` separates the public frontend from sing-box's runtime listener. A node keeps its original direct `listen`/`port`; while the mux is enabled, rendering substitutes `127.0.0.1:<backend_port>` and exports substitute the shared public port. Node IDs, case-insensitive SNI values, and backend ports must each be unique. The built-in backend adds a TCP-only direct inbound, scoped TLS sniffing, fixed loopback route destinations and a final reject for that inbound. It adds no credentials and does not terminate TLS. API, subscriptions, Realm, Sub-Store and node port reservations are checked before applying a candidate.
-
-The optional top-level `realm` object configures sing-box's `hysteria-realm` service. Its bearer token is stored only in `secrets/realm.json`; `realm.public_url` is used by Hysteria2 inbound/outbound `realm` blocks. A Hysteria2 node opts in with `realm_enabled`/`realm_id`, and may restrict Realm traffic to IPv4/IPv6 or request UPnP/NAT-PMP port mapping. Realm cannot be disabled while an enabled Hysteria2 node still references it.
-
-Existing v1 installations migrate once, before rendering, with a pre-migration snapshot. Future changes must use explicit, one-way migration steps. Generated config files must never be parsed back into state.
-
-`nodes[].metadata` contains operator-only `remark`, `region`, `purpose`, `line`, and unique `tags`. These values are for filtering and dashboards and are deliberately excluded from protocol renderers and client exports.
-
-`node_templates` stores non-secret protocol defaults captured from existing nodes. Templates never include user or node credentials; creating a node from a template generates fresh credentials through the normal node-add transaction.
-
-`nodes[].singbox.inbound` and `nodes[].singbox.outbound` are optional JSON
-objects for fields introduced by newer sing-box releases. They are accepted by
-`xm node add` and `xm node set` through `--sing-box-inbound-json` and
-`--sing-box-outbound-json` (or `@FILE`), merged into generated server and client
-objects, and checked by the installed core. The manager keeps `type`, `tag`,
-addresses, ports, users, and credentials authoritative. Compound protocol
-exports can use an optional `by_tag` object to target a generated member by its
-tag; otherwise an array extension applies to the primary member.
-
-`nodes[].xray.inbound` and `nodes[].xray.outbound` use the same protected JSON
-extension model for Xray-core. They are accepted with `--xray-inbound-json`
-and `--xray-outbound-json` (or `@FILE`). The Xray inbound extension is merged
-after the generated protocol object while keeping protocol, tag, listen port
-and credentials under manager control. This allows VLESS settings used by
-3x-ui, including custom `streamSettings` for TCP, WebSocket, gRPC,
-HTTPUpgrade or XHTTP, plus TLS/Reality fields, fingerprints, ALPN, destinations,
-server names and short IDs. Xray checks the resulting configuration before its
-optional service is started.
-
-Mutations hold the manager lock through candidate validation, rendering,
-installation, and service reconciliation. A failed operation restores the
-state/config pair plus secrets, certificates, subscriptions, and service
-definitions from the operation snapshot. Core upgrades additionally retain a
-known-good binary/config pair for compatibility-aware rollback.
-
-
-## Live subscriptions (alpha.34)
-
-Live subscriptions (alpha.34) keep authorization metadata in protected
-`subscriptions/<token-sha256>.meta.json`: `live` defaults to false for old
-files, and `expires_at_epoch: null` is valid only for live subscriptions.
-`subscriptions/live.json` is an atomic derived bundle of current Sub-Store
-links and mixed/TUN profiles. State and protected node secrets remain the
-source of truth. Full backups include metadata and generations; restored live
-content is regenerated after the restore transaction. Remote source URLs and
-collection definitions belong to the protected Sub-Store database and its
-backups, never to public status output.
-
-## Optional operations (alpha.32)
-
-Existing v2 states remain valid; no destructive migration is required. The
-`socks`, `http`, and `mixed` node protocols store authenticated user secrets as
-`{username,password}` in the existing protected user-secret files. Their default
-listener is `127.0.0.1`.
-
-A node may have `expiry:{at:null|UNIX_SECONDS,suspended:false,resume_enabled:false}`.
-The expiry tick records the previous enabled state when suspending a node;
-renewal restores that state, while manual disable cancels automatic resumption.
-
-`traffic_groups` is an optional array of `{id,nodes:[NODE_ID],quota_bytes,
-quota_mode,reset_day}`. Members must have traffic accounting enabled and cannot
-belong to two groups. Group counters live in `traffic-usage.json.groups`, using
-the same cycle/upload/download fields as node counters, and survive membership
-changes. Group and node billing cycles are independent.
-
-`shaping:{enabled,interface,capacity_bps}` configures optional downstream tc
-shaping. Original qdiscs and the last applied plan are protected runtime recovery
-files in `var/shaping`; they are specific to the host interface, not generated
-sing-box configuration.
-
-Tunnel mode `managed` adds `tunnel_id` and `routes:[{id,hostname,service,path}]`.
-The credential is stored separately as `secrets/cloudflared-credentials.json`.
-Generated ingress JSON has a final 404 rule; it is not persistent input state.
-
-`substore:{enabled,port,version,frontend_version}` describes the optional service.
-Its random API path is in `secrets/substore.json`; app and mutable data reside
-under `var/substore`. Full backups include those directories. Restore operations
-snapshot component payloads for rollback; ordinary node snapshots avoid copying
-large unrelated component data.
-
-## OpenList website records
-
-Optional `openlist.sites` records contain `domain`, `server` (`caddy` or `nginx`),
-`binary`, `config` and loopback `port`. These are the source of truth for managed
-website ownership, certificate reloads and explicit detach. Site changes use
-protected filesystem journals before updating this state; they do not restart
-sing-box. OpenList itself owns its SQLite/configuration data under
-`/var/lib/xm-openlist`; this independent application's data is not included in
-the manager's full backup. Initial admin output is stored as a protected secret.
-
-## Reality website entry
-
-Optional `reality_site` contains `enabled:true`, `node_id`, `domain`, `server`,
-`binary`, `config`, `backend_port` and `journal`. The selected node must remain an
-enabled Xray VLESS/Reality/raw listener on TCP443 with Vision flow and a
-`127.0.0.1:backend_port` target. Inbound/outbound overrides are refused for this
-managed entry. The active website journal under `var/reality-site/current` stores
-the minimal files needed to undo the current listener transformation; it is not
-a historical backup and is removed on detach. Ordinary node changes and backup
-restores cannot silently remove the entry. Detach restores public website TLS
-and disables the associated VLESS node while retaining credentials.
+Existing v1 installations migrate once, before rendering, with a pre-migration
+snapshot. Future changes must use explicit one-way migrations.

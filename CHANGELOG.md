@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.3
+
+- 状态精简：读取时移除 sb-manager 遗留的 sing-box 字段（`api`、`realm`、DNS 设置、`core_channel`、
+  Hysteria2 Realm/Gecko/BBR/Chrome 选项）；分享链接与模板只保留 Xray 支持的参数，输出不变。
+- 修复：Sub-Store 安装函数的默认端口仍为 sb-manager 的 3001，与共存的 sb 冲突；改为 3002。
+- 文档：重写 ARCHITECTURE、STATE_SCHEMA，OPERATIONAL_FEATURES 去除 sing-box/Snell 内容。
+
 ## 0.1.0-alpha.2
 
 - 3x-ui 参数：`--udp-idle-timeout`、`--quic-congestion/--quic-idle-timeout/--quic-keepalive`（Hysteria2）、

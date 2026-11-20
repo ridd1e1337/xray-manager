@@ -15,7 +15,7 @@ Node.js、Python、iperf3 或 tc 依赖。兼容 Debian/systemd 和 Alpine/OpenR
 使用检测到的服务器地址，无法取得时要求填写；端口建议会避开已占用端口。
 
 从 alpha.57 起，主菜单按“功能名＋用途”展示；7 为 CF Tunnel（Cloudflare
-隧道），14 为 sing-box 设置，15 为 VPS 与网站运维，20 为 Sub-Store 订阅管理。
+隧道），14 为通用设置，15 为 VPS 与网站运维，20 为 Sub-Store 订阅管理。
 VPS 分类集中提供初始化、基础环境状态、UFW/Fail2ban、Nginx/Caddy 共用 443、
 BBR/TCP/QUIC 网络调优、测速和系统支持说明。旧主菜单 21 仍可进入该分类。
 
@@ -25,7 +25,7 @@ BBR/TCP/QUIC 网络调优、测速和系统支持说明。旧主菜单 21 仍可
 也可在“15. VPS 与网站运维 → 支持的 Linux 系统与当前环境”查看。
 此命令只显示信息，不需要 root，也不会创建状态、安装软件或更改服务。
 
-| 发行版 | 包管理器 | 常用服务管理器 | sing-box 安装与节点管理 | 新 VPS 整体初始化 |
+| 发行版 | 包管理器 | 常用服务管理器 | Xray 安装与节点管理 | 新 VPS 整体初始化 |
 | --- | --- | --- | --- | --- |
 | Debian / Ubuntu | apt | systemd | 支持 | 支持 |
 | Alpine | apk | OpenRC | 支持 | 支持，需 community 源 |
@@ -33,7 +33,7 @@ BBR/TCP/QUIC 网络调优、测速和系统支持说明。旧主菜单 21 仍可
 | Arch | pacman | systemd | 支持 | 暂不提供 |
 | openSUSE | zypper | systemd | 支持 | 暂不提供 |
 
-系统必须实际运行 systemd 或 OpenRC，并有与架构匹配的 sing-box Release。
+系统必须实际运行 systemd 或 OpenRC，并有与架构匹配的 Xray-core Release。
 可选组件使用已配置的发行版软件源；不会为了安装组件自动添加第三方源。
 网站共用 443 还要求兼容的 Nginx/Caddy 配置：Nginx stream 模块目前只在
 Debian/Ubuntu、Alpine 自动补装，其他系统需要先安装匹配的模块。
@@ -45,7 +45,7 @@ Debian/Ubuntu、Alpine 自动补装，其他系统需要先安装匹配的模块
 
 ## 新 VPS 初始化（alpha.56）
 
-项目的主功能仍是 sing-box 安装与节点管理。基础环境初始化是独立的显式操作：
+项目的主功能仍是 Xray 安装与节点管理。基础环境初始化是独立的显式操作：
 
 ```bash
 xm vps init
@@ -82,11 +82,11 @@ UFW 会允许 22/TCP、80/TCP、443/TCP 和 443/UDP，后者用于 HTTP/3 或 QU
 80/443 已由其他程序占用，或 firewalld 正在运行时，初始化会停止，避免改动
 现有网站入口。该入口面向新 VPS，不适合直接替换已有 Nginx 环境。
 `--init-vps` 与 `--no-start` 不能合用；VPS 初始化失败不会撤销已完成的
-sing-box 安装。普通安装、日常升级和节点操作不会自动触发这套初始化。
+Xray 安装。普通安装、日常升级和节点操作不会自动触发这套初始化。
 
 ## 节点域名与证书自动准备（alpha.52）
 
-添加 AnyTLS、Hysteria2、Trojan、TUIC、Naive 或 VLESS TLS 节点时，输入
+添加 Hysteria2、MASQUE、Trojan TLS，或使用 TLS 的 VLESS/VMess/Shadowsocks 节点时，输入
 Cloudflare 托管的域名即可。已有有效且私钥匹配的证书会直接复用；缺少可用
 证书时，管理器查询域名所属的有效区域，探测本机公网 IPv4/IPv6，为探测到
 的地址创建 A/AAAA 记录（`proxied:false`、自动 TTL），然后用 acme.sh 的
@@ -106,7 +106,7 @@ xm node add anytls --id edge --domain edge.example.com
 遇到其他地址、橙云、CNAME 或 NS 记录时停止操作，请为节点使用独立子域名，
 或在 Cloudflare 控制台先修正记录。不会自动覆盖网站或 Tunnel 的 DNS。
 已有证书复用时不改 DNS；`--disabled` 创建停用节点时不准备 DNS/证书；
-Reality、ShadowTLS 的握手域名和 VMess Tunnel 域名不走此流程。
+REALITY 的握手域名和 VMess Tunnel 域名不走此流程。
 
 探测不到公网地址时可通过 `SBM_PUBLIC_IPV4` / `SBM_PUBLIC_IPV6` 显式提供地址；
 `SBM_DISABLE_IPV6_DETECTION=1` 可只准备 IPv4，但若已有无法核对的 AAAA 则仍会
@@ -131,11 +131,11 @@ xm node add anytls --id any-main --domain node.example.com
 ```
 
 面板入口：“15. VPS 与网站运维 → 网站与节点共用 443 → 一键接入现有 Nginx/Caddy
-网站并自动同步”。自动接入后，全部启用的 AnyTLS、Trojan、VLESS TLS/Reality、
-Naive TCP、ShadowTLS 都按唯一 SNI 分流；添加、删除、启停、修改域名会自动更新
+网站并自动同步”。自动接入后，全部启用的 TCP 传输 TLS/REALITY 节点（VLESS、VMess、
+Trojan、Shadowsocks）都按唯一 SNI 分流；添加、删除、启停、修改域名会自动更新
 网站入口。节点只监听本机，分享与订阅使用公网 443，UFW 无需额外放行。
-节点必须使用与网站不同的域名，且不能开启隐藏 SNI 的 ECH。SS、Snell、
-VMess Tunnel 和 QUIC 协议不在该 TCP/SNI 接入范围内。
+节点必须使用与网站不同的域名，且不能开启隐藏 SNI 的 ECH。无 TLS 的节点、
+VMess Tunnel 和 UDP/QUIC 协议不在该 TCP/SNI 接入范围内。
 
 Caddy 沿用 HTTP 网站配置并增加 L4 listener wrapper。从 alpha.59 起，缺少 L4
 时默认从 Caddy 官方构建接口下载带现有插件的程序；校验 CPU 架构、正式版本、
@@ -157,7 +157,7 @@ HTTP/80、UDP/443、证书和业务 upstream 保留。支持标准 wildcard 443 
 Nginx/Caddy、自定义服务名和无法识别的配置布局也不自动改写。
 
 Python 只在接入时按需安装，用于按语法编辑配置及记录恢复信息。候选网站配置
-和 sing-box 配置均通过实际程序校验后才安装。首次切换服务可能短暂中断连接，
+和 Xray 配置均通过实际程序校验后才安装。首次切换服务可能短暂中断连接，
 后续路由变化使用重载。应用失败时按操作快照恢复网站配置、服务命令与节点状态；
 外部修改过的文件不会被显式恢复命令覆盖。
 
@@ -174,7 +174,7 @@ xm mux detach
 不会把其他主机的网站路径和服务命令直接应用到本机。卸载前也会先恢复网站入口。
 
 仅开放 22/80/443 并不能让所有协议共用 443：TCP 与 UDP 是不同监听。
-Caddy/Nginx HTTP/3 占用 UDP/443 时，Hysteria2/TUIC 不能再直接绑定同一 UDP 端口。
+Caddy/Nginx HTTP/3 占用 UDP/443 时，Hysteria2/MASQUE 不能再直接绑定同一 UDP 端口。
 
 ## Caddy 程序维护（alpha.59）
 
@@ -243,31 +243,16 @@ Caddy，沿用原有 `xm-manager-update.timer` 或 OpenRC periodic 任务、每�
 成功的脚本更新。脚本升级后使用新的已安装入口执行 Caddy 更新；未接入管理的
 网站程序会跳过。自动更新关闭后不启动后续阶段，正在执行的阶段完成后退出。
 `xm update --check` 和 `xm --dry-run update` 只查询版本，不写状态、不下载构建或
-切换程序；版本查询无法判断同一主版本下的插件构建差异。sing-box 和 cloudflared
+切换程序；版本查询无法判断同一主版本下的插件构建差异。Xray 和 cloudflared
 的更新策略保持独立。
 
-## Xray 与 sing-box 分工（alpha.72）
+## Xray 核心
 
-从 alpha.79 起 `settings.vless_engine` 只能是 `xray` 或 `disabled`：全部 VLESS 由
-Xray 运行，sing-box 不渲染 VLESS 入站，也不生成 Reality 密钥。旧状态中的
-`sing-box` 或缺失值在状态迁移时改为 `xray`，随后的渲染按需安装官方 Xray，
-先重启 sing-box 释放端口再启动 Xray；节点凭据与 Reality 密钥（同为 X25519）
-保持不变。`xm mux` 的 sing-box 后端只做 TCP/SNI 转发，不解析 VLESS。
-`xm xray disable` 将引擎设为
-`disabled` 并暂停 VLESS，其余协议保持工作。共用 443 的 Reality 节点需先解除
-网站入口才能停用，以免网站随代理节点停机。
-
-`xm xray install|update|status|config` 和面板 `8 → 13` 管理官方 Xray。
-支持官方两位年份版本号（如 v26.11.9），核对 Release SHA-256 或官方 .dgst，
-只提取 Xray 程序，不安装此配置用不到的 geoip/geosite 数据库。两份配置分别原生
-校验后才原子安装；按实际配置变化重启对应服务，失败恢复两份配置及服务定义。
-OpenRC 使用低权限服务账号及低端口 capability，systemd 使用 unit capability。
-VLESS TLS 证书续签会同步重新加载对应 Xray 服务。
-
-VLESS 向导或 `--xray-inbound-json JSON|@FILE` 可传入原生 streamSettings。
-Vision flow 写入每个 clients 项，Reality 使用最新 target 字段并支持本机目标。
-普通 VLESS 可自定义传输；共享网站的受管 Reality 节点固定为 Vision/Reality/raw，
-不接受会覆盖目标或客户端参数的扩展。已有节点扩展非空时，一键共存明确拒绝。
+`xm core check|update [VERSION]|rollback|policy` 和面板 `8 → 2` 管理官方 Xray。
+支持两位年份版本号（如 v26.11.9），核对 Release SHA-256 或官方 .dgst，只提取 Xray
+程序，不安装 geoip/geosite 数据库。新版本先用当前配置校验，再原子切换并重启服务，
+失败恢复旧版本；保留上一版供回滚。systemd 以低权限 `xraymanager` 用户运行并只授予
+绑定低端口的 capability。TLS 证书续签会重新加载 Xray。
 
 ## VLESS 原生 Xray 参数（alpha.73）
 
@@ -419,9 +404,9 @@ OpenRC 使用项目文件日志，旧的八轮日志配置调整为不保留轮�
 
 ## 与现有 Caddy 网站共享 443（alpha.53，手工接入）
 
-Caddy 已监听 443 时，先为 AnyTLS 等 TLS 节点选一个空闲端口，再显式选择
+Caddy 已监听 443 时，先为 Trojan、VLESS TLS 等节点选一个空闲端口，再显式选择
 `caddy` 方式。Caddy 需要包含 `github.com/mholt/caddy-l4` 模块；普通 HTTP
-`reverse_proxy` 无法透传 AnyTLS。管理器不会安装模块或改写 Caddy 网站配置。
+`reverse_proxy` 无法透传这些 TLS 代理连接。管理器不会安装模块或改写 Caddy 网站配置。
 
 ```bash
 xm node add anytls --id any-main --domain node.example.com --port 24443
@@ -438,7 +423,7 @@ xm mux caddy
 路由增删或后端端口变化后，需要重新导出并重载 Caddy。停用管理器复用不会
 移除 Caddy 的片段，需同步移除对应分流。Caddy 网站与节点应使用不同域名，
 此模式依靠可见 SNI；节点不要启用隐藏 SNI 的 ECH。网站的 UDP/443 HTTP/3
-仍由 Caddy 占用，不能同时给 Hysteria2/TUIC 直接使用。
+仍由 Caddy 占用，不能同时给 Hysteria2/MASQUE 直接使用。
 
 使用自定义 Caddy 二进制时，应将 systemd/OpenRC 的启动与重载命令都指向
 该二进制，并保留原程序、配置与服务定义以便回滚。状态页检查 `caddy`
@@ -511,7 +496,7 @@ xm traffic group remove family
 ```bash
 xm cloudflared install
 xm tunnel managed 11111111-2222-3333-4444-555555555555 /root/tunnel-credentials.json
-xm tunnel route add web app.example.com http://127.0.0.1:3001
+xm tunnel route add web app.example.com http://127.0.0.1:3002
 xm tunnel route add api app.example.com http://127.0.0.1:9080 '^/api/'
 xm tunnel route list
 xm tunnel route remove api
@@ -524,23 +509,6 @@ xm tunnel route remove api
 既有 fixed/quick 模式保留，同一时间运行一个模式。
 
 面板：“7. CF Tunnel → 配置多域名/路径转发到本机 HTTP 服务”。
-
-## Snell 分享与客户端导入
-
-`xm share NODE_ID` 和面板分享功能优先显示可复制的 Surge 原生配置，放入
-Surge 配置文件的 `[Proxy]` 段即可。单节点还保存 `surge.conf`；批量分享先显示
-全部可用 Snell 原生行，再显示其他协议链接，并保存 `snell-surge.conf`。
-这些文件与凭据一样按 0600 保存。
-
-服务端 v5 导出 Surge 兼容的 `version=4`，v6 需要支持 v6 的 Surge。
-截至 2026-11-06，官方 mihomo 最新稳定版 v1.19.33 仍不接受 Snell v6；
-其 [Snell 实现](https://github.com/MetaCubeX/mihomo/blob/v1.19.33/adapter/outbound/snell.go)
-仅将 v5 转为 v4 兼容连接，版本检查会拒绝 v6。因此 mihomo 导出只提供可兼容
-的单用户 v5，不会把 v6 改写成 v4。客户端版本号和 Snell 协议版本是两回事。
-sing-box 多用户 Snell 不兼容 Surge，不生成误导的原生行；请用主菜单 5 或
-节点菜单导出 sing-box 配置。Snell 分享页不再重复显示通用 URI 和二维码，
-程序使用的 `share.txt` / `links.txt`、sing-box JSON 和 Sub-Store 兼容订阅仍保留。
-此次调整不更改节点凭据或已有客户端连接。
 
 ## Sub-Store 使用入门
 
@@ -557,11 +525,10 @@ Sub-Store 是**订阅整理工具**。它把本机、其他 VPS 或已有订阅�
 
 1. 完成首次设置，选择“5. 打开管理网页”。
 2. 在自己的电脑执行面板提供的 SSH 转发命令，替换服务器 IP、用户名和实际
-   SSH 端口。默认示例：`ssh -N -L 3001:127.0.0.1:3001 -p 22 root@YOUR_VPS_IP`。
-3. 保持连接，在该电脑浏览器打开 `http://127.0.0.1:3001/`；网页要求后端地址时，
-   填入面板显示的完整后端 URL（含随机访问路径）。无需在 UFW 开放 3001。
+   SSH 端口。默认示例：`ssh -N -L 3002:127.0.0.1:3002 -p 22 root@YOUR_VPS_IP`。
+3. 保持连接，在该电脑浏览器打开 `http://127.0.0.1:3002/`；网页要求后端地址时，
+   填入面板显示的完整后端 URL（含随机访问路径）。无需在 UFW 开放 3002。
 4. 打开 `xray-manager-all` 组合，选择客户端格式，导出内容并导入客户端。
-   单用户 Snell 可选择 Surge；多用户 Snell 请通过主菜单 5 直接导出 sing-box 配置。
 5. 合并其他服务器时，选择“9. 接入其他 VPS/订阅并合并来源”，填写中心机
    能访问的订阅地址。来源服务器无需安装 Sub-Store。
 
@@ -574,7 +541,7 @@ Sub-Store 是**订阅整理工具**。它把本机、其他 VPS 或已有订阅�
 ## Sub-Store 生命周期与节点同步
 
 ```bash
-xm substore install --port 3001
+xm substore install --port 3002
 xm substore update --version 2.39.9 --frontend-version 2.32.2
 xm substore status --json
 xm substore access
