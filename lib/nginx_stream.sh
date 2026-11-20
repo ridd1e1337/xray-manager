@@ -501,14 +501,6 @@ nginx_stream_doctor_check() {
     fi
     return 0
   fi
-  if [[ $(mux_backend) == sing-box ]]; then
-    if service_active "$SBM_SERVICE" && singbox_port_in_use tcp "$port"; then
-      check_line PASS "sing-box 内置 TCP/SNI 分流正在运行（${port}/TCP，${routes} 条路由）"
-    else
-      check_line FAIL "sing-box 内置 TCP/SNI 分流未就绪：${port}/TCP"; failures=$((failures + 1))
-    fi
-    return 0
-  fi
   if [[ "$backend" != systemd && "$backend" != openrc ]]; then
     check_line FAIL 'Nginx Stream 复用已启用，但当前不是 systemd/OpenRC 后端'; failures=$((failures + 1)); return 0
   fi

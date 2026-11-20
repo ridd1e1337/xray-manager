@@ -60,43 +60,22 @@ host_port_in_use() {
   fi
 }
 
-singbox_port_in_use() {
+# Whether the Xray process listens on PORT/KIND (tcp or udp).
+xray_port_in_use() {
   local kind=$1 port=$2 flags
   command_exists ss || return 1
   [[ "$kind" == tcp ]] && flags=-ltnp || flags=-lunp
-  # Alpine's gcompat launcher reports the process name as ld-musl/ld-linux
-  # in `ss -p`, even though the command is sing-box.  Accept that launcher
-  # name so status and health checks do not report healthy listeners as down.
   ss -H "$flags" 2>/dev/null | awk -v p="$port" '
-    $0 ~ /sing-box|ld-(musl|linux)/ {
-      address = ($1 == "udp" || $1 == "tcp") ? $5 : $4
-      if (address ~ (":" p "$")) found=1
-    }
-    END {exit !found}
-  '
+    $0 ~ /"xray"/ { addr = ($1 == "tcp" || $1 == "udp") ? $5 : $4; n = split(addr, a, ":"); if (a[n] == p) found = 1 }
+    END { exit !found }'
 }
 
 node_runtime_port_in_use() {
-  local node=$1 kind=$2 state=${3:-$SBM_STATE} engine port
-  engine=$(state_node_engine "$node" "$state") || return 1
+  local node=$1 kind=$2 state=${3:-$SBM_STATE}
   if declare -F nginx_stream_effective_node >/dev/null 2>&1; then
     node=$(nginx_stream_effective_node "$state" "$node") || return 1
   fi
-  port=$(jq -r '.port' <<<"$node") || return 1
-  case "$engine" in
-    sing-box) singbox_port_in_use "$kind" "$port" ;;
-    xray)
-      [[ "$kind" == tcp ]] && command_exists ss || return 1
-      ss -H -ltnp 2>/dev/null | awk -v p="$port" '
-        $0 ~ /"xray"/ {
-          address = ($1 == "tcp") ? $5 : $4
-          if (address ~ (":" p "$")) found=1
-        }
-        END {exit !found}
-      ' ;;
-    disabled) return 1 ;;
-    *) return 1 ;;
-  esac
+  xray_port_in_use "$kind" "$(jq -r '.port' <<<"$node")"
 }
 
 node_list_json() {
@@ -196,7 +175,7 @@ node_native_fragment() {
 
 _node_add() {
   local type=$1; shift
-  local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' obfs_host='' obfs_min_packet_size=512 obfs_max_packet_size=1200 disable_chrome_parrot=false bbr_profile='' brutal_debug=false masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 congestion_control='cubic' strict_mode=true wildcard_sni='off' snell_version=5 snell_mode=default realm_id='' realm_ip_version=0 realm_port_mapping=false inbound_json='{}' outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
+  local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
   local remark='' region='' purpose='' line='' tags='' proxy_listen='127.0.0.1' proxy_listen_supplied=0 vless_preview='' vless_network='' vless_listen='::'
   local -a vless_options=() native_flags=()
   local security_supplied=0 tunnel_target='' follow_redirect=false wg_subnet='' wg_mtu=1420
@@ -206,7 +185,8 @@ _node_add() {
       --id) id=${2:?}; shift 2;; --name) name=${2:?}; shift 2;; --port) port=${2:?}; shift 2;;
       --domain) domain=${2:?}; shift 2;; --address) address=${2:?}; address_supplied=1; address_source=manual; shift 2;; --path) path=${2:?}; shift 2;;
       --method) method=${2:?}; shift 2;; --network) network=${2:?}; shift 2;; --no-mux) mux=false; shift;;
-      --obfs) obfs=${2:?}; shift 2;; --obfs-host) obfs_host=${2:?}; shift 2;; --obfs-min-packet-size) obfs_min_packet_size=${2:?}; shift 2;; --obfs-max-packet-size) obfs_max_packet_size=${2:?}; shift 2;; --disable-chrome-parrot) disable_chrome_parrot=true; shift;; --bbr-profile) bbr_profile=${2:?}; shift 2;; --brutal-debug) brutal_debug=true; shift;; --masquerade) masquerade=${2:?}; shift 2;; --disabled) enabled=false; shift;;
+      --obfs) obfs=${2:?}; shift 2;; --masquerade) masquerade=${2:?}; shift 2;; --disabled) enabled=false; shift;;
+      --obfs-host|--obfs-min-packet-size|--obfs-max-packet-size|--disable-chrome-parrot|--enable-chrome-parrot|--bbr-profile|--brutal-debug|--no-brutal-debug|--congestion-control|--strict-mode|--wildcard-sni|--quic|--snell-version|--snell-mode|--realm-id|--realm-ip-version|--realm-port-mapping|--no-realm-port-mapping|--clear-realm|--sing-box-inbound-json|--inbound-json) usage_die "$1 是 sing-box 专属参数，xray-manager 不支持；请使用 sb-manager（Xray 入站扩展用 --xray-inbound-json）。";;
       --security) security=${2:?}; security_supplied=1; shift 2;;
       --target) tunnel_target=${2:?}; shift 2;; --follow-redirect) follow_redirect=true; shift;;
       --subnet) wg_subnet=${2:?}; shift 2;; --mtu) wg_mtu=${2:?}; shift 2;;
@@ -217,11 +197,6 @@ _node_add() {
         (($# >= 2)) || usage_die "缺少参数值：$1"
         vless_options+=("$1" "$2"); shift 2;;
       --handshake-server) handshake_server=${2:?}; shift 2;; --handshake-port) handshake_port=${2:?}; shift 2;;
-      --congestion-control) congestion_control=${2:?}; shift 2;;
-      --strict-mode) strict_mode=${2:?}; shift 2;; --wildcard-sni) wildcard_sni=${2:?}; shift 2;; --quic) network=udp; shift;;
-      --snell-version) snell_version=${2:?}; shift 2;; --snell-mode) snell_mode=${2:?}; shift 2;;
-      --realm-id) realm_id=${2:?}; shift 2;; --realm-ip-version) realm_ip_version=${2:?}; shift 2;; --realm-port-mapping) realm_port_mapping=true; shift;;
-      --sing-box-inbound-json|--inbound-json) inbound_json=$(node_json_argument "${2:?}"); node_validate_json_object 'sing-box inbound JSON' "$inbound_json"; shift 2;;
       --sing-box-outbound-json|--outbound-json) outbound_json=$(node_json_argument "${2:?}"); node_validate_json_object 'sing-box outbound JSON' "$outbound_json"; shift 2;;
       --xray-inbound-json) xray_inbound_json=$(node_json_argument "${2:?}"); node_validate_json_object 'Xray inbound JSON' "$xray_inbound_json"; shift 2;;
       --xray-outbound-json) xray_outbound_json=$(node_json_argument "${2:?}"); node_validate_json_object 'Xray outbound JSON' "$xray_outbound_json"; shift 2;;
@@ -236,7 +211,7 @@ _node_add() {
   if [[ "$proxy_listen_supplied" == 1 ]]; then
     case "$type" in socks|socks5|http|mixed|vless) ;; *) usage_die '--listen 目前仅用于 VLESS 与 socks/http/mixed 代理入口。';; esac
   fi
-  local protocol base transport secret node_secret='' node candidate user_secret_path default_address created_at reality_secret='' snell_obfs_mode snell_obfs_host
+  local protocol base transport secret node_secret='' node candidate user_secret_path default_address created_at reality_secret=''
   if [[ "$type" == vless ]]; then
     [[ -z "$path" ]] || vless_options+=(--path "$path")
     [[ "$proxy_listen_supplied" != 1 ]] || vless_options+=(--listen "$proxy_listen")
@@ -251,7 +226,6 @@ _node_add() {
   elif (( ${#vless_options[@]} > 0 )) && [[ ! "$type" =~ ^(vmess|trojan|ss|shadowsocks)$ ]]; then
     usage_die '传输与安全层参数用于 VLESS、VMess、Trojan、Shadowsocks。'
   fi
-  [[ "$inbound_json" == '{}' ]] || usage_die 'xray-manager 的服务端是 Xray，请改用 --xray-inbound-json；--sing-box-outbound-json 仍可定制 sing-box 客户端导出。'
   case "$type" in
     anytls|tuic|naive|shadowtls|snell) usage_die "xray-manager 只使用 Xray-core，Xray 不支持 $type；请使用 sb-manager。";;
   esac
@@ -294,8 +268,6 @@ _node_add() {
       [[ -n "$address" ]] || address=${default_address:-$domain}
       # Xray's Hysteria inbound: TLS (h3), optional Salamander obfs and masquerade.
       [[ -z "$obfs" || "$obfs" == salamander ]] || die 'Xray Hysteria2 混淆只支持 salamander（Gecko 为 sing-box 专属）。'
-      [[ "$disable_chrome_parrot" != true && -z "$bbr_profile" && "$brutal_debug" != true && -z "$realm_id" ]] \
-        || die 'Chrome QUIC 指纹、BBR profile/debug 与 Hysteria Realm 是 sing-box 专属选项，xray-manager 不支持。'
       secret=$(jq -n --arg password "$(random_password 24)" --arg obfs_password "$([[ -n "$obfs" ]] && random_password 18 || true)" '{password:$password,obfs_password:$obfs_password}')
       ;;
     trojan)
@@ -440,7 +412,7 @@ _node_add() {
     .traffic={configured:false,enabled:false,quota_bytes:null,quota_mode:"total",reset_day:1,upload_rate_bps:null,download_rate_bps:null}
     | .metadata={remark:$remark,region:$region,purpose:$purpose,line:$line,tags:($tags | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)) | unique)}
   ' <<<"$node")
-  node=$(jq --argjson inbound "$inbound_json" --argjson outbound "$outbound_json" ".singbox={inbound:\$inbound,outbound:\$outbound}" <<<"$node")
+  node=$(jq --argjson outbound "$outbound_json" '.singbox={outbound:$outbound}' <<<"$node")
   local i frag
   for ((i = 0; i < ${#native_flags[@]}; i += 2)); do
     frag=$(node_native_fragment "$protocol" "${native_flags[i]}" "${native_flags[i+1]}") || return 1
@@ -575,10 +547,8 @@ _node_set() {
   while (($#)); do
     key=$1
     case "$key" in
-      --disable-chrome-parrot|--brutal-debug|--realm-port-mapping) value=true; shift;;
-      --enable-chrome-parrot|--no-brutal-debug|--no-realm-port-mapping) value=false; shift;;
-      --clear-realm) value=''; shift;;
-      --sing-box-inbound-json|--inbound-json) value=$(node_json_argument "${2:?}"); node_validate_json_object 'sing-box inbound JSON' "$value"; shift 2;;
+      --obfs-host|--obfs-min-packet-size|--obfs-max-packet-size|--disable-chrome-parrot|--enable-chrome-parrot|--bbr-profile|--brutal-debug|--no-brutal-debug|--congestion-control|--strict-mode|--wildcard-sni|--snell-version|--snell-mode|--realm-id|--realm-ip-version|--realm-port-mapping|--no-realm-port-mapping|--clear-realm|--sing-box-inbound-json|--inbound-json)
+        rm -f "$candidate"; die "$key 是 sing-box 专属参数，xray-manager 不支持；请使用 sb-manager（Xray 入站扩展用 --xray-inbound-json）。";;
       --sing-box-outbound-json|--outbound-json) value=$(node_json_argument "${2:?}"); node_validate_json_object 'sing-box outbound JSON' "$value"; shift 2;;
       --xray-inbound-json) value=$(node_json_argument "${2:?}"); node_validate_json_object 'Xray inbound JSON' "$value"; shift 2;;
       --xray-outbound-json) value=$(node_json_argument "${2:?}"); node_validate_json_object 'Xray outbound JSON' "$value"; shift 2;;
@@ -596,27 +566,16 @@ _node_set() {
         [[ "$(jq -r '.method' <<<"$node")" == "$value" || ( "$value" != 2022-* && "$(jq -r '.method' <<<"$node")" != 2022-* ) ]] || { rm -f "$candidate"; die '更换 2022 方法会改变密钥长度；请新建节点。'; }
         tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.method)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --network) [[ "$value" == tcp || "$value" == udp ]] || { rm -f "$candidate"; die "network 必须是 tcp 或 udp"; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.network)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --obfs) [[ "$value" == salamander || "$value" == none || -z "$value" ]] || { rm -f "$candidate"; die "无效 obfs 类型"; }
+      --obfs) [[ "$value" == salamander || "$value" == none || -z "$value" ]] || { rm -f "$candidate"; die "Xray Hysteria2 混淆只支持 salamander 或 none。"; }
         if [[ "$value" == salamander && -z "$(state_get_secret "$id" 2>/dev/null | jq -r '.obfs_password // ""')" ]]; then
           state_write_secret "$id" "$( (state_get_secret "$id" 2>/dev/null || echo '{}') | jq -c --arg p "$(random_password 18)" '(. // {}) + {obfs_password:$p}')" || { rm -f "$candidate"; return 1; }
         fi
-        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="hysteria2" then .obfs=(if ($v=="" or $v=="none") then {} elif $v=="gecko" then (.obfs // {}) + {type:$v} else {type:$v} end) elif .protocol=="snell" then .obfs_mode=(if $v=="" then "none" else $v end) else . end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --obfs-host) validate_domain "$value" || die "无效 obfs Host：$value"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.obfs_host)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
+        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="hysteria2" then .obfs=(if ($v=="" or $v=="none") then {} else {type:$v} end) else . end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --masquerade) [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || die 'masquerade 不能包含控制字符'; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.masquerade)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --security) [[ "$value" == "$(jq -r --arg id "$id" '.nodes[]|select(.id==$id)|.security' "$candidate")" ]] || { rm -f "$candidate"; die 'VLESS security 创建后不可直接切换；请新建目标类型节点。'; };;
       --flow) [[ -z "$value" || "$value" == xtls-rprx-vision ]] || { rm -f "$candidate"; die 'VLESS flow 仅支持 xtls-rprx-vision 或空值。'; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.flow)=(if $v=="" then null else $v end)' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --handshake-server) validate_domain "$value" || { [[ $(jq -r '.protocol' <<<"$node") == vless ]] && { validate_ipv4 "$value" || validate_ipv6 "$value"; }; } || { rm -f "$candidate"; die "无效握手目标：$value"; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.handshake_server)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --strict-mode) [[ "$value" == true || "$value" == false ]] || { rm -f "$candidate"; die 'strict-mode 必须是 true 或 false。'; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.strict_mode)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --wildcard-sni) case "$value" in off|authed|all) ;; *) rm -f "$candidate"; die 'wildcard-sni 必须是 off、authed 或 all。';; esac; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.wildcard_sni)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --snell-mode) case "$value" in default|unshaped|unsafe-raw) ;; *) rm -f "$candidate"; die 'Snell mode 必须是 default、unshaped 或 unsafe-raw。';; esac; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.snell_mode)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --handshake-port) validate_port "$value" || die "无效握手端口"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.handshake_port)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --congestion-control) case "$value" in cubic|new_reno|bbr) ;; *) rm -f "$candidate"; die "无效拥塞控制算法";; esac; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="naive" then .quic_congestion_control=$v else .congestion_control=$v end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --snell-version) [[ "$value" == 5 || "$value" == 6 ]] || { rm -f "$candidate"; die "Snell 版本必须是 5 或 6"; }; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.snell_version)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
-      --realm-id|--realm-ip-version|--realm-port-mapping|--no-realm-port-mapping|--bbr-profile|--brutal-debug|--no-brutal-debug|--disable-chrome-parrot|--enable-chrome-parrot|--obfs-min-packet-size|--obfs-max-packet-size|--clear-realm)
-        rm -f "$candidate"; die "$key 是 sing-box 专属选项，xray-manager 不支持。";;
-      --sing-box-inbound-json|--inbound-json)
-        rm -f "$candidate"; die 'xray-manager 的服务端是 Xray，请改用 --xray-inbound-json。';
-        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.singbox.inbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --sing-box-outbound-json|--outbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.singbox.outbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --xray-inbound-json) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.xray.inbound)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --udp-idle-timeout|--quic-congestion|--quic-idle-timeout|--quic-keepalive|--allow-transparent|--port-map)
