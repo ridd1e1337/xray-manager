@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.32
+
+- 彻底卸载（`xm uninstall --purge` / 面板“删除程序及全部数据”）时，列出本脚本在 Cloudflare 创建的 A/AAAA 记录并询问是否一并删除。
+  只按创建时打上的标记识别，手动创建或仅被复用的记录不会删除；Cloudflare 不可达时只提示，卸载继续。普通卸载不动 DNS。
+
 ## 0.1.0-alpha.31
 
 - 服务器换公网 IP（域名不变）后的处理：

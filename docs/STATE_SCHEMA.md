@@ -11,7 +11,7 @@ Simplified example:
 ```json
 {
   "schema_version": 2,
-  "manager_version": "0.1.0-alpha.31",
+  "manager_version": "0.1.0-alpha.32",
   "settings": {
     "log_level": "warn",
     "default_server_address": "",
