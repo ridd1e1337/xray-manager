@@ -9,7 +9,7 @@ Rocky、Alma、Fedora、Arch、openSUSE）。
 配置目录、服务名、端口和防火墙表互不重叠。TUIC、AnyTLS、NaiveProxy、ShadowTLS、Snell 等
 sing-box 协议请使用 sb-manager。
 
-当前版本：`0.1.0-alpha.30`
+当前版本：`0.1.0-alpha.31`
 
 ## 安装
 
@@ -127,6 +127,8 @@ xm tools reality-check www.apple.com             # REALITY 目标是否合适；
 - **Cloudflare Tunnel**、**Sub-Store**、**OpenList**、**Telegram 通知与命令机器人**、健康检查、备份恢复、
   BBR/TCP 调优、测速：见面板对应菜单或 `xm help`。
 - **更新**：`xm core update [版本]|policy`（Xray，只保留当前版本；要换回旧版用 `xm core update 版本号`），`xm update`（脚本与 Caddy）。
+- **换 IP**：服务器换公网 IP 后每 15 分钟自动检查并更新公网地址、本机的 Cloudflare DNS 记录和分享链接；
+  也可立即运行 `xm settings refresh-ip`。证书不受影响。
 - **不留垃圾**：文件只放在 `/etc/xray-manager`、`/var/lib/xray-manager`、`/var/log/xray-manager`、
   `/run/xray-manager` 与 `/usr/local/lib/xray-manager`；缓存和日志最长保留约一天，中断操作留下的
   临时文件自动清理。`xm uninstall --purge` 全部移除。
