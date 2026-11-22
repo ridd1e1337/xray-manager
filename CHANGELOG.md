@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.34
+
+- 新增 `xm node schema`：以 JSON 输出 `xm node add` 支持的协议、每个协议的参数、输入类型和可选值
+  （来源 `schemas/node-form.json`）。网页面板据此生成添加节点的表单，脚本新增参数后面板无需改动。
+  新增或修改 `node add` 参数时须同步更新该文件。
+
 ## 0.1.0-alpha.33
 
 - 添加/修改节点时，“客户端连接地址”改为选项：有域名时 1 域名（默认）、2 自动获取的本机公网 IP、3 手动输入；

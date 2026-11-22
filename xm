@@ -81,6 +81,7 @@ sb_help_full() {
   xm node add <vless|vmess|vmess-ws-cf|trojan|ss|hy2|wireguard|masque|tunnel|socks|http|mixed> [参数]
   xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
   xm node show <ID>
+  xm node schema                 输出节点表单描述 JSON（协议与参数；供网页面板生成表单）
   xm node enable|disable|delete|rotate <ID>
   xm node clone SRC_ID NEW_ID [--port N] [--name NAME]   复制节点设置，重新生成凭据
   xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH|--listen IP
@@ -399,6 +400,7 @@ main() {
           node_list "$json" "$tag" "$region"
           ;;
         expiry) node_expiry_cli "$@" ;;
+        schema) (($# == 0)) || usage_die '用法：xm node schema'; node_schema ;;
         add) (($# >= 1)) || die '缺少协议'; node_add "$@" ;;
         show) [[ $# == 1 || ( $# == 2 && $2 == --json ) ]] || usage_die '用法：xm node show ID [--json]'; node_show "$1" "$([[ ${2:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         enable) node_enable "${1:?缺少节点 ID}" ;;
