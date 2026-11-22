@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.40
+
+- 新增 `xm substore remote status --json`：输出是否已连接中心 Sub-Store、来源名、显示名、标签、上次推送时间和最近一次失败原因
+  （不包含后端地址），供网页面板显示同步状态。
+
 ## 0.1.0-alpha.39
 
 - 修复 `xm cert status` 在 jq 1.6 上报语法错误（`label` 是 jq 的保留字）。
