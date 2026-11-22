@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.36
+
+- `xm node schema` 升级为第 2 版：字段带分组（基础 / Reality / 传输 / TLS / 性能与混淆 / 高级 / 备注与标签 / 专家）、
+  显示条件（例如选了 WebSocket 才出现路径和 Host）和更明确的选项文字，供面板生成类似 3x-ui 的分步表单。
+
 ## 0.1.0-alpha.35
 
 - Debian/Ubuntu 安装依赖时只处理确实缺少的软件包：依赖已齐全时不再运行 `apt-get update`，
