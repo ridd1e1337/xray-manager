@@ -82,6 +82,7 @@ sb_help_full() {
   xm node expiry ID [--days N|--at UTC_TIMESTAMP|--clear]
   xm node show <ID>
   xm node schema                 输出节点表单描述 JSON（协议与参数；供网页面板生成表单）
+  xm panel schema                输出功能页描述 JSON（用户、流量、出站与分流、系统；供网页面板生成界面）
   xm node enable|disable|delete|rotate <ID>
   xm node clone SRC_ID NEW_ID [--port N] [--name NAME]   复制节点设置，重新生成凭据
   xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH|--listen IP
@@ -225,7 +226,7 @@ sb_help_full() {
 EOF_HELP
 }
 
-SBM_HELP_TOPICS='status node quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config tools logs restart uninstall'
+SBM_HELP_TOPICS='status node panel quick user share export subscription substore tunnel cert traffic notify health tcp bbr hy2 network vps firewall mux caddy maintenance settings core xray openlist reality update cloudflared deps acme config tools logs restart uninstall'
 
 sb_help_overview() {
   cat <<EOF_OVERVIEW
@@ -392,6 +393,13 @@ main() {
       else
         status_summary
       fi
+      ;;
+    panel)
+      # Feature pages for the web panel: what to show and which commands each
+      # button runs.  The panel renders this as-is, so a new feature only needs
+      # an entry in schemas/panel.json.
+      [[ ${2:-} == schema && $# == 2 ]] || usage_die '用法：xm panel schema'
+      jq --arg version "$SBM_VERSION" '. + {manager_version:$version}' "$SBM_LIB/schemas/panel.json"
       ;;
     node)
       local action=${2:-list}; shift 2 || true

@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.41
+
+- 新增 `xm panel schema`（来源 `schemas/panel.json`）：描述网页面板的功能页——用户、流量、出站与分流、系统，
+  以及节点的编辑、到期、复制、轮换——每页显示哪些状态和表格、有哪些操作、操作对应的命令和参数。
+  面板据此生成界面，脚本的功能与网页保持一致；新增或修改命令时须同步更新该文件。
+
 ## 0.1.0-alpha.40
 
 - 新增 `xm substore remote status --json`：输出是否已连接中心 Sub-Store、来源名、显示名、标签、上次推送时间和最近一次失败原因
