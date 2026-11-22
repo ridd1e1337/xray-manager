@@ -4,6 +4,14 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.38
+
+- 证书的 DNS-01 验证新增三家服务商：阿里云、腾讯云 DNSPod、NameSilo（原有 Cloudflare 不变）。
+  `xm cert setup <cloudflare|aliyun|dnspod|namesilo> --email EMAIL --stdin` 配置凭据，凭据从标准输入读取，不进入进程列表；
+  `xm cert status` 以 JSON 输出当前服务商。签发、每日自动续期和部署到节点沿用原有流程。
+  只有 Cloudflare 会自动创建节点域名的 A/AAAA 记录；其他三家只用于证书验证，域名解析需自行指向本机。
+  NameSilo 的记录生效较慢，签发时会等待 15 分钟。
+
 ## 0.1.0-alpha.37
 
 - `xm node schema` 不再包含任何 JSON 输入字段，也去掉了「专家」分组：面板的添加节点表单里不会出现需要手写 JSON 的地方。

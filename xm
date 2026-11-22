@@ -149,6 +149,10 @@ sb_help_full() {
   xm config validate|diff [--json]
 
   xm cert setup-cloudflare [TOKEN] [ZONE_ID] [EMAIL]
+  xm cert setup <cloudflare|aliyun|dnspod|namesilo> --email EMAIL [--stdin] [变量=值 …]
+                                 配置 DNS-01 服务商；--stdin 从标准输入读取 变量=值（每行一个），凭据不进入进程列表
+                                 变量：CF_Token | Ali_Key Ali_Secret | DP_Id DP_Key | Namesilo_Key
+  xm cert status               以 JSON 输出当前 DNS 服务商、邮箱和可选服务商
   xm cert issue <DOMAIN> [EMAIL]
   xm cert list [--json]|renew|inspect <DOMAIN>|delete <DOMAIN>
 
@@ -485,6 +489,8 @@ main() {
       local action=${2:-list}
       case "$action" in
         setup-cloudflare) cert_setup_cloudflare "${3:-}" "${4:-}" "${5:-}" ;;
+        setup) cert_setup "${@:3}" ;;
+        status) cert_status_json ;;
         issue) cert_issue "${3:?缺少域名}" "${4:-}" ;;
         list) [[ ${3:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && cert_list_json || cert_list ;;
         renew) cert_renew "$([[ ${3:-} == --quiet ]] && echo 1 || echo 0)" ;;
