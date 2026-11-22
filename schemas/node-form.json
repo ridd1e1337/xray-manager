@@ -31,11 +31,6 @@
    "id": "meta",
    "label": "备注与标签",
    "collapsed": true
-  },
-  {
-   "id": "expert",
-   "label": "专家：原始配置片段",
-   "collapsed": true
   }
  ],
  "common": [
@@ -569,43 +564,6 @@
     "::"
    ],
    "empty_label": "127.0.0.1（仅本机）"
-  },
-  "transport_json": {
-   "flag": "--transport-json",
-   "label": "传输设置（JSON）",
-   "kind": "json",
-   "group": "expert"
-  },
-  "tls_json": {
-   "flag": "--tls-json",
-   "label": "TLS / Reality 设置（JSON）",
-   "kind": "json",
-   "group": "expert"
-  },
-  "sockopt_json": {
-   "flag": "--sockopt-json",
-   "label": "sockopt（JSON）",
-   "kind": "json",
-   "group": "expert"
-  },
-  "fallbacks": {
-   "flag": "--fallbacks",
-   "label": "回落列表（JSON）",
-   "kind": "json",
-   "group": "expert"
-  },
-  "inbound_json": {
-   "flag": "--xray-inbound-json",
-   "label": "入站配置片段（JSON）",
-   "kind": "json",
-   "group": "expert",
-   "note": "仅在需要表单里没有的字段时使用"
-  },
-  "outbound_json": {
-   "flag": "--xray-outbound-json",
-   "label": "客户端出站配置片段（JSON）",
-   "kind": "json",
-   "group": "expert"
   }
  },
  "protocols": [
@@ -686,13 +644,7 @@
     "tfo",
     "proxy_protocol",
     "vless_encryption",
-    "vless_decryption",
-    "fallbacks",
-    "transport_json",
-    "tls_json",
-    "sockopt_json",
-    "inbound_json",
-    "outbound_json"
+    "vless_decryption"
    ]
   },
   {
@@ -734,12 +686,7 @@
     "sniffing",
     "sniff_dest",
     "tfo",
-    "proxy_protocol",
-    "transport_json",
-    "tls_json",
-    "sockopt_json",
-    "inbound_json",
-    "outbound_json"
+    "proxy_protocol"
    ]
   },
   {
@@ -810,13 +757,7 @@
     "sniffing",
     "sniff_dest",
     "tfo",
-    "proxy_protocol",
-    "fallbacks",
-    "transport_json",
-    "tls_json",
-    "sockopt_json",
-    "inbound_json",
-    "outbound_json"
+    "proxy_protocol"
    ]
   },
   {
@@ -833,9 +774,7 @@
     "sniffing",
     "sniff_dest",
     "tfo",
-    "proxy_protocol",
-    "inbound_json",
-    "outbound_json"
+    "proxy_protocol"
    ]
   },
   {
@@ -856,9 +795,7 @@
     "quic_congestion",
     "udp_idle_timeout",
     "quic_idle_timeout",
-    "quic_keepalive",
-    "inbound_json",
-    "outbound_json"
+    "quic_keepalive"
    ]
   },
   {
@@ -874,9 +811,7 @@
      "key": "port",
      "placeholder": "留空自动选择"
     },
-    "path",
-    "inbound_json",
-    "outbound_json"
+    "path"
    ]
   },
   {
@@ -888,8 +823,7 @@
      "key": "port",
      "default": 1080
     },
-    "proxy_listen",
-    "inbound_json"
+    "proxy_listen"
    ]
   },
   {
@@ -902,8 +836,7 @@
      "default": 1080
     },
     "proxy_listen",
-    "allow_transparent",
-    "inbound_json"
+    "allow_transparent"
    ]
   },
   {
@@ -915,8 +848,7 @@
      "key": "port",
      "default": 1080
     },
-    "proxy_listen",
-    "inbound_json"
+    "proxy_listen"
    ]
   },
   {
@@ -932,8 +864,7 @@
     {
      "key": "mtu",
      "default": 1420
-    },
-    "inbound_json"
+    }
    ]
   },
   {
@@ -953,8 +884,7 @@
     {
      "key": "mtu",
      "default": 1280
-    },
-    "inbound_json"
+    }
    ]
   },
   {
@@ -972,8 +902,7 @@
     },
     "tunnel_network",
     "follow_redirect",
-    "port_map",
-    "inbound_json"
+    "port_map"
    ]
   }
  ]

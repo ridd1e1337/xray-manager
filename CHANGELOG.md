@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.37
+
+- `xm node schema` 不再包含任何 JSON 输入字段，也去掉了「专家」分组：面板的添加节点表单里不会出现需要手写 JSON 的地方。
+  原始配置片段仍可通过命令行参数使用。
+
 ## 0.1.0-alpha.36
 
 - `xm node schema` 升级为第 2 版：字段带分组（基础 / Reality / 传输 / TLS / 性能与混淆 / 高级 / 备注与标签 / 专家）、
