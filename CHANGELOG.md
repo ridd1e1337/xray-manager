@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.51
+
+- `xm node schema`：UDP 伪装补上剩下的四种——端口跳跃（udphop）、DNS 隧道（xdns）、ICMP 隧道（xicmp）、打洞会合（realm）。
+- udphop 只在客户端生效：生成服务端入站时自动去掉，服务端照常监听原端口。
+- 已用 Xray 26.11.9 在本机跑通真实流量：xdns 用客户端直连服务端端口的方式（未经公共 DNS 和 NS 委派），realm 配合本机的 sing-box Hysteria Realm 服务与公共 STUN。
+
 ## 0.1.0-alpha.50
 
 - `xm node schema`：补齐与 3x-ui 剩余的差异——Reality 的额外 Short ID 与额外 SNI，TLS 证书的 OCSP 装订、只加载一次、补全证书链，XHTTP 的 XMUX（客户端连接复用参数）。

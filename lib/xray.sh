@@ -244,6 +244,12 @@ xray_inbound_for_node() {
           | .serverNames=((.serverNames // []) + (.extraServerNames // []) | uniq)
           | del(.extraShortIds,.extraServerNames))
       else . end
+    # udphop is a client-side mask; the server keeps listening on its port.
+    | if (.streamSettings.finalmask.udp // null)!=null then
+        .streamSettings.finalmask.udp |= map(select(.type!="udphop"))
+        | if (.streamSettings.finalmask.udp|length)==0 then del(.streamSettings.finalmask.udp) else . end
+        | if (.streamSettings.finalmask|length)==0 then del(.streamSettings.finalmask) else . end
+      else . end
     | if .streamSettings.tlsSettings!=null then
         .streamSettings.tlsSettings |= ((if ($cert|length)>0 then
             .certificates=[(.certificates // [])[] | . + ($cert|with_entries(select(.key|IN("ocspStapling","oneTimeLoading","buildChain"))))] else . end)

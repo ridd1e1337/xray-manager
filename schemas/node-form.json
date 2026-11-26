@@ -2954,6 +2954,222 @@
        "placeholder": "IP 或网段，逗号分隔"
       }
      ]
+    },
+    {
+     "value": "udphop",
+     "label": "端口跳跃（udphop）",
+     "note": "只在客户端生效。远端跳跃需要服务器把这些端口都转到节点端口（防火墙规则自行配置）；本地跳跃只换客户端的本地端口，不需要服务器配合。",
+     "fields": [
+      {
+       "key": "mode",
+       "label": "跳跃方式",
+       "kind": "tags",
+       "join": ",",
+       "value": "intervalLocal",
+       "required": true,
+       "options": [
+        {
+         "value": "intervalLocal",
+         "label": "定时换本地端口"
+        },
+        {
+         "value": "intervalRemote",
+         "label": "定时换远端端口"
+        },
+        {
+         "value": "perConnRemote",
+         "label": "每条连接换远端端口"
+        }
+       ]
+      },
+      {
+       "key": "interval",
+       "label": "间隔",
+       "kind": "text",
+       "suffix": "秒",
+       "placeholder": "默认 30，最小 5；可填范围 5-10",
+       "pattern": "^\\d+(-\\d+)?$",
+       "pattern_hint": "填数字或范围，如 5-10"
+      },
+      {
+       "key": "remotePorts",
+       "label": "远端端口",
+       "kind": "text",
+       "placeholder": "如 20000-50000"
+      },
+      {
+       "key": "remoteIPs",
+       "label": "远端 IP",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "可选，IP 或网段，逗号分隔"
+      }
+     ]
+    },
+    {
+     "value": "xdns",
+     "label": "DNS 隧道（xdns）",
+     "note": "把流量封装成 DNS 查询。需要：域名的 NS 记录指向这台机器、节点端口用 53/UDP、mKCP 的 MTU 设为 130 以下。速度很慢，只适合只能发 DNS 的网络。",
+     "fields": [
+      {
+       "key": "domains",
+       "label": "隧道域名",
+       "kind": "rows",
+       "required": true,
+       "add_label": "添加域名",
+       "columns": [
+        {
+         "key": "names",
+         "label": "域名，多个用逗号分隔",
+         "type": "list",
+         "required": true
+        },
+        {
+         "key": "types",
+         "label": "记录类型 16,1,28,5",
+         "type": "ints"
+        },
+        {
+         "key": "edns0",
+         "label": "EDNS0 大小",
+         "type": "int"
+        },
+        {
+         "key": "lenLimit",
+         "label": "域名总长上限",
+         "type": "int"
+        },
+        {
+         "key": "labelLimit",
+         "label": "单段长度上限",
+         "type": "int"
+        }
+       ]
+      },
+      {
+       "key": "resolvers",
+       "label": "客户端使用的 DNS",
+       "kind": "rows",
+       "required": true,
+       "add_label": "添加 DNS",
+       "columns": [
+        {
+         "key": "addrs",
+         "label": "地址，如 8.8.8.8 或 https://dns.google/dns-query",
+         "type": "list",
+         "required": true
+        },
+        {
+         "key": "worker",
+         "label": "并发数（默认 32）",
+         "type": "int"
+        }
+       ]
+      },
+      {
+       "key": "extraPoll",
+       "label": "额外轮询",
+       "kind": "select",
+       "type": "int",
+       "options": [
+        "1",
+        "2",
+        "3"
+       ],
+       "empty_label": "关闭"
+      }
+     ]
+    },
+    {
+     "value": "xicmp",
+     "label": "ICMP 隧道（xicmp）",
+     "note": "把流量封装成 ICMP 回显。服务端需要 root 权限，路径上不能屏蔽 ICMP。",
+     "fields": [
+      {
+       "key": "ips",
+       "label": "服务器 IP",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "客户端连接地址是域名时必填，逗号分隔"
+      },
+      {
+       "key": "dgram",
+       "label": "非特权模式",
+       "kind": "switch"
+      }
+     ]
+    },
+    {
+     "value": "realm",
+     "label": "打洞会合（realm）",
+     "note": "服务端和客户端通过会合服务交换地址后直连，用于没有公网入口的机器。会合服务可用 sb 的「Hysteria Realm」。",
+     "fields": [
+      {
+       "key": "url",
+       "label": "会合地址",
+       "kind": "text",
+       "required": true,
+       "placeholder": "realm://令牌@主机:端口/房间名",
+       "pattern": "^realm(\\+http)?://[^@/]+@[^/]+/.+$",
+       "pattern_hint": "realm://令牌@主机[:端口]/房间名（明文 HTTP 用 realm+http://）"
+      },
+      {
+       "key": "stunServers",
+       "label": "STUN 服务器",
+       "kind": "text",
+       "type": "list",
+       "required": true,
+       "value": "stun.cloudflare.com:3478,stun.l.google.com:19302"
+      },
+      {
+       "key": "ipMode",
+       "label": "IP 版本",
+       "kind": "select",
+       "options": [
+        {
+         "value": "dual",
+         "label": "双栈"
+        },
+        {
+         "value": "v4",
+         "label": "仅 IPv4"
+        },
+        {
+         "value": "v6",
+         "label": "仅 IPv6"
+        }
+       ]
+      },
+      {
+       "key": "portMapping.enabled",
+       "label": "端口映射（UPnP / NAT-PMP）",
+       "kind": "switch"
+      },
+      {
+       "key": "portMapping.timeout",
+       "label": "映射超时",
+       "kind": "number",
+       "type": "int",
+       "suffix": "秒",
+       "when": {
+        "portMapping.enabled": [
+         "1"
+        ]
+       }
+      },
+      {
+       "key": "portMapping.lifetime",
+       "label": "映射有效期",
+       "kind": "number",
+       "type": "int",
+       "suffix": "秒",
+       "when": {
+        "portMapping.enabled": [
+         "1"
+        ]
+       }
+      }
+     ]
     }
    ]
   },

@@ -77,4 +77,4 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 
 `schemas/node-form.json` 已把上面的传输、TLS、REALITY、sockopt、sniffing、fallbacks、finalmask（tcp：fragment / sudoku / header-custom / xmc / filter；
 udp：salamander / mkcp-legacy / sudoku / noise / header-custom / filter；quicParams）做成结构化字段，并用 Xray 26.11.9 逐项验证。
-仍只能通过原生 JSON 设置的：finalmask 的 xdns、xicmp、realm、udphop（需要 DNS 委派、ICMP、会合服务或端口范围等额外环境），内联证书与证书用途，header-custom 的多组与 transform。
+udp 另有 udphop / xdns / xicmp / realm（alpha.51）。仍只能通过原生 JSON 设置的：内联证书与证书用途，header-custom 的多组与 transform，xdns 解析器的 DoH TLS / QUIC 细项，realm 的 tlsConfig。
