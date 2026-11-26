@@ -4,6 +4,15 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.49
+
+- `xm node schema`：新增「FinalMask」分节（VLESS / VMess / Trojan / Shadowsocks），同一份设置写入服务端入站和客户端出站：
+  - TCP 伪装（RAW、WebSocket、gRPC、HTTPUpgrade、XHTTP；TLS 或无安全层）：分片、Sudoku、自定义头部、Minecraft 伪装（xmc）、来源过滤。
+  - UDP 伪装（mKCP、Hysteria 传输）：Salamander（含 Gecko 分片）、mKCP 旧式头部 / 种子、Sudoku、噪声、自定义头部、来源过滤。
+  - Hysteria 传输的 QUIC 参数：拥塞控制、BBR 档位、Brutal 带宽、空闲超时、保活、并发流、接收窗口、路径 MTU 探测与 GSO 开关。
+  - 字段类型新增 `blocks`（每项选一种类型，`variants` 给出该类型的字段）。xdns、xicmp、realm、udphop 需要额外的网络环境，仍用命令行 JSON 设置。
+- 上一版与本版的表单选项已用 Xray 26.11.9 逐项验证（配置校验加真实流量）。Reality 与 TCP 分片同时使用时无法连通，表单在 Reality 下不提供 TCP 伪装。
+
 ## 0.1.0-alpha.48
 
 - `xm node schema`：按 3x-ui「添加入站」补齐 VLESS / VMess / Trojan / Shadowsocks 的细项，全部是结构化字段，写入节点的 Xray 入站 / 出站扩展

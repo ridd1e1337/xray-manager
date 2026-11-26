@@ -29,6 +29,11 @@
    "collapsed": true
   },
   {
+   "id": "finalmask",
+   "label": "FinalMask",
+   "collapsed": true
+  },
+  {
    "id": "sniffing",
    "label": "嗅探",
    "collapsed": true
@@ -2336,6 +2341,930 @@
      ]
     }
    ]
+  },
+  "fm_tcp": {
+   "label": "TCP 伪装",
+   "kind": "blocks",
+   "group": "finalmask",
+   "add_label": "添加 TCP 伪装",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.tcp"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.tcp"
+    ]
+   ],
+   "note": "可以叠加多个，按顺序生效（一般只用一种）。服务端和客户端使用同一份设置，随分享链接下发；只有 Xray 内核的客户端支持，mihomo / sing-box 订阅里会跳过这个节点。",
+   "when": {
+    "transport": [
+     "",
+     "raw",
+     "ws",
+     "grpc",
+     "httpupgrade",
+     "xhttp"
+    ],
+    "security": [
+     "tls",
+     "none"
+    ]
+   },
+   "variants": [
+    {
+     "value": "fragment",
+     "label": "分片（fragment）",
+     "fields": [
+      {
+       "key": "packets",
+       "label": "作用的包",
+       "kind": "text",
+       "value": "tlshello",
+       "required": true,
+       "placeholder": "tlshello 或包序号范围 1-3"
+      },
+      {
+       "key": "lengths",
+       "label": "每段长度",
+       "kind": "text",
+       "type": "list",
+       "value": "100-200",
+       "required": true,
+       "placeholder": "如 100-200，多段用逗号分隔"
+      },
+      {
+       "key": "delays",
+       "label": "每段延迟",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "毫秒，如 10-20，多段用逗号分隔"
+      },
+      {
+       "key": "maxSplit",
+       "label": "最多分段数",
+       "kind": "text",
+       "pattern": "^\\d+(-\\d+)?$",
+       "pattern_hint": "填数字或范围，如 100-200"
+      }
+     ]
+    },
+    {
+     "value": "sudoku",
+     "label": "Sudoku",
+     "fields": [
+      {
+       "key": "password",
+       "label": "密码",
+       "kind": "text",
+       "generate": "password:16",
+       "auto": true,
+       "required": true
+      },
+      {
+       "key": "ascii",
+       "label": "字符偏好",
+       "kind": "select",
+       "options": [
+        {
+         "value": "prefer_ascii",
+         "label": "偏向 ASCII"
+        },
+        {
+         "value": "prefer_entropy",
+         "label": "偏向高熵"
+        }
+       ]
+      },
+      {
+       "key": "customTable",
+       "label": "自定义表",
+       "kind": "text"
+      },
+      {
+       "key": "customTables",
+       "label": "自定义表（多个）",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "多个用逗号分隔"
+      },
+      {
+       "key": "paddingMin",
+       "label": "最小填充",
+       "kind": "number",
+       "type": "int"
+      },
+      {
+       "key": "paddingMax",
+       "label": "最大填充",
+       "kind": "number",
+       "type": "int"
+      }
+     ]
+    },
+    {
+     "value": "header-custom",
+     "label": "自定义头部（header-custom）",
+     "note": "连接建立后客户端先发送「客户端发送」，服务端回应「服务端回应」。",
+     "fields": [
+      {
+       "key": "clients",
+       "label": "客户端发送",
+       "kind": "rows",
+       "columns": [
+        {
+         "key": "type",
+         "label": "类型",
+         "options": [
+          {
+           "value": "",
+           "label": "随机字节"
+          },
+          {
+           "value": "str",
+           "label": "文本"
+          },
+          {
+           "value": "hex",
+           "label": "十六进制"
+          },
+          {
+           "value": "base64",
+           "label": "Base64"
+          }
+         ]
+        },
+        {
+         "key": "packet",
+         "label": "内容"
+        },
+        {
+         "key": "rand",
+         "label": "随机字节数",
+         "type": "int"
+        },
+        {
+         "key": "randRange",
+         "label": "字节取值 0-255"
+        },
+        {
+         "key": "delay",
+         "label": "延迟毫秒"
+        }
+       ],
+       "add_label": "添加一段",
+       "wrap": true
+      },
+      {
+       "key": "servers",
+       "label": "服务端回应",
+       "kind": "rows",
+       "columns": [
+        {
+         "key": "type",
+         "label": "类型",
+         "options": [
+          {
+           "value": "",
+           "label": "随机字节"
+          },
+          {
+           "value": "str",
+           "label": "文本"
+          },
+          {
+           "value": "hex",
+           "label": "十六进制"
+          },
+          {
+           "value": "base64",
+           "label": "Base64"
+          }
+         ]
+        },
+        {
+         "key": "packet",
+         "label": "内容"
+        },
+        {
+         "key": "rand",
+         "label": "随机字节数",
+         "type": "int"
+        },
+        {
+         "key": "randRange",
+         "label": "字节取值 0-255"
+        },
+        {
+         "key": "delay",
+         "label": "延迟毫秒"
+        }
+       ],
+       "add_label": "添加一段",
+       "wrap": true
+      }
+     ]
+    },
+    {
+     "value": "xmc",
+     "label": "Minecraft 伪装（xmc）",
+     "fields": [
+      {
+       "key": "hostname",
+       "label": "服务器地址",
+       "kind": "text",
+       "placeholder": "mc.example.com"
+      },
+      {
+       "key": "password",
+       "label": "密码",
+       "kind": "text",
+       "generate": "password:16",
+       "auto": true,
+       "required": true
+      },
+      {
+       "key": "profiles",
+       "label": "玩家档案",
+       "kind": "rows",
+       "required": true,
+       "add_label": "添加档案",
+       "columns": [
+        {
+         "key": "username",
+         "label": "用户名",
+         "required": true
+        },
+        {
+         "key": "uuid",
+         "label": "UUID",
+         "required": true
+        },
+        {
+         "key": "texturesValue",
+         "label": "Textures 值",
+         "required": true
+        },
+        {
+         "key": "texturesSignature",
+         "label": "Textures 签名",
+         "required": true
+        }
+       ]
+      },
+      {
+       "key": "noPadding",
+       "label": "不填充",
+       "kind": "switch"
+      }
+     ]
+    },
+    {
+     "value": "filter",
+     "label": "来源过滤（filter）",
+     "fields": [
+      {
+       "key": "allowedSourceIPs",
+       "label": "允许的来源",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "IP 或网段，逗号分隔；留空表示全部允许"
+      },
+      {
+       "key": "blockedSourceIPs",
+       "label": "拒绝的来源",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "IP 或网段，逗号分隔"
+      }
+     ]
+    }
+   ]
+  },
+  "fm_udp": {
+   "label": "UDP 伪装",
+   "kind": "blocks",
+   "group": "finalmask",
+   "add_label": "添加 UDP 伪装",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.udp"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.udp"
+    ]
+   ],
+   "note": "可以叠加多个，按顺序生效（一般只用一种）。服务端和客户端使用同一份设置，随分享链接下发；只有 Xray 内核的客户端支持，mihomo / sing-box 订阅里会跳过这个节点。",
+   "when": {
+    "transport": [
+     "kcp",
+     "hysteria"
+    ]
+   },
+   "variants": [
+    {
+     "value": "salamander",
+     "label": "Salamander",
+     "fields": [
+      {
+       "key": "password",
+       "label": "密码",
+       "kind": "text",
+       "generate": "password:16",
+       "auto": true,
+       "required": true
+      },
+      {
+       "key": "packetSize",
+       "label": "Gecko 分片大小",
+       "kind": "text",
+       "placeholder": "留空不分片；如 512-1200",
+       "pattern": "^\\d+-\\d+$",
+       "pattern_hint": "填范围，如 512-1200"
+      }
+     ]
+    },
+    {
+     "value": "mkcp-legacy",
+     "label": "mKCP 旧式头部 / 种子",
+     "fields": [
+      {
+       "key": "header",
+       "label": "伪装类型",
+       "kind": "select",
+       "empty_label": "无（仅种子）",
+       "options": [
+        "dns",
+        "dtls",
+        "srtp",
+        "utp",
+        "wechat",
+        "wireguard"
+       ]
+      },
+      {
+       "key": "value",
+       "label": "种子 / 域名",
+       "kind": "text",
+       "placeholder": "选 dns 时填域名，其余为种子"
+      }
+     ]
+    },
+    {
+     "value": "sudoku",
+     "label": "Sudoku",
+     "fields": [
+      {
+       "key": "password",
+       "label": "密码",
+       "kind": "text",
+       "generate": "password:16",
+       "auto": true,
+       "required": true
+      },
+      {
+       "key": "ascii",
+       "label": "字符偏好",
+       "kind": "select",
+       "options": [
+        {
+         "value": "prefer_ascii",
+         "label": "偏向 ASCII"
+        },
+        {
+         "value": "prefer_entropy",
+         "label": "偏向高熵"
+        }
+       ]
+      },
+      {
+       "key": "customTable",
+       "label": "自定义表",
+       "kind": "text"
+      },
+      {
+       "key": "customTables",
+       "label": "自定义表（多个）",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "多个用逗号分隔"
+      },
+      {
+       "key": "paddingMin",
+       "label": "最小填充",
+       "kind": "number",
+       "type": "int"
+      },
+      {
+       "key": "paddingMax",
+       "label": "最大填充",
+       "kind": "number",
+       "type": "int"
+      }
+     ]
+    },
+    {
+     "value": "noise",
+     "label": "噪声（noise）",
+     "fields": [
+      {
+       "key": "reset",
+       "label": "重发间隔",
+       "kind": "text",
+       "suffix": "秒",
+       "placeholder": "0 或留空表示只发一次",
+       "pattern": "^\\d+(-\\d+)?$",
+       "pattern_hint": "填数字或范围，如 100-200"
+      },
+      {
+       "key": "noise",
+       "label": "噪声包",
+       "kind": "rows",
+       "required": true,
+       "add_label": "添加噪声包",
+       "columns": [
+        {
+         "key": "type",
+         "label": "类型",
+         "options": [
+          {
+           "value": "",
+           "label": "随机字节"
+          },
+          {
+           "value": "str",
+           "label": "文本"
+          },
+          {
+           "value": "hex",
+           "label": "十六进制"
+          },
+          {
+           "value": "base64",
+           "label": "Base64"
+          }
+         ]
+        },
+        {
+         "key": "packet",
+         "label": "内容"
+        },
+        {
+         "key": "rand",
+         "label": "随机长度 如 10-20"
+        },
+        {
+         "key": "randRange",
+         "label": "字节取值 0-255"
+        },
+        {
+         "key": "delay",
+         "label": "延迟毫秒"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "value": "header-custom",
+     "label": "自定义头部（header-custom）",
+     "fields": [
+      {
+       "key": "mode",
+       "label": "模式",
+       "kind": "select",
+       "options": [
+        {
+         "value": "prefix",
+         "label": "前缀（prefix）"
+        },
+        {
+         "value": "standalone",
+         "label": "独立包（standalone）"
+        }
+       ]
+      },
+      {
+       "key": "client",
+       "label": "客户端包头",
+       "kind": "rows",
+       "columns": [
+        {
+         "key": "type",
+         "label": "类型",
+         "options": [
+          {
+           "value": "",
+           "label": "随机字节"
+          },
+          {
+           "value": "str",
+           "label": "文本"
+          },
+          {
+           "value": "hex",
+           "label": "十六进制"
+          },
+          {
+           "value": "base64",
+           "label": "Base64"
+          }
+         ]
+        },
+        {
+         "key": "packet",
+         "label": "内容"
+        },
+        {
+         "key": "rand",
+         "label": "随机字节数",
+         "type": "int"
+        },
+        {
+         "key": "randRange",
+         "label": "字节取值 0-255"
+        }
+       ],
+       "add_label": "添加一段"
+      },
+      {
+       "key": "server",
+       "label": "服务端包头",
+       "kind": "rows",
+       "columns": [
+        {
+         "key": "type",
+         "label": "类型",
+         "options": [
+          {
+           "value": "",
+           "label": "随机字节"
+          },
+          {
+           "value": "str",
+           "label": "文本"
+          },
+          {
+           "value": "hex",
+           "label": "十六进制"
+          },
+          {
+           "value": "base64",
+           "label": "Base64"
+          }
+         ]
+        },
+        {
+         "key": "packet",
+         "label": "内容"
+        },
+        {
+         "key": "rand",
+         "label": "随机字节数",
+         "type": "int"
+        },
+        {
+         "key": "randRange",
+         "label": "字节取值 0-255"
+        }
+       ],
+       "add_label": "添加一段"
+      }
+     ]
+    },
+    {
+     "value": "filter",
+     "label": "来源过滤（filter）",
+     "fields": [
+      {
+       "key": "allowedSourceIPs",
+       "label": "允许的来源",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "IP 或网段，逗号分隔；留空表示全部允许"
+      },
+      {
+       "key": "blockedSourceIPs",
+       "label": "拒绝的来源",
+       "kind": "text",
+       "type": "list",
+       "placeholder": "IP 或网段，逗号分隔"
+      }
+     ]
+    }
+   ]
+  },
+  "q_congestion": {
+   "label": "QUIC 拥塞控制",
+   "kind": "select",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.congestion"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.congestion"
+    ]
+   ],
+   "options": [
+    "reno",
+    "bbr",
+    "brutal",
+    "force-brutal"
+   ]
+  },
+  "q_bbr": {
+   "label": "BBR 档位",
+   "kind": "select",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ],
+    "q_congestion": [
+     "bbr"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.bbrProfile"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.bbrProfile"
+    ]
+   ],
+   "options": [
+    {
+     "value": "conservative",
+     "label": "保守"
+    },
+    {
+     "value": "standard",
+     "label": "标准"
+    },
+    {
+     "value": "aggressive",
+     "label": "激进"
+    }
+   ]
+  },
+  "q_brutal_up": {
+   "label": "Brutal 上行",
+   "kind": "text",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ],
+    "q_congestion": [
+     "brutal",
+     "force-brutal"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.brutalUp"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.brutalUp"
+    ]
+   ],
+   "placeholder": "如 100 mbps"
+  },
+  "q_brutal_down": {
+   "label": "Brutal 下行",
+   "kind": "text",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ],
+    "q_congestion": [
+     "brutal",
+     "force-brutal"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.brutalDown"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.brutalDown"
+    ]
+   ],
+   "placeholder": "如 100 mbps"
+  },
+  "q_idle": {
+   "label": "QUIC 空闲超时",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.maxIdleTimeout"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.maxIdleTimeout"
+    ]
+   ],
+   "type": "int",
+   "suffix": "秒",
+   "placeholder": "4-120，默认 30"
+  },
+  "q_keepalive": {
+   "label": "QUIC 保活间隔",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.keepAlivePeriod"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.keepAlivePeriod"
+    ]
+   ],
+   "type": "int",
+   "suffix": "秒",
+   "placeholder": "2-60"
+  },
+  "q_streams": {
+   "label": "最大并发流",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.maxIncomingStreams"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.maxIncomingStreams"
+    ]
+   ],
+   "type": "int",
+   "placeholder": "默认 1024"
+  },
+  "q_win_stream": {
+   "label": "流接收窗口",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.initStreamReceiveWindow"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.initStreamReceiveWindow"
+    ]
+   ],
+   "type": "int",
+   "suffix": "字节"
+  },
+  "q_win_stream_max": {
+   "label": "流接收窗口上限",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.maxStreamReceiveWindow"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.maxStreamReceiveWindow"
+    ]
+   ],
+   "type": "int",
+   "suffix": "字节"
+  },
+  "q_win_conn": {
+   "label": "连接接收窗口",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.initConnectionReceiveWindow"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.initConnectionReceiveWindow"
+    ]
+   ],
+   "type": "int",
+   "suffix": "字节"
+  },
+  "q_win_conn_max": {
+   "label": "连接接收窗口上限",
+   "kind": "number",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.maxConnectionReceiveWindow"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.maxConnectionReceiveWindow"
+    ]
+   ],
+   "type": "int",
+   "suffix": "字节"
+  },
+  "q_no_pmtud": {
+   "label": "禁用路径 MTU 探测",
+   "kind": "switch",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.disablePathMTUDiscovery"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.disablePathMTUDiscovery"
+    ]
+   ]
+  },
+  "q_no_gso": {
+   "label": "禁用 GSO",
+   "kind": "switch",
+   "group": "finalmask",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.finalmask.quicParams.disableGSO"
+    ],
+    [
+     "outbound",
+     "streamSettings.finalmask.quicParams.disableGSO"
+    ]
+   ]
   }
  },
  "protocols": [
@@ -2539,6 +3468,21 @@
     "so_penetrate",
     "so_v6only",
     "so_xff",
+    "fm_tcp",
+    "fm_udp",
+    "q_congestion",
+    "q_bbr",
+    "q_brutal_up",
+    "q_brutal_down",
+    "q_idle",
+    "q_keepalive",
+    "q_streams",
+    "q_win_stream",
+    "q_win_stream_max",
+    "q_win_conn",
+    "q_win_conn_max",
+    "q_no_pmtud",
+    "q_no_gso",
     "packet_encoding",
     "fallbacks"
    ],
@@ -2706,7 +3650,9 @@
     "so_mptcp",
     "so_penetrate",
     "so_v6only",
-    "so_xff"
+    "so_xff",
+    "fm_tcp",
+    "fm_udp"
    ],
    "state": "vmess"
   },
@@ -2873,6 +3819,8 @@
     "so_penetrate",
     "so_v6only",
     "so_xff",
+    "fm_tcp",
+    "fm_udp",
     "fallbacks"
    ],
    "state": "trojan"
@@ -2989,7 +3937,9 @@
     "so_mptcp",
     "so_penetrate",
     "so_v6only",
-    "so_xff"
+    "so_xff",
+    "fm_tcp",
+    "fm_udp"
    ],
    "state": "shadowsocks"
   },
