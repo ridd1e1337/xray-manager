@@ -3265,6 +3265,213 @@
      "streamSettings.finalmask.quicParams.disableGSO"
     ]
    ]
+  },
+  "r_extra_sids": {
+   "label": "额外 Short ID",
+   "kind": "text",
+   "group": "security",
+   "type": "list",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.extraShortIds"
+    ]
+   ],
+   "placeholder": "多个用逗号分隔",
+   "pattern": "^\\s*([0-9a-fA-F]{2}){1,8}(\\s*,\\s*([0-9a-fA-F]{2}){1,8})*\\s*$",
+   "pattern_hint": "每个 2-16 位十六进制，位数为偶数",
+   "note": "服务端同时接受这些 Short ID；分享链接仍使用上面的那一个。"
+  },
+  "r_extra_snis": {
+   "label": "额外 SNI",
+   "kind": "text",
+   "group": "security",
+   "type": "list",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.extraServerNames"
+    ]
+   ],
+   "placeholder": "多个用逗号分隔",
+   "note": "服务端同时接受这些 SNI，须是目标网站证书覆盖的域名。"
+  },
+  "cert_ocsp": {
+   "label": "OCSP 装订刷新间隔",
+   "kind": "number",
+   "group": "security",
+   "type": "int",
+   "suffix": "秒",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.certOptions.ocspStapling"
+    ]
+   ],
+   "placeholder": "0 或留空表示关闭"
+  },
+  "cert_onetime": {
+   "label": "证书只加载一次",
+   "kind": "switch",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.certOptions.oneTimeLoading",
+     true
+    ]
+   ],
+   "note": "关闭证书热重载；续期后需要重启才生效，一般不用开。"
+  },
+  "cert_chain": {
+   "label": "补全证书链",
+   "kind": "switch",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.certOptions.buildChain",
+     true
+    ]
+   ]
+  },
+  "xmux_concurrency": {
+   "label": "XMUX 最大并发",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.xhttpSettings.xmux.maxConcurrency"
+    ]
+   ],
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 16-32",
+   "placeholder": "如 16-32；与最大连接数二选一",
+   "note": "XMUX 是客户端的连接复用参数，随分享链接下发。"
+  },
+  "xmux_connections": {
+   "label": "XMUX 最大连接数",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.xhttpSettings.xmux.maxConnections"
+    ]
+   ],
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 16-32"
+  },
+  "xmux_reuse": {
+   "label": "连接最多复用次数",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.xhttpSettings.xmux.cMaxReuseTimes"
+    ]
+   ],
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 16-32"
+  },
+  "xmux_requests": {
+   "label": "每连接最多请求数",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.xhttpSettings.xmux.hMaxRequestTimes"
+    ]
+   ],
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 16-32",
+   "placeholder": "如 600-900"
+  },
+  "xmux_secs": {
+   "label": "连接最长使用时间",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.xhttpSettings.xmux.hMaxReusableSecs"
+    ]
+   ],
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 16-32",
+   "suffix": "秒",
+   "placeholder": "如 1800-3000"
+  },
+  "xmux_keepalive": {
+   "label": "H2 保活间隔",
+   "kind": "number",
+   "group": "transport",
+   "type": "int",
+   "suffix": "秒",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.xhttpSettings.xmux.hKeepAlivePeriod"
+    ]
+   ]
   }
  },
  "protocols": [
@@ -3356,6 +3563,12 @@
     "xh_max_header",
     "xh_no_sse",
     "xh_no_grpc",
+    "xmux_concurrency",
+    "xmux_connections",
+    "xmux_reuse",
+    "xmux_requests",
+    "xmux_secs",
+    "xmux_keepalive",
     "hy_auth",
     "hy_idle",
     {
@@ -3396,6 +3609,9 @@
     "ech",
     "pin_cert",
     "verify_name",
+    "cert_ocsp",
+    "cert_onetime",
+    "cert_chain",
     {
      "key": "sni",
      "when": {
@@ -3437,6 +3653,8 @@
      }
     },
     "r_mldsa",
+    "r_extra_sids",
+    "r_extra_snis",
     "r_xver",
     "r_spider",
     "r_timediff",
@@ -3545,6 +3763,12 @@
     "xh_max_header",
     "xh_no_sse",
     "xh_no_grpc",
+    "xmux_concurrency",
+    "xmux_connections",
+    "xmux_reuse",
+    "xmux_requests",
+    "xmux_secs",
+    "xmux_keepalive",
     {
      "key": "security",
      "options": [
@@ -3579,6 +3803,9 @@
     "ech",
     "pin_cert",
     "verify_name",
+    "cert_ocsp",
+    "cert_onetime",
+    "cert_chain",
     {
      "key": "sni",
      "when": {
@@ -3620,6 +3847,8 @@
      }
     },
     "r_mldsa",
+    "r_extra_sids",
+    "r_extra_snis",
     "r_xver",
     "r_spider",
     "r_timediff",
@@ -3713,6 +3942,12 @@
     "xh_max_header",
     "xh_no_sse",
     "xh_no_grpc",
+    "xmux_concurrency",
+    "xmux_connections",
+    "xmux_reuse",
+    "xmux_requests",
+    "xmux_secs",
+    "xmux_keepalive",
     {
      "key": "security",
      "options": [
@@ -3747,6 +3982,9 @@
     "ech",
     "pin_cert",
     "verify_name",
+    "cert_ocsp",
+    "cert_onetime",
+    "cert_chain",
     {
      "key": "sni",
      "when": {
@@ -3788,6 +4026,8 @@
      }
     },
     "r_mldsa",
+    "r_extra_sids",
+    "r_extra_snis",
     "r_xver",
     "r_spider",
     "r_timediff",
@@ -3884,6 +4124,12 @@
     "xh_max_header",
     "xh_no_sse",
     "xh_no_grpc",
+    "xmux_concurrency",
+    "xmux_connections",
+    "xmux_reuse",
+    "xmux_requests",
+    "xmux_secs",
+    "xmux_keepalive",
     {
      "key": "security",
      "required": false,
@@ -3919,6 +4165,9 @@
     "ech",
     "pin_cert",
     "verify_name",
+    "cert_ocsp",
+    "cert_onetime",
+    "cert_chain",
     "sniffing",
     "sniff_dest",
     "sniff_meta",

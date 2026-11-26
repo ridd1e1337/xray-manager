@@ -233,6 +233,22 @@ xray_inbound_for_node() {
       '.streamSettings += {security:"tls",tlsSettings:{certificates:[{certificateFile:$cert,keyFile:$key}]}}' <<<"$rendered") || return 1
   fi
   rendered=$(xray_apply_override "$rendered" "$(xray_node_override "$node" inbound)") || return 1
+  # Manager-only keys inside the extension: additions to what the manager
+  # generates (certificate entry, REALITY short IDs and names). They are folded
+  # into the real fields here and never reach Xray under their own names.
+  rendered=$(jq '
+    def uniq: reduce .[] as $x ([]; if index($x) then . else . + [$x] end);
+    (.streamSettings.tlsSettings.certOptions // {}) as $cert
+    | if .streamSettings.realitySettings!=null then
+        .streamSettings.realitySettings |= (.shortIds=((.shortIds // []) + (.extraShortIds // []) | uniq)
+          | .serverNames=((.serverNames // []) + (.extraServerNames // []) | uniq)
+          | del(.extraShortIds,.extraServerNames))
+      else . end
+    | if .streamSettings.tlsSettings!=null then
+        .streamSettings.tlsSettings |= ((if ($cert|length)>0 then
+            .certificates=[(.certificates // [])[] | . + ($cert|with_entries(select(.key|IN("ocspStapling","oneTimeLoading","buildChain"))))] else . end)
+          | del(.certOptions))
+      else . end' <<<"$rendered") || return 1
   local stream
   stream=$(vless_stream_normalize "$(jq -c '.streamSettings' <<<"$rendered")") || return 1
   # Fallbacks need an explicit HTTP/1.1 ALPN; add h2 only for h2 fallbacks.

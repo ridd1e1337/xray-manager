@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.50
+
+- `xm node schema`：补齐与 3x-ui 剩余的差异——Reality 的额外 Short ID 与额外 SNI，TLS 证书的 OCSP 装订、只加载一次、补全证书链，XHTTP 的 XMUX（客户端连接复用参数）。
+- 入站扩展里新增三个由管理器处理的键：`realitySettings.extraShortIds`、`realitySettings.extraServerNames`（追加到生成的 Short ID / SNI 之后）、
+  `tlsSettings.certOptions`（合并进证书条目）；它们不会以原名写进 Xray 配置。
+- 已用 Xray 26.11.9 验证（配置校验加真实流量）。
+
 ## 0.1.0-alpha.49
 
 - `xm node schema`：新增「FinalMask」分节（VLESS / VMess / Trojan / Shadowsocks），同一份设置写入服务端入站和客户端出站：

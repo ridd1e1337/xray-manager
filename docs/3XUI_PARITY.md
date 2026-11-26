@@ -72,3 +72,9 @@ HTTPUpgrade（path/host/headers/acceptProxyProtocol）、XHTTP（mode/path/host/
 | 运维 | 备份恢复、面板自更新、BBR、证书、防火墙、Fail2ban | ✅ | |
 | 多机 | 多节点管理 | ➖ | 由配套项目 sb-manager-web 负责 |
 | Web | 网页登录 2FA/LDAP、PWA、主题与多语言、Discord、SMTP | ➖ | 终端脚本无网页登录；通知已有 Telegram/Webhook |
+
+## 网页面板表单（2026-11-27）
+
+`schemas/node-form.json` 已把上面的传输、TLS、REALITY、sockopt、sniffing、fallbacks、finalmask（tcp：fragment / sudoku / header-custom / xmc / filter；
+udp：salamander / mkcp-legacy / sudoku / noise / header-custom / filter；quicParams）做成结构化字段，并用 Xray 26.11.9 逐项验证。
+仍只能通过原生 JSON 设置的：finalmask 的 xdns、xicmp、realm、udphop（需要 DNS 委派、ICMP、会合服务或端口范围等额外环境），内联证书与证书用途，header-custom 的多组与 transform。
