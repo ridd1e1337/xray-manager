@@ -49,6 +49,7 @@ source "$SBM_LIB/lib/notification.sh"
 source "$SBM_LIB/lib/health.sh"
 source "$SBM_LIB/lib/status.sh"
 source "$SBM_LIB/lib/export.sh"
+source "$SBM_LIB/lib/compat.sh"
 source "$SBM_LIB/lib/cert.sh"
 source "$SBM_LIB/lib/public_ip.sh"
 source "$SBM_LIB/lib/tunnel.sh"
@@ -92,7 +93,7 @@ sb_help_full() {
                  [--security none|tls|reality] [--host H] [--service-name N] [--xhttp-mode MODE]
                  [--tls-server-name SNI] [--fingerprint FP] [--alpn a,b] [--pinned-cert-sha256 HEX[,HEX]]
                  [--verify-name NAME[,NAME]] [--handshake-server DOMAIN] [--handshake-port N]
-                 VLESS：[--flow FLOW] [--vless-auth x25519|mlkem768|none | --vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
+                 VLESS：[--flow FLOW] [--vless-auth x25519|mlkem768|none [--vless-auth-mode native|xorpub|random] | --vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
                  [--reality-mldsa65 true|false] [--ech DOMAIN|none]   自动生成 ML-DSA-65 / ECH 密钥
                  回落（VLESS/Trojan）：[--fallback-dest PORT|HOST:PORT|none] [--fallbacks JSON|@FILE|none]
                  [--sniffing on|route-only|off] [--sniff-dest http,tls,quic,fakedns]
@@ -415,6 +416,7 @@ main() {
           ;;
         expiry) node_expiry_cli "$@" ;;
         schema) (($# == 0)) || usage_die '用法：xm node schema'; node_schema ;;
+        compat) [[ "${2:-}" != --json ]] || SBM_OUTPUT_JSON=1; node_compat "${1:?用法：xm node compat ID [--json]}" "${SBM_OUTPUT_JSON:-0}" ;;
         add) (($# >= 1)) || die '缺少协议'; node_add "$@" ;;
         show) [[ $# == 1 || ( $# == 2 && $2 == --json ) ]] || usage_die '用法：xm node show ID [--json]'; node_show "$1" "$([[ ${2:-} == --json || ${SBM_OUTPUT_JSON:-0} == 1 ]] && echo 1 || echo 0)" ;;
         enable) node_enable "${1:?缺少节点 ID}" ;;

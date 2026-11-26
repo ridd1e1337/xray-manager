@@ -4,6 +4,16 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.52
+
+- `xm node set` 新增 `--xray-inbound-patch` / `--xray-outbound-patch`：只改扩展里的几项（`{"set":{"a.b":值},"unset":["c.d"]}`），不必回传整段扩展；
+  网页面板编辑节点时改用它，命令和执行记录里不再出现扩展中的私钥。
+- `xm --dry-run node add …`：预检。校验参数、生成配置并交给内核检查，然后列出哪些客户端能用这个节点，不保存任何改动；域名还没有证书时跳过内核检查并说明。
+- `xm node compat ID [--json]`：逐个尝试导出，列出分享链接 / Sub-Store、sing-box、mihomo、Xray 内核 能否使用这个节点及原因；功能页的节点菜单里新增「客户端兼容性」。
+- `xm node schema`：新增 `patch_flags`、`check`、协议的 `presets`（常用组合）与字段的 `when_any`（多组显示条件之一）。
+- `--vless-auth-mode native|xorpub|random`：VLESS 加密的握手外观；更换密钥对时保留节点原来的模式。表单新增「加密外观」。
+- 表单：VLESS 加密 + 无安全层 + RAW 时可以选 Vision。
+
 ## 0.1.0-alpha.51
 
 - `xm node schema`：UDP 伪装补上剩下的四种——端口跳跃（udphop）、DNS 隧道（xdns）、ICMP 隧道（xicmp）、打洞会合（realm）。

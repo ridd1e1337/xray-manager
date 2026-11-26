@@ -349,18 +349,33 @@
      "label": "无"
     }
    ],
-   "when": {
-    "transport": [
-     "",
-     "raw"
-    ],
-    "security": [
-     "reality",
-     "tls"
-    ]
-   },
    "hidden_emit": "",
-   "from": "flow"
+   "from": "flow",
+   "when_any": [
+    {
+     "transport": [
+      "",
+      "raw"
+     ],
+     "security": [
+      "reality",
+      "tls"
+     ]
+    },
+    {
+     "transport": [
+      "",
+      "raw"
+     ],
+     "security": [
+      "none"
+     ],
+     "vless_auth": [
+      "x25519",
+      "mlkem768"
+     ]
+    }
+   ]
   },
   "vless_auth": {
    "label": "VLESS 加密",
@@ -395,6 +410,46 @@
     ]
    ],
    "edit_empty": "none"
+  },
+  "vless_auth_mode": {
+   "label": "加密外观",
+   "kind": "select",
+   "group": "client",
+   "flag": "--vless-auth-mode",
+   "when": {
+    "vless_auth": [
+     "x25519",
+     "mlkem768"
+    ]
+   },
+   "empty_label": "原生（默认）",
+   "options": [
+    {
+     "value": "xorpub",
+     "label": "公钥异或（握手不含可识别的公钥）"
+    },
+    {
+     "value": "random",
+     "label": "全随机外观"
+    }
+   ],
+   "note": "只改变握手的外观，加密强度相同。客户端需要重新导入配置。",
+   "from": "xray.inbound.settings.decryption",
+   "from_match": [
+    [
+     "^[^.]+\\.xorpub\\.",
+     "xorpub"
+    ],
+    [
+     "^[^.]+\\.random\\.",
+     "random"
+    ],
+    [
+     ".",
+     ""
+    ]
+   ],
+   "edit_empty": "native"
   },
   "transport": {
    "label": "传输",
@@ -3708,6 +3763,7 @@
     "uuid",
     "flow",
     "vless_auth",
+    "vless_auth_mode",
     {
      "key": "transport",
      "options": [
@@ -3920,7 +3976,51 @@
     "packet_encoding",
     "fallbacks"
    ],
-   "state": "vless"
+   "state": "vless",
+   "presets": [
+    {
+     "label": "Reality + Vision",
+     "note": "直连最常用：无需域名和证书",
+     "values": {
+      "security": "reality",
+      "transport": "",
+      "flow": "xtls-rprx-vision"
+     }
+    },
+    {
+     "label": "XHTTP + Reality",
+     "values": {
+      "security": "reality",
+      "transport": "xhttp"
+     }
+    },
+    {
+     "label": "XHTTP + TLS",
+     "note": "有域名时使用，可套 CDN",
+     "values": {
+      "security": "tls",
+      "transport": "xhttp"
+     }
+    },
+    {
+     "label": "WebSocket + TLS",
+     "note": "兼容面最广，可套 CDN",
+     "values": {
+      "security": "tls",
+      "transport": "ws",
+      "alpn": "http/1.1"
+     }
+    },
+    {
+     "label": "mKCP + VLESS 加密",
+     "note": "UDP 传输，不需要域名",
+     "values": {
+      "security": "none",
+      "transport": "kcp",
+      "vless_auth": "x25519"
+     }
+    }
+   ]
   },
   {
    "type": "vmess",
@@ -4279,7 +4379,32 @@
     "fm_udp",
     "fallbacks"
    ],
-   "state": "trojan"
+   "state": "trojan",
+   "presets": [
+    {
+     "label": "TLS 直连",
+     "values": {
+      "security": "tls",
+      "transport": ""
+     }
+    },
+    {
+     "label": "WebSocket + TLS",
+     "note": "可套 CDN",
+     "values": {
+      "security": "tls",
+      "transport": "ws",
+      "alpn": "http/1.1"
+     }
+    },
+    {
+     "label": "Reality",
+     "values": {
+      "security": "reality",
+      "transport": ""
+     }
+    }
+   ]
   },
   {
    "type": "ss",
@@ -4583,5 +4708,14 @@
  "ext_from": {
   "inbound": "xray.inbound",
   "outbound": "xray.outbound"
+ },
+ "patch_flags": {
+  "inbound": "--xray-inbound-patch",
+  "outbound": "--xray-outbound-patch"
+ },
+ "check": {
+  "prefix": [
+   "--dry-run"
+  ]
  }
 }

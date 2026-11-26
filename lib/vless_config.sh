@@ -15,16 +15,16 @@ vless_config_apply() {
     (($# >= 2)) || { log_error "缺少参数值：$1"; return 1; }
     key=$1; value=$2; shift 2
     case "$key" in
-      --xray-inbound-json|--xray-outbound-json|--transport-json|--tls-json|--sockopt-json)
+      --xray-inbound-json|--xray-outbound-json|--xray-inbound-patch|--xray-outbound-patch|--transport-json|--tls-json|--sockopt-json)
         value=$(node_json_argument "$value") || return 1
         node_validate_json_object "$key" "$value" || return 1;;
-      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--reality-mldsa65|--ech|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
+      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--vless-auth-mode|--reality-mldsa65|--ech|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
       *) log_error "未知 VLESS 参数：$key"; return 1;;
     esac
     options[$key]=$value
   done
   if [[ "$protocol" != vless ]]; then
-    for key in --flow --vless-encryption --vless-decryption --vless-auth --packet-encoding; do
+    for key in --flow --vless-encryption --vless-decryption --vless-auth --vless-auth-mode --packet-encoding; do
       [[ ! -v options[$key] ]] || { log_error "$key 仅用于 VLESS。"; return 1; }
     done
   fi
@@ -55,6 +55,19 @@ vless_config_apply() {
     if [[ -v options[$key] ]]; then
       value=${key#--xray-}; value=${value%-json}
       node=$(jq --arg direction "$value" --argjson object "${options[$key]}" '.xray[$direction]=$object' <<<"$node") || return 1
+    fi
+  done
+  # Patches change a few extension settings in place ({"set":{"a.b":value},"unset":["c.d"]}),
+  # so a caller never has to send back the whole extension — and the keys inside it.
+  for key in --xray-inbound-patch --xray-outbound-patch; do
+    if [[ -v options[$key] ]]; then
+      value=${key#--xray-}; value=${value%-patch}
+      node=$(jq --arg direction "$value" --argjson p "${options[$key]}" '
+      def ext_patch($p):
+        reduce (($p.unset // [])[]) as $u (.; ($u|split(".")) as $k | delpaths([$k])
+          | reduce range(($k|length)-1; 0; -1) as $n (.; if getpath($k[:$n])=={} then delpaths([$k[:$n]]) else . end))
+        | reduce (($p.set // {})|to_entries[]) as $e (.; setpath($e.key|split("."); $e.value));
+      .xray[$direction]=((.xray[$direction] // {}) | ext_patch($p))' <<<"$node") || { log_error '扩展补丁无效。'; return 1; }
     fi
   done
   network=$(vless_network_normalize "${options[--transport]:-$(vless_node_network "$node")}") || return 1
@@ -172,6 +185,21 @@ vless_config_apply() {
         node=$(jq --arg field "$json" --arg value "$value" 'if $value=="" then del(.xray.outbound.streamSettings.tlsSettings[$field]) else .xray.outbound.streamSettings.tlsSettings[$field]=$value end' <<<"$node") || return 1;;
     esac
   done
+  # Appearance of the encrypted handshake: native (default), xorpub (public keys
+  # XORed so they look random) or random. A new key pair keeps the node's mode.
+  if [[ -v options[--vless-auth-mode] || -v options[--vless-auth] ]]; then
+    local enc_mode=${options[--vless-auth-mode]:-} enc_d enc_e
+    enc_d=${options[--vless-decryption]:-$(jq -r '.xray.inbound.settings.decryption // "none"' <<<"$node")}
+    enc_e=${options[--vless-encryption]:-$(jq -r '.xray.outbound.settings.vnext[0].users[0].encryption // "none"' <<<"$node")}
+    [[ -n "$enc_mode" ]] || enc_mode=$(jq -r '(.xray.inbound.settings.decryption // "") | split(".") | .[1] // "native"' <<<"$node")
+    case "$enc_mode" in native|xorpub|random) ;; *) log_error '--vless-auth-mode 只能是 native、xorpub 或 random。'; return 1;; esac
+    if [[ "$enc_d" == mlkem768x25519plus.* ]]; then
+      options[--vless-decryption]=$(sed -E "s/^([^.]+)\.[^.]+\./\1.${enc_mode}./" <<<"$enc_d")
+      [[ "$enc_e" != mlkem768x25519plus.* ]] || options[--vless-encryption]=$(sed -E "s/^([^.]+)\.[^.]+\./\1.${enc_mode}./" <<<"$enc_e")
+    elif [[ -v options[--vless-auth-mode] && "$enc_mode" != native ]]; then
+      log_error '--vless-auth-mode 需要先启用 VLESS 加密（--vless-auth）。'; return 1
+    fi
+  fi
   # Server-generated key material: the operator picks on/off (or a name), the
   # paired client value is derived or stored next to it.
   if [[ -v options[--reality-mldsa65] ]]; then

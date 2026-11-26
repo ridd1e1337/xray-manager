@@ -202,7 +202,7 @@ _node_add() {
       --udp-idle-timeout|--quic-congestion|--quic-idle-timeout|--quic-keepalive|--allow-transparent|--port-map)
         (($# >= 2)) || usage_die "缺少参数值：$1"; native_flags+=("$1" "$2"); shift 2;;
       --flow) (($# >= 2)) || usage_die '缺少 flow 值；可显式传空字符串。'; flow=$2; shift 2;;
-      --transport|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--reality-mldsa65|--ech|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol)
+      --transport|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--vless-auth-mode|--reality-mldsa65|--ech|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol)
         (($# >= 2)) || usage_die "缺少参数值：$1"
         vless_options+=("$1" "$2"); shift 2;;
       --handshake-server) handshake_server=${2:?}; shift 2;; --handshake-port) handshake_port=${2:?}; shift 2;;
@@ -450,10 +450,10 @@ _node_add() {
   fi
   if [[ "$enabled" == true ]]; then
     case "$protocol" in
-      hysteria2|masque) _cert_prepare_node_domain "$domain" || return 1;;
+      hysteria2|masque) node_add_cert "$domain" || return 1;;
       vless|vmess|trojan|shadowsocks)
         if [[ $(xray_node_security "$node") == tls ]] && ! jq -e '(.xray.inbound.streamSettings.tlsSettings.certificates // [])|length>0' <<<"$node" >/dev/null; then
-          _cert_prepare_node_domain "$(jq -r '.domain' <<<"$node")" || return 1
+          node_add_cert "$(jq -r '.domain' <<<"$node")" || return 1
         fi;;
     esac
   fi
@@ -480,13 +480,22 @@ _node_add() {
   [[ -z "$node_secret" ]] || state_write_secret "$id" "$node_secret" || return 1
   candidate=$(state_candidate)
   jq --argjson node "$node" '.nodes += [$node]' "$SBM_STATE" >"$candidate"
+  if [[ ${SBM_DRY_RUN:-0} == 1 ]]; then
+    # Preview: check and report, then remove every trace of the candidate.
+    local preview_rc=0
+    node_add_preview "$candidate" "$id" || preview_rc=$?
+    rm -f "$candidate" "$user_secret_path"; [[ -z "$node_secret" ]] || rm -f "$(state_secret_path "$id")"
+    rmdir "$(dirname "$user_secret_path")" 2>/dev/null || true
+    return "$preview_rc"
+  fi
   if ! apply_candidate_state "$candidate" "add-$id"; then rm -f "$candidate" "$user_secret_path"; return 1; fi
   rm -f "$candidate"
   log_ok "已添加节点：$id ($(node_protocol_label "$protocol"))"
   [[ "$enabled" == true ]] || log_warn "节点当前为停用状态。"
 }
 node_add() {
-  [[ ${SBM_DRY_RUN:-0} != 1 ]] || usage_die '添加节点不支持 --dry-run；请退出预览模式后再操作。'
+  # --dry-run validates the node and reports client compatibility without saving anything.
+  if [[ ${SBM_DRY_RUN:-0} == 1 ]]; then NODE_ADD_CERT_MISSING=''; with_lock _node_add "$@"; return $?; fi
   with_state_transaction node-add _node_add "$@"
 }
 
@@ -616,7 +625,7 @@ node_set() {
   if xray_stream_protocol "$(jq -r '.protocol // ""' <<<"$node")"; then
     local arg
     for arg in "$@"; do
-      case "$arg" in --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--reality-mldsa65|--ech|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol|--xray-inbound-json|--xray-outbound-json)
+      case "$arg" in --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--vless-auth-mode|--reality-mldsa65|--ech|--transport-json|--tls-json|--sockopt-json|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol|--xray-inbound-json|--xray-outbound-json|--xray-inbound-patch|--xray-outbound-patch)
         node_vless_configure "$id" "$@"; return $?;; esac
     done
   fi
