@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
+# Listings mask private keys; refuse an extension that carries a mask back in.
+node_reject_redacted() {
+  if grep -qE '<redacted>|\*{20,}' <<<"$1"; then die '这段设置里有被遮蔽的密钥（来自节点列表），不能写回；请只提交要修改的项。'; fi
+}
+
 node_protocol_label() {
   case "$1" in
     vmess) printf 'VMess' ;;
@@ -79,10 +84,23 @@ node_runtime_port_in_use() {
 }
 
 node_list_json() {
-  local tag=${1:-} region=${2:-}
-  jq --arg tag "$tag" --arg region "$region" '[.nodes[]
+  local tag=${1:-} region=${2:-} excluded=''
+  [[ ! -r "$SBM_EXPORTS/substore.excluded" ]] || excluded=$(<"$SBM_EXPORTS/substore.excluded")
+  jq --arg tag "$tag" --arg region "$region" --arg excluded "$excluded" '
+    ($excluded | split("\n") | map(select(length>0) | split("\t") | {key:.[0], value:(.[2] // "")}) | from_entries) as $ex |
+    [.nodes[]
     | select($tag=="" or (.metadata.tags | index($tag)) != null)
-    | select($region=="" or .metadata.region==$region)]' "$SBM_STATE"
+    | select($region=="" or .metadata.region==$region)
+    | if .enabled and ($ex[.id] // null)!=null then .substore_excluded=$ex[.id] else . end]
+    | map(
+        # Private keys stay on the machine: a listing shows that they exist, not what they are.
+        (if (.xray.inbound.settings.decryption // "none") | test("^none$") | not then
+           .xray.inbound.settings.decryption |= (split(".") | map(if length>=20 then ("*" * length) else . end) | join(".")) else . end)
+        | (if (.xray.inbound.streamSettings.tlsSettings.echServerKeys // "")!="" then .xray.inbound.streamSettings.tlsSettings.echServerKeys="<redacted>" else . end)
+        | (if (.xray.inbound.streamSettings.realitySettings.mldsa65Seed // "")!="" then .xray.inbound.streamSettings.realitySettings.mldsa65Seed="<redacted>" else . end)
+        | (if (.xray.inbound.streamSettings.realitySettings.privateKey // "")!="" then .xray.inbound.streamSettings.realitySettings.privateKey="<redacted>" else . end)
+        | (if (.xray.inbound.streamSettings.tlsSettings.certificates // null)!=null then
+             .xray.inbound.streamSettings.tlsSettings.certificates |= map(if .key!=null then .key=["<redacted>"] else . end) else . end))' "$SBM_STATE"
 }
 
 # Machine-readable description of `node add`: protocols, their flags and

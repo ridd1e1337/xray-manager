@@ -4,6 +4,16 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.53
+
+- `xm node list --json` 遮蔽节点扩展里的私钥（VLESS decryption、ECH 服务端密钥、ML-DSA-65 种子、Reality 私钥、内联证书私钥）：只显示它们存在，不输出内容；`xm node show` 不受影响。
+  带有遮蔽值的扩展不能写回（会被拒绝），修改请用扩展补丁参数。
+- 记录最近一次 Sub-Store 导出时被跳过的节点及原因（`exports/substore.excluded`）：`xm status` 的异常列表里出现 `substore_excluded` 警告，
+  `xm node list --json` 给这些节点加上 `substore_excluded`。端口转发节点本来就没有客户端，不计入。
+- 导出放宽：客户端不带也不影响连通的设置不再让节点被整个拒绝——WebSocket 心跳、mKCP 的容量 / 窗口等本地调优、Hysteria 传输的 UDP 空闲超时、
+  XHTTP 的服务端选项（缓存上传数、stream-up 保活、请求头上限、SSE 头）。这些节点现在可以生成分享链接并进入 Sub-Store；其余无法表达的设置仍会让导出拒绝该节点。
+  已用「分享链接还原成客户端再跑流量」验证。
+
 ## 0.1.0-alpha.52
 
 - `xm node set` 新增 `--xray-inbound-patch` / `--xray-outbound-patch`：只改扩展里的几项（`{"set":{"a.b":值},"unset":["c.d"]}`），不必回传整段扩展；

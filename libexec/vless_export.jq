@@ -41,8 +41,17 @@ def root_options:
 def stream_options:
   only(["network","security","tlsSettings","realitySettings","rawSettings","tcpSettings","wsSettings","grpcSettings","httpupgradeSettings","xhttpSettings","kcpSettings","hysteriaSettings","masqueSettings","xdriveSettings","finalmask"]; $mode+" streamSettings") |
   if $mode!="uri" and (.finalmask // {}|length)>0 then unsupported($mode+" 不支持 Xray finalmask；请使用原生 Xray JSON") else . end;
+# Settings a client can lose without changing what goes over the wire: local
+# tuning (mKCP capacities and windows, the WebSocket ping interval) and options
+# only the server acts on. Dropping them keeps the node exportable; everything
+# else a format cannot express still makes the export refuse the node.
+def drop_local:
+  (if .wsSettings!=null then .wsSettings |= del(.heartbeatPeriod) else . end)
+  | (if .kcpSettings!=null then .kcpSettings |= del(.uplinkCapacity,.downlinkCapacity,.cwndMultiplier,.maxSendingWindow,.congestion,.readBufferSize,.writeBufferSize) else . end)
+  | (if .hysteriaSettings!=null then .hysteriaSettings |= del(.udpIdleTimeout) else . end)
+  | (if .xhttpSettings!=null and (.xhttpSettings|type)=="object" then .xhttpSettings |= del(.scMaxBufferedPosts,.scStreamUpServerSecs,.serverMaxHeaderBytes,.noSSEHeader) else . end);
 def common($o):
-  ($o.streamSettings // {} | stream_options) as $s |
+  ($o.streamSettings // {} | (if $mode=="xray" then . else drop_local end) | stream_options) as $s |
   (if ($o.protocol|IN("vless","vmess")) then ($o.settings.vnext[0]) as $v | ($v.users[0]) as $u |
      {server:$v.address,port:$v.port,uuid:$u.id,encryption:($u.encryption // "none"),flow:($u.flow // ""),cipher:($u.security // "auto")}
    else ($o.settings.servers[0]) as $v |
