@@ -93,6 +93,7 @@ sb_help_full() {
                  [--tls-server-name SNI] [--fingerprint FP] [--alpn a,b] [--pinned-cert-sha256 HEX[,HEX]]
                  [--verify-name NAME[,NAME]] [--handshake-server DOMAIN] [--handshake-port N]
                  VLESS：[--flow FLOW] [--vless-auth x25519|mlkem768|none | --vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
+                 [--reality-mldsa65 true|false] [--ech DOMAIN|none]   自动生成 ML-DSA-65 / ECH 密钥
                  回落（VLESS/Trojan）：[--fallback-dest PORT|HOST:PORT|none] [--fallbacks JSON|@FILE|none]
                  [--sniffing on|route-only|off] [--sniff-dest http,tls,quic,fakedns]
                  [--tcp-fast-open true|false] [--accept-proxy-protocol true|false] [--sockopt-json JSON|@FILE]

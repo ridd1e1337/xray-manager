@@ -24,6 +24,11 @@
    "label": "安全"
   },
   {
+   "id": "sockopt",
+   "label": "Sockopt",
+   "collapsed": true
+  },
+  {
    "id": "sniffing",
    "label": "嗅探",
    "collapsed": true
@@ -493,7 +498,7 @@
   "proxy_protocol": {
    "label": "Proxy Protocol",
    "kind": "select",
-   "group": "transport",
+   "group": "sockopt",
    "flag": "--accept-proxy-protocol",
    "empty_label": "关闭",
    "options": [
@@ -583,7 +588,13 @@
      "value": "off",
      "label": "关闭"
     }
-   ]
+   ],
+   "from": "xray.inbound.sniffing.routeOnly",
+   "from_map": {
+    "true": "route-only",
+    "false": "on"
+   },
+   "edit_empty": "off"
   },
   "sniff_dest": {
    "label": "嗅探协议",
@@ -619,7 +630,7 @@
   "tfo": {
    "label": "TCP Fast Open",
    "kind": "select",
-   "group": "advanced",
+   "group": "sockopt",
    "flag": "--tcp-fast-open",
    "empty_label": "默认",
    "options": [
@@ -646,15 +657,6 @@
     "none"
    ],
    "from": "xray.packet_encoding"
-  },
-  "fallback_dest": {
-   "label": "回落目标",
-   "kind": "text",
-   "group": "advanced",
-   "flag": "--fallback-dest",
-   "placeholder": "端口 或 主机:端口",
-   "note": "非代理流量转发到这里（如本机网站 8080）",
-   "edit_empty": "none"
   },
   "method": {
    "label": "加密方式",
@@ -816,6 +818,1524 @@
    "flag": "--domain",
    "placeholder": "经 Cloudflare 代理的域名",
    "from": "domain"
+  },
+  "raw_http": {
+   "label": "HTTP 伪装",
+   "kind": "switch",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "",
+     "raw"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.rawSettings.header.type",
+     "http"
+    ]
+   ],
+   "note": "把 TCP 流量伪装成 HTTP 请求；不能与 Reality、Vision 同时使用。"
+  },
+  "raw_path": {
+   "label": "请求路径",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "",
+     "raw"
+    ],
+    "raw_http": [
+     "1"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.rawSettings.header.request.path"
+    ]
+   ],
+   "type": "list",
+   "placeholder": "/，多个用逗号分隔"
+  },
+  "raw_host": {
+   "label": "请求 Host",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "",
+     "raw"
+    ],
+    "raw_http": [
+     "1"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.rawSettings.header.request.headers.Host"
+    ]
+   ],
+   "type": "list",
+   "placeholder": "example.com，多个用逗号分隔"
+  },
+  "kcp_mtu": {
+   "label": "MTU",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "kcp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.kcpSettings.mtu"
+    ]
+   ],
+   "default": 1350
+  },
+  "kcp_tti": {
+   "label": "TTI",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "kcp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.kcpSettings.tti"
+    ]
+   ],
+   "default": 20,
+   "suffix": "毫秒"
+  },
+  "kcp_up": {
+   "label": "上行容量",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "kcp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.kcpSettings.uplinkCapacity"
+    ]
+   ],
+   "default": 5,
+   "suffix": "MB/s"
+  },
+  "kcp_down": {
+   "label": "下行容量",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "kcp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.kcpSettings.downlinkCapacity"
+    ]
+   ],
+   "default": 20,
+   "suffix": "MB/s"
+  },
+  "kcp_cwnd": {
+   "label": "CWND 倍数",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "kcp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.kcpSettings.cwndMultiplier"
+    ]
+   ],
+   "default": 1
+  },
+  "kcp_window": {
+   "label": "最大发送窗口",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "kcp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.kcpSettings.maxSendingWindow"
+    ]
+   ],
+   "default": 2097152
+  },
+  "ws_heartbeat": {
+   "label": "心跳间隔",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "ws"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.wsSettings.heartbeatPeriod"
+    ]
+   ],
+   "suffix": "秒",
+   "placeholder": "0 或留空表示关闭"
+  },
+  "ws_headers": {
+   "label": "请求头",
+   "kind": "pairs",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "ws"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.wsSettings.headers"
+    ]
+   ]
+  },
+  "hu_headers": {
+   "label": "请求头",
+   "kind": "pairs",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "httpupgrade"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.httpupgradeSettings.headers"
+    ]
+   ]
+  },
+  "grpc_authority": {
+   "label": "Authority",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "grpc"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.grpcSettings.authority"
+    ]
+   ]
+  },
+  "grpc_multi": {
+   "label": "Multi Mode",
+   "kind": "switch",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "grpc"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.grpcSettings.multiMode"
+    ]
+   ]
+  },
+  "xh_headers": {
+   "label": "请求头",
+   "kind": "pairs",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.headers"
+    ]
+   ]
+  },
+  "xh_padding": {
+   "label": "填充字节数",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.xPaddingBytes"
+    ]
+   ],
+   "placeholder": "默认 100-1000",
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 100-1000"
+  },
+  "xh_obfs": {
+   "label": "填充混淆模式",
+   "kind": "switch",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.xPaddingObfsMode"
+    ]
+   ]
+  },
+  "xh_pad_key": {
+   "label": "填充键名",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ],
+    "xh_obfs": [
+     "1"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.xPaddingKey"
+    ]
+   ],
+   "placeholder": "x_padding"
+  },
+  "xh_pad_header": {
+   "label": "填充请求头",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ],
+    "xh_obfs": [
+     "1"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.xPaddingHeader"
+    ]
+   ],
+   "placeholder": "X-Padding"
+  },
+  "xh_pad_place": {
+   "label": "填充位置",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ],
+    "xh_obfs": [
+     "1"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.xPaddingPlacement"
+    ]
+   ],
+   "options": [
+    "queryInHeader",
+    "header",
+    "cookie",
+    "query"
+   ]
+  },
+  "xh_pad_method": {
+   "label": "填充方式",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ],
+    "xh_obfs": [
+     "1"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.xPaddingMethod"
+    ]
+   ],
+   "options": [
+    "repeat-x",
+    "tokenish"
+   ]
+  },
+  "xh_method": {
+   "label": "上行 HTTP 方法",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.uplinkHTTPMethod"
+    ]
+   ],
+   "options": [
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+    {
+     "value": "GET",
+     "label": "GET（仅 packet-up）"
+    },
+    {
+     "value": "HEAD",
+     "label": "HEAD（仅 packet-up）"
+    }
+   ],
+   "empty_label": "默认（POST）"
+  },
+  "xh_sess_place": {
+   "label": "会话 ID 位置",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.sessionIDPlacement"
+    ]
+   ],
+   "options": [
+    "path",
+    "header",
+    "cookie",
+    "query"
+   ]
+  },
+  "xh_sess_key": {
+   "label": "会话 ID 键名",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.sessionIDKey"
+    ]
+   ]
+  },
+  "xh_sess_table": {
+   "label": "会话 ID 字符集",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.sessionIDTable"
+    ]
+   ],
+   "options": [
+    "ALPHABET",
+    "Alphabet",
+    "BASE36",
+    "Base62",
+    "HEX",
+    "alphabet",
+    "base36",
+    "hex",
+    "number"
+   ]
+  },
+  "xh_sess_len": {
+   "label": "会话 ID 长度",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.sessionIDLength"
+    ]
+   ],
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 100-1000"
+  },
+  "xh_seq_place": {
+   "label": "序号位置",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.seqPlacement"
+    ]
+   ],
+   "options": [
+    "path",
+    "header",
+    "cookie",
+    "query"
+   ]
+  },
+  "xh_seq_key": {
+   "label": "序号键名",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.seqKey"
+    ]
+   ]
+  },
+  "xh_up_place": {
+   "label": "上行数据位置",
+   "kind": "select",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.uplinkDataPlacement"
+    ]
+   ],
+   "options": [
+    "auto",
+    "body",
+    "header",
+    "cookie"
+   ]
+  },
+  "xh_up_key": {
+   "label": "上行数据键名",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.uplinkDataKey"
+    ]
+   ]
+  },
+  "xh_chunk": {
+   "label": "上行分块大小",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.uplinkChunkSize"
+    ]
+   ],
+   "suffix": "字节",
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 100-1000"
+  },
+  "xh_max_post": {
+   "label": "单次上传上限",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.scMaxEachPostBytes"
+    ]
+   ],
+   "suffix": "字节",
+   "placeholder": "默认 1000000",
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 100-1000"
+  },
+  "xh_min_interval": {
+   "label": "最小上传间隔",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.scMinPostsIntervalMs"
+    ]
+   ],
+   "suffix": "毫秒",
+   "placeholder": "默认 30",
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 100-1000"
+  },
+  "xh_buffered": {
+   "label": "最大缓存上传数",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.scMaxBufferedPosts"
+    ]
+   ],
+   "default": 30
+  },
+  "xh_stream_secs": {
+   "label": "stream-up 服务端保活",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.scStreamUpServerSecs"
+    ]
+   ],
+   "suffix": "秒",
+   "placeholder": "默认 20-80",
+   "pattern": "^\\d+(-\\d+)?$",
+   "pattern_hint": "填数字或范围，如 100-1000"
+  },
+  "xh_max_header": {
+   "label": "请求头大小上限",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.serverMaxHeaderBytes"
+    ]
+   ],
+   "suffix": "字节",
+   "placeholder": "0 或留空使用默认"
+  },
+  "xh_no_sse": {
+   "label": "不发送 SSE 响应头",
+   "kind": "switch",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.noSSEHeader"
+    ]
+   ]
+  },
+  "xh_no_grpc": {
+   "label": "不发送 gRPC 请求头",
+   "kind": "switch",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "xhttp"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.xhttpSettings.noGRPCHeader"
+    ]
+   ]
+  },
+  "hy_auth": {
+   "label": "认证密码",
+   "kind": "text",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.hysteriaSettings.auth"
+    ],
+    [
+     "inbound",
+     "streamSettings.hysteriaSettings.version",
+     2
+    ]
+   ],
+   "generate": "password:20",
+   "auto": true,
+   "required": true,
+   "note": "Hysteria 传输走 UDP，安全层必须选 TLS。"
+  },
+  "hy_idle": {
+   "label": "UDP 空闲超时",
+   "kind": "number",
+   "group": "transport",
+   "when": {
+    "transport": [
+     "hysteria"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.hysteriaSettings.udpIdleTimeout"
+    ]
+   ],
+   "suffix": "秒",
+   "placeholder": "2-600，默认 60"
+  },
+  "tls_min": {
+   "label": "最低 TLS 版本",
+   "kind": "select",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.minVersion"
+    ]
+   ],
+   "options": [
+    "1.0",
+    "1.1",
+    "1.2",
+    "1.3"
+   ],
+   "empty_label": "默认（1.2）"
+  },
+  "tls_max": {
+   "label": "最高 TLS 版本",
+   "kind": "select",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.maxVersion"
+    ]
+   ],
+   "options": [
+    "1.0",
+    "1.1",
+    "1.2",
+    "1.3"
+   ],
+   "empty_label": "默认（1.3）"
+  },
+  "tls_ciphers": {
+   "label": "加密套件",
+   "kind": "tags",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.cipherSuites"
+    ]
+   ],
+   "join": ":",
+   "note": "不选表示自动；只对 TLS 1.2 及以下生效。",
+   "options": [
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+    "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+   ]
+  },
+  "tls_curves": {
+   "label": "密钥交换曲线",
+   "kind": "tags",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "type": "list",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.curvePreferences"
+    ]
+   ],
+   "options": [
+    "X25519MLKEM768",
+    "X25519",
+    "CurveP256",
+    "CurveP384",
+    "CurveP521"
+   ]
+  },
+  "tls_reject_sni": {
+   "label": "拒绝未知 SNI",
+   "kind": "switch",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.rejectUnknownSni"
+    ]
+   ]
+  },
+  "tls_no_sysroot": {
+   "label": "禁用系统根证书",
+   "kind": "switch",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.disableSystemRoot"
+    ]
+   ]
+  },
+  "tls_resume": {
+   "label": "会话恢复",
+   "kind": "switch",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.tlsSettings.enableSessionResumption"
+    ]
+   ]
+  },
+  "ech": {
+   "label": "ECH",
+   "kind": "text",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "flag": "--ech",
+   "placeholder": "对外公开的域名，留空不启用",
+   "note": "填写后自动生成 ECH 密钥，客户端配置随分享链接下发。",
+   "from": "xray.ech_name",
+   "edit_empty": "none"
+  },
+  "pin_cert": {
+   "label": "证书指纹固定",
+   "kind": "text",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "flag": "--pinned-cert-sha256",
+   "placeholder": "证书 SHA-256，多个用逗号分隔",
+   "note": "自签或私有 CA 证书时填写，客户端只信任这些证书。",
+   "pattern": "^[0-9a-fA-F: ]{64,}(,[0-9a-fA-F: ]{64,})*$",
+   "pattern_hint": "64 位十六进制的 SHA-256 指纹",
+   "from": "xray.outbound.streamSettings.tlsSettings.pinnedPeerCertSha256"
+  },
+  "verify_name": {
+   "label": "按名称校验证书",
+   "kind": "text",
+   "group": "security",
+   "when": {
+    "security": [
+     "tls"
+    ]
+   },
+   "flag": "--verify-name",
+   "placeholder": "证书里的域名，多个用逗号分隔",
+   "from": "xray.outbound.streamSettings.tlsSettings.verifyPeerCertByName"
+  },
+  "r_mldsa": {
+   "label": "ML-DSA-65 抗量子签名",
+   "kind": "select",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "flag": "--reality-mldsa65",
+   "empty_label": "关闭",
+   "options": [
+    {
+     "value": "true",
+     "label": "开启"
+    }
+   ],
+   "note": "开启后自动生成密钥；sing-box 客户端不支持。",
+   "from": "xray.inbound.streamSettings.realitySettings.mldsa65Seed",
+   "from_match": [
+    [
+     ".",
+     "true"
+    ]
+   ],
+   "edit_empty": "false"
+  },
+  "r_xver": {
+   "label": "Xver（PROXY protocol）",
+   "kind": "select",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.xver"
+    ]
+   ],
+   "options": [
+    {
+     "value": "1",
+     "label": "1"
+    },
+    {
+     "value": "2",
+     "label": "2"
+    }
+   ],
+   "type": "int",
+   "empty_label": "0（关闭）",
+   "from_map": {
+    "0": ""
+   }
+  },
+  "r_spider": {
+   "label": "SpiderX",
+   "kind": "text",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "outbound",
+     "streamSettings.realitySettings.spiderX"
+    ]
+   ],
+   "placeholder": "默认 /"
+  },
+  "r_timediff": {
+   "label": "最大时间差",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.maxTimediff"
+    ]
+   ],
+   "suffix": "毫秒",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_min_ver": {
+   "label": "最低客户端版本",
+   "kind": "text",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.minClientVer"
+    ]
+   ],
+   "placeholder": "如 25.9.11",
+   "pattern": "^\\d+\\.\\d+\\.\\d+$",
+   "pattern_hint": "x.y.z"
+  },
+  "r_max_ver": {
+   "label": "最高客户端版本",
+   "kind": "text",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.maxClientVer"
+    ]
+   ],
+   "placeholder": "如 26.12.31",
+   "pattern": "^\\d+\\.\\d+\\.\\d+$",
+   "pattern_hint": "x.y.z"
+  },
+  "r_up_after": {
+   "label": "回落上传限速起点",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.limitFallbackUpload.afterBytes"
+    ]
+   ],
+   "suffix": "字节",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_up_bytes": {
+   "label": "回落上传限速",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.limitFallbackUpload.bytesPerSec"
+    ]
+   ],
+   "suffix": "字节/秒",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_up_burst": {
+   "label": "回落上传突发速率",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.limitFallbackUpload.burstBytesPerSec"
+    ]
+   ],
+   "suffix": "字节/秒",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_do_after": {
+   "label": "回落下载限速起点",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.limitFallbackDownload.afterBytes"
+    ]
+   ],
+   "suffix": "字节",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_do_bytes": {
+   "label": "回落下载限速",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.limitFallbackDownload.bytesPerSec"
+    ]
+   ],
+   "suffix": "字节/秒",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_do_burst": {
+   "label": "回落下载突发速率",
+   "kind": "number",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.limitFallbackDownload.burstBytesPerSec"
+    ]
+   ],
+   "suffix": "字节/秒",
+   "placeholder": "0 或留空表示不限"
+  },
+  "r_show": {
+   "label": "输出调试信息",
+   "kind": "switch",
+   "group": "security",
+   "when": {
+    "security": [
+     "reality"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "streamSettings.realitySettings.show"
+    ]
+   ]
+  },
+  "so_mark": {
+   "label": "路由标记（mark）",
+   "kind": "number",
+   "group": "sockopt",
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.mark"
+    ]
+   ]
+  },
+  "so_keepalive_interval": {
+   "label": "TCP 保活间隔",
+   "kind": "number",
+   "group": "sockopt",
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpKeepAliveInterval"
+    ]
+   ],
+   "suffix": "秒"
+  },
+  "so_keepalive_idle": {
+   "label": "TCP 保活空闲",
+   "kind": "number",
+   "group": "sockopt",
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpKeepAliveIdle"
+    ]
+   ],
+   "suffix": "秒"
+  },
+  "so_maxseg": {
+   "label": "TCP 最大分段",
+   "kind": "number",
+   "group": "sockopt",
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpMaxSeg"
+    ]
+   ],
+   "suffix": "字节"
+  },
+  "so_user_timeout": {
+   "label": "TCP 用户超时",
+   "kind": "number",
+   "group": "sockopt",
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpUserTimeout"
+    ]
+   ],
+   "suffix": "毫秒"
+  },
+  "so_window_clamp": {
+   "label": "TCP 窗口上限",
+   "kind": "number",
+   "group": "sockopt",
+   "type": "int",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpWindowClamp"
+    ]
+   ],
+   "suffix": "字节"
+  },
+  "so_congestion": {
+   "label": "拥塞控制",
+   "kind": "select",
+   "group": "sockopt",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpcongestion"
+    ]
+   ],
+   "options": [
+    "bbr",
+    "cubic",
+    "reno"
+   ],
+   "empty_label": "系统默认"
+  },
+  "so_tproxy": {
+   "label": "透明代理",
+   "kind": "select",
+   "group": "sockopt",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tproxy"
+    ]
+   ],
+   "options": [
+    "redirect",
+    "tproxy"
+   ],
+   "empty_label": "关闭",
+   "from_map": {
+    "off": ""
+   }
+  },
+  "so_mptcp": {
+   "label": "多路径 TCP",
+   "kind": "switch",
+   "group": "sockopt",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.tcpMptcp"
+    ]
+   ]
+  },
+  "so_penetrate": {
+   "label": "Penetrate",
+   "kind": "switch",
+   "group": "sockopt",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.penetrate"
+    ]
+   ]
+  },
+  "so_v6only": {
+   "label": "仅 IPv6",
+   "kind": "switch",
+   "group": "sockopt",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.V6Only"
+    ]
+   ]
+  },
+  "so_xff": {
+   "label": "信任的转发头",
+   "kind": "tags",
+   "group": "sockopt",
+   "type": "list",
+   "set": [
+    [
+     "inbound",
+     "streamSettings.sockopt.trustedXForwardedFor"
+    ]
+   ],
+   "options": [
+    "CF-Connecting-IP",
+    "X-Real-IP",
+    "True-Client-IP",
+    "X-Client-IP"
+   ],
+   "note": "从这些请求头读取真实客户端地址（在 CDN 或反代后面时使用）。"
+  },
+  "sniff_meta": {
+   "label": "仅用元数据",
+   "kind": "switch",
+   "group": "sniffing",
+   "when": {
+    "sniffing": [
+     "on",
+     "route-only"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "sniffing.metadataOnly"
+    ]
+   ]
+  },
+  "sniff_domains_ex": {
+   "label": "排除域名",
+   "kind": "text",
+   "group": "sniffing",
+   "when": {
+    "sniffing": [
+     "on",
+     "route-only"
+    ]
+   },
+   "type": "list",
+   "set": [
+    [
+     "inbound",
+     "sniffing.domainsExcluded"
+    ]
+   ],
+   "placeholder": "多个用逗号分隔"
+  },
+  "sniff_ips_ex": {
+   "label": "排除 IP",
+   "kind": "text",
+   "group": "sniffing",
+   "when": {
+    "sniffing": [
+     "on",
+     "route-only"
+    ]
+   },
+   "type": "list",
+   "set": [
+    [
+     "inbound",
+     "sniffing.ipsExcluded"
+    ]
+   ],
+   "placeholder": "IP、网段或 geoip:cn，多个用逗号分隔"
+  },
+  "fallbacks": {
+   "label": "回落",
+   "kind": "rows",
+   "group": "advanced",
+   "when": {
+    "transport": [
+     "",
+     "raw"
+    ],
+    "security": [
+     "tls"
+    ]
+   },
+   "set": [
+    [
+     "inbound",
+     "settings.fallbacks"
+    ]
+   ],
+   "add_label": "添加回落",
+   "note": "非代理流量按 SNI / ALPN / 路径转发到目标（端口 或 主机:端口）；仅 RAW + TLS 可用。",
+   "columns": [
+    {
+     "key": "name",
+     "label": "SNI"
+    },
+    {
+     "key": "alpn",
+     "label": "ALPN",
+     "options": [
+      {
+       "value": "",
+       "label": "任意 ALPN"
+      },
+      "h2",
+      "http/1.1"
+     ]
+    },
+    {
+     "key": "path",
+     "label": "路径"
+    },
+    {
+     "key": "dest",
+     "label": "目标",
+     "type": "auto",
+     "required": true
+    },
+    {
+     "key": "xver",
+     "label": "Xver",
+     "type": "int",
+     "options": [
+      {
+       "value": "",
+       "label": "Xver 0"
+      },
+      {
+       "value": "1",
+       "label": "Xver 1"
+      },
+      {
+       "value": "2",
+       "label": "Xver 2"
+      }
+     ]
+    }
+   ]
   }
  },
  "protocols": [
@@ -836,12 +2356,79 @@
     "uuid",
     "flow",
     "vless_auth",
-    "transport",
+    {
+     "key": "transport",
+     "options": [
+      {
+       "value": "kcp",
+       "label": "mKCP"
+      },
+      {
+       "value": "ws",
+       "label": "WebSocket"
+      },
+      {
+       "value": "grpc",
+       "label": "gRPC"
+      },
+      {
+       "value": "httpupgrade",
+       "label": "HTTPUpgrade"
+      },
+      {
+       "value": "xhttp",
+       "label": "XHTTP"
+      },
+      {
+       "value": "hysteria",
+       "label": "Hysteria"
+      }
+     ]
+    },
     "t_host",
     "t_path",
     "t_service",
     "xhttp_mode",
-    "proxy_protocol",
+    "raw_http",
+    "raw_path",
+    "raw_host",
+    "kcp_mtu",
+    "kcp_tti",
+    "kcp_up",
+    "kcp_down",
+    "kcp_cwnd",
+    "kcp_window",
+    "ws_heartbeat",
+    "ws_headers",
+    "hu_headers",
+    "grpc_authority",
+    "grpc_multi",
+    "xh_headers",
+    "xh_padding",
+    "xh_obfs",
+    "xh_pad_key",
+    "xh_pad_header",
+    "xh_pad_place",
+    "xh_pad_method",
+    "xh_method",
+    "xh_sess_place",
+    "xh_sess_key",
+    "xh_sess_table",
+    "xh_sess_len",
+    "xh_seq_place",
+    "xh_seq_key",
+    "xh_up_place",
+    "xh_up_key",
+    "xh_chunk",
+    "xh_max_post",
+    "xh_min_interval",
+    "xh_buffered",
+    "xh_stream_secs",
+    "xh_max_header",
+    "xh_no_sse",
+    "xh_no_grpc",
+    "hy_auth",
+    "hy_idle",
     {
      "key": "security",
      "options": [
@@ -870,6 +2457,16 @@
     "tls_sni",
     "utls",
     "alpn",
+    "tls_min",
+    "tls_max",
+    "tls_ciphers",
+    "tls_curves",
+    "tls_reject_sni",
+    "tls_no_sysroot",
+    "tls_resume",
+    "ech",
+    "pin_cert",
+    "verify_name",
     {
      "key": "sni",
      "when": {
@@ -910,11 +2507,40 @@
       ]
      }
     },
+    "r_mldsa",
+    "r_xver",
+    "r_spider",
+    "r_timediff",
+    "r_min_ver",
+    "r_max_ver",
+    "r_up_after",
+    "r_up_bytes",
+    "r_up_burst",
+    "r_do_after",
+    "r_do_bytes",
+    "r_do_burst",
+    "r_show",
     "sniffing",
     "sniff_dest",
+    "sniff_meta",
+    "sniff_domains_ex",
+    "sniff_ips_ex",
+    "proxy_protocol",
     "tfo",
+    "so_mark",
+    "so_keepalive_interval",
+    "so_keepalive_idle",
+    "so_maxseg",
+    "so_user_timeout",
+    "so_window_clamp",
+    "so_congestion",
+    "so_tproxy",
+    "so_mptcp",
+    "so_penetrate",
+    "so_v6only",
+    "so_xff",
     "packet_encoding",
-    "fallback_dest"
+    "fallbacks"
    ],
    "state": "vless"
   },
@@ -937,7 +2563,44 @@
     "t_path",
     "t_service",
     "xhttp_mode",
-    "proxy_protocol",
+    "raw_http",
+    "raw_path",
+    "raw_host",
+    "kcp_mtu",
+    "kcp_tti",
+    "kcp_up",
+    "kcp_down",
+    "kcp_cwnd",
+    "kcp_window",
+    "ws_heartbeat",
+    "ws_headers",
+    "hu_headers",
+    "grpc_authority",
+    "grpc_multi",
+    "xh_headers",
+    "xh_padding",
+    "xh_obfs",
+    "xh_pad_key",
+    "xh_pad_header",
+    "xh_pad_place",
+    "xh_pad_method",
+    "xh_method",
+    "xh_sess_place",
+    "xh_sess_key",
+    "xh_sess_table",
+    "xh_sess_len",
+    "xh_seq_place",
+    "xh_seq_key",
+    "xh_up_place",
+    "xh_up_key",
+    "xh_chunk",
+    "xh_max_post",
+    "xh_min_interval",
+    "xh_buffered",
+    "xh_stream_secs",
+    "xh_max_header",
+    "xh_no_sse",
+    "xh_no_grpc",
     {
      "key": "security",
      "options": [
@@ -962,6 +2625,16 @@
     "tls_sni",
     "utls",
     "alpn",
+    "tls_min",
+    "tls_max",
+    "tls_ciphers",
+    "tls_curves",
+    "tls_reject_sni",
+    "tls_no_sysroot",
+    "tls_resume",
+    "ech",
+    "pin_cert",
+    "verify_name",
     {
      "key": "sni",
      "when": {
@@ -1002,9 +2675,38 @@
       ]
      }
     },
+    "r_mldsa",
+    "r_xver",
+    "r_spider",
+    "r_timediff",
+    "r_min_ver",
+    "r_max_ver",
+    "r_up_after",
+    "r_up_bytes",
+    "r_up_burst",
+    "r_do_after",
+    "r_do_bytes",
+    "r_do_burst",
+    "r_show",
     "sniffing",
     "sniff_dest",
-    "tfo"
+    "sniff_meta",
+    "sniff_domains_ex",
+    "sniff_ips_ex",
+    "proxy_protocol",
+    "tfo",
+    "so_mark",
+    "so_keepalive_interval",
+    "so_keepalive_idle",
+    "so_maxseg",
+    "so_user_timeout",
+    "so_window_clamp",
+    "so_congestion",
+    "so_tproxy",
+    "so_mptcp",
+    "so_penetrate",
+    "so_v6only",
+    "so_xff"
    ],
    "state": "vmess"
   },
@@ -1027,7 +2729,44 @@
     "t_path",
     "t_service",
     "xhttp_mode",
-    "proxy_protocol",
+    "raw_http",
+    "raw_path",
+    "raw_host",
+    "kcp_mtu",
+    "kcp_tti",
+    "kcp_up",
+    "kcp_down",
+    "kcp_cwnd",
+    "kcp_window",
+    "ws_heartbeat",
+    "ws_headers",
+    "hu_headers",
+    "grpc_authority",
+    "grpc_multi",
+    "xh_headers",
+    "xh_padding",
+    "xh_obfs",
+    "xh_pad_key",
+    "xh_pad_header",
+    "xh_pad_place",
+    "xh_pad_method",
+    "xh_method",
+    "xh_sess_place",
+    "xh_sess_key",
+    "xh_sess_table",
+    "xh_sess_len",
+    "xh_seq_place",
+    "xh_seq_key",
+    "xh_up_place",
+    "xh_up_key",
+    "xh_chunk",
+    "xh_max_post",
+    "xh_min_interval",
+    "xh_buffered",
+    "xh_stream_secs",
+    "xh_max_header",
+    "xh_no_sse",
+    "xh_no_grpc",
     {
      "key": "security",
      "options": [
@@ -1052,6 +2791,16 @@
     "tls_sni",
     "utls",
     "alpn",
+    "tls_min",
+    "tls_max",
+    "tls_ciphers",
+    "tls_curves",
+    "tls_reject_sni",
+    "tls_no_sysroot",
+    "tls_resume",
+    "ech",
+    "pin_cert",
+    "verify_name",
     {
      "key": "sni",
      "when": {
@@ -1092,10 +2841,39 @@
       ]
      }
     },
+    "r_mldsa",
+    "r_xver",
+    "r_spider",
+    "r_timediff",
+    "r_min_ver",
+    "r_max_ver",
+    "r_up_after",
+    "r_up_bytes",
+    "r_up_burst",
+    "r_do_after",
+    "r_do_bytes",
+    "r_do_burst",
+    "r_show",
     "sniffing",
     "sniff_dest",
+    "sniff_meta",
+    "sniff_domains_ex",
+    "sniff_ips_ex",
+    "proxy_protocol",
     "tfo",
-    "fallback_dest"
+    "so_mark",
+    "so_keepalive_interval",
+    "so_keepalive_idle",
+    "so_maxseg",
+    "so_user_timeout",
+    "so_window_clamp",
+    "so_congestion",
+    "so_tproxy",
+    "so_mptcp",
+    "so_penetrate",
+    "so_v6only",
+    "so_xff",
+    "fallbacks"
    ],
    "state": "trojan"
   },
@@ -1115,9 +2893,103 @@
     "cred_auto",
     "method",
     "ss_network",
+    "transport",
+    "t_host",
+    "t_path",
+    "t_service",
+    "xhttp_mode",
+    "raw_http",
+    "raw_path",
+    "raw_host",
+    "kcp_mtu",
+    "kcp_tti",
+    "kcp_up",
+    "kcp_down",
+    "kcp_cwnd",
+    "kcp_window",
+    "ws_heartbeat",
+    "ws_headers",
+    "hu_headers",
+    "grpc_authority",
+    "grpc_multi",
+    "xh_headers",
+    "xh_padding",
+    "xh_obfs",
+    "xh_pad_key",
+    "xh_pad_header",
+    "xh_pad_place",
+    "xh_pad_method",
+    "xh_method",
+    "xh_sess_place",
+    "xh_sess_key",
+    "xh_sess_table",
+    "xh_sess_len",
+    "xh_seq_place",
+    "xh_seq_key",
+    "xh_up_place",
+    "xh_up_key",
+    "xh_chunk",
+    "xh_max_post",
+    "xh_min_interval",
+    "xh_buffered",
+    "xh_stream_secs",
+    "xh_max_header",
+    "xh_no_sse",
+    "xh_no_grpc",
+    {
+     "key": "security",
+     "required": false,
+     "empty_label": "无",
+     "options": [
+      {
+       "value": "tls",
+       "label": "TLS"
+      }
+     ],
+     "from_map": {
+      "none": ""
+     }
+    },
+    {
+     "key": "domain",
+     "when": {
+      "security": [
+       "tls"
+      ]
+     }
+    },
+    "tls_sni",
+    "utls",
+    "alpn",
+    "tls_min",
+    "tls_max",
+    "tls_ciphers",
+    "tls_curves",
+    "tls_reject_sni",
+    "tls_no_sysroot",
+    "tls_resume",
+    "ech",
+    "pin_cert",
+    "verify_name",
     "sniffing",
     "sniff_dest",
-    "tfo"
+    "sniff_meta",
+    "sniff_domains_ex",
+    "sniff_ips_ex",
+    "proxy_protocol",
+    "tfo",
+    "so_mark",
+    "so_keepalive_interval",
+    "so_keepalive_idle",
+    "so_maxseg",
+    "so_user_timeout",
+    "so_window_clamp",
+    "so_congestion",
+    "so_tproxy",
+    "so_mptcp",
+    "so_penetrate",
+    "so_v6only",
+    "so_xff"
    ],
    "state": "shadowsocks"
   },
@@ -1288,5 +3160,13 @@
    "set",
    "{id}"
   ]
+ },
+ "json_flags": {
+  "inbound": "--xray-inbound-json",
+  "outbound": "--xray-outbound-json"
+ },
+ "ext_from": {
+  "inbound": "xray.inbound",
+  "outbound": "xray.outbound"
  }
 }

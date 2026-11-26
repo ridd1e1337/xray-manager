@@ -18,7 +18,7 @@ vless_config_apply() {
       --xray-inbound-json|--xray-outbound-json|--transport-json|--tls-json|--sockopt-json)
         value=$(node_json_argument "$value") || return 1
         node_validate_json_object "$key" "$value" || return 1;;
-      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
+      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--reality-mldsa65|--ech|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
       *) log_error "未知 VLESS 参数：$key"; return 1;;
     esac
     options[$key]=$value
@@ -35,10 +35,7 @@ vless_config_apply() {
     case "${options[--vless-auth]}" in
       none) options[--vless-encryption]=none; options[--vless-decryption]=none;;
       x25519|mlkem768)
-        if [[ ! -x "$SBM_XRAY_BIN" ]]; then
-          [[ ${SBM_DRY_RUN:-0} != 1 ]] || { log_error '生成 VLESS Encryption 密钥需要先安装 Xray：xm xray install。'; return 1; }
-          _xray_install >&2 || return 1
-        fi
+        vless_keygen_ready || return 1
         value=$(xray_vless_keys "${options[--vless-auth]}") || { log_error '当前 Xray 无法生成 VLESS Encryption 密钥，请先更新内核：xm core update。'; return 1; }
         options[--vless-decryption]=$(jq -er '.decryption' <<<"$value") || return 1
         options[--vless-encryption]=$(jq -er '.encryption' <<<"$value") || return 1;;
@@ -175,6 +172,46 @@ vless_config_apply() {
         node=$(jq --arg field "$json" --arg value "$value" 'if $value=="" then del(.xray.outbound.streamSettings.tlsSettings[$field]) else .xray.outbound.streamSettings.tlsSettings[$field]=$value end' <<<"$node") || return 1;;
     esac
   done
+  # Server-generated key material: the operator picks on/off (or a name), the
+  # paired client value is derived or stored next to it.
+  if [[ -v options[--reality-mldsa65] ]]; then
+    case "${options[--reality-mldsa65]}" in
+      false|none|'') node=$(jq 'del(.xray.inbound.streamSettings.realitySettings.mldsa65Seed, .xray.outbound.streamSettings.realitySettings.mldsa65Verify)' <<<"$node") || return 1;;
+      true)
+        [[ "$security" == reality ]] || { log_error '--reality-mldsa65 需要 Reality。'; return 1; }
+        if ! jq -e '(.xray.inbound.streamSettings.realitySettings.mldsa65Seed // "") != ""' <<<"$node" >/dev/null; then
+          vless_keygen_ready || return 1
+          value=$("$SBM_XRAY_BIN" mldsa65 2>/dev/null) || value=''
+          value=$(awk -F': *' '$1=="Seed" {print $2; exit}' <<<"$value")
+          [[ "$value" =~ ^[A-Za-z0-9_-]{43}$ ]] || { log_error '当前 Xray 无法生成 ML-DSA-65 密钥，请先更新内核：xm core update。'; return 1; }
+          node=$(jq --arg value "$value" '.xray.inbound.streamSettings.realitySettings.mldsa65Seed=$value' <<<"$node") || return 1
+        fi;;
+      *) log_error '--reality-mldsa65 只能是 true 或 false。'; return 1;;
+    esac
+  fi
+  if [[ -v options[--ech] ]]; then
+    value=${options[--ech]}
+    if [[ -z "$value" || "$value" == none ]]; then
+      node=$(jq 'del(.xray.inbound.streamSettings.tlsSettings.echServerKeys, .xray.outbound.streamSettings.tlsSettings.echConfigList, .xray.ech_name)' <<<"$node") || return 1
+    else
+      [[ "$security" == tls ]] || { log_error '--ech 需要 TLS。'; return 1; }
+      validate_domain "$value" || { log_error '--ech 需要一个域名（ECH 对外公开的名称）。'; return 1; }
+      if [[ $(jq -r '.xray.ech_name // ""' <<<"$node") != "$value" ]] || ! jq -e '(.xray.inbound.streamSettings.tlsSettings.echServerKeys // "") != ""' <<<"$node" >/dev/null; then
+        vless_keygen_ready || return 1
+        json=$("$SBM_XRAY_BIN" tls ech --serverName "$value" 2>/dev/null) || json=''
+        json=$(awk '
+          /config list/ {k="c"; sub(/^.*config list:?[ \t]*/, ""); if ($0!="") {c=$0; k=""}; next}
+          /server keys/ {k="s"; sub(/^.*server keys:?[ \t]*/, ""); if ($0!="") {s=$0; k=""}; next}
+          k=="c" && NF {c=$1; k=""; next}
+          k=="s" && NF {s=$1; k=""; next}
+          END {print c "\t" s}' <<<"$json")
+        [[ "$json" =~ ^[A-Za-z0-9+/=]{16,}$'\t'[A-Za-z0-9+/=]{16,}$ ]] || { log_error '当前 Xray 无法生成 ECH 密钥，请先更新内核：xm core update。'; return 1; }
+        node=$(jq --arg name "$value" --arg config "${json%%$'\t'*}" --arg keys "${json##*$'\t'}" '
+          .xray.ech_name=$name | .xray.inbound.streamSettings.tlsSettings.echServerKeys=$keys
+          | .xray.outbound.streamSettings.tlsSettings.echConfigList=$config' <<<"$node") || return 1
+      fi
+    fi
+  fi
   for key in --vless-encryption --vless-decryption; do
     [[ -v options[$key] ]] || continue
     value=${options[$key]}; value=${value:-none}
@@ -255,6 +292,13 @@ vless_config_apply() {
   node=$(jq --arg flow "$flow" '.flow=(if $flow=="" then null else $flow end)' <<<"$node") || return 1
   vless_server_options_check "$node" || return 1
   printf '%s\n' "$node"
+}
+
+# Key generation needs the Xray binary; install it unless this is a dry run.
+vless_keygen_ready() {
+  [[ -x "$SBM_XRAY_BIN" ]] && return 0
+  [[ ${SBM_DRY_RUN:-0} != 1 ]] || { log_error '生成密钥需要先安装 Xray：xm xray install。'; return 1; }
+  _xray_install >&2
 }
 
 vless_fallbacks_validate() {

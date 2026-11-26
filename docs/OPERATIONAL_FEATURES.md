@@ -264,6 +264,8 @@ raw|ws|grpc|httpupgrade|xhttp|kcp|hysteria --security none|tls|reality` 及
 sing-box、mihomo 时，无法完整表达的字段会跳过该节点并提示原因；完整原生配置
 可用 Xray 客户端导出。公网 `security none` 必须启用 VLESS Encryption。
 `--vless-auth x25519|mlkem768|none` 自动生成配对的加密密钥（`none` 关闭），无需手工传入两段密钥。
+`--reality-mldsa65 true|false` 为 Reality 生成 ML-DSA-65 密钥；`--ech 域名|none` 为 TLS 生成 ECH 密钥，
+服务端密钥写入入站扩展，客户端 `echConfigList` 写入出站扩展。
 
 ## VLESS 回落、嗅探、证书固定与用户限额（alpha.74）
 

@@ -4,6 +4,21 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.48
+
+- `xm node schema`：按 3x-ui「添加入站」补齐 VLESS / VMess / Trojan / Shadowsocks 的细项，全部是结构化字段，写入节点的 Xray 入站 / 出站扩展
+  （顶层新增 `json_flags`、`ext_from`）：
+  - 传输：RAW 的 HTTP 伪装（路径、Host）；mKCP 的 MTU、TTI、上下行容量、CWND 倍数、发送窗口；WebSocket 的心跳与请求头；HTTPUpgrade 请求头；
+    gRPC 的 Authority 与 Multi Mode；XHTTP 的请求头、填充（含混淆模式）、会话 ID、序号、上行数据位置、上传大小与间隔、SSE / gRPC 头开关；
+    VLESS 新增 Hysteria 传输（认证密码、UDP 空闲超时）。
+  - TLS：最低 / 最高版本、加密套件、密钥交换曲线、拒绝未知 SNI、禁用系统根证书、会话恢复、ECH、证书指纹固定、按名称校验证书。
+  - Reality：ML-DSA-65、Xver、SpiderX、最大时间差、客户端版本范围、回落限速、调试输出。
+  - Sockopt（新分节）：mark、TCP 保活 / 最大分段 / 用户超时 / 窗口上限、拥塞控制、透明代理、多路径 TCP、Penetrate、仅 IPv6、信任的转发头。
+  - 嗅探：仅用元数据、排除域名、排除 IP。回落改为多条（SNI、ALPN、路径、目标、Xver），取代原来的单个回落目标。
+  - Shadowsocks 可选传输与 TLS。
+- 新增 `--reality-mldsa65 true|false`（自动生成 ML-DSA-65 密钥）与 `--ech 域名|none`（自动生成 ECH 密钥，客户端配置写入出站扩展）。
+- 表单描述新增字段类型 `pairs`（名称 → 值）、`rows`（多行表格，`columns`），以及 `join`、`from_match`。
+
 ## 0.1.0-alpha.47
 
 - `xm node add vless` / `xm node set` 新增 `--vless-auth x25519|mlkem768|none`：自动生成配对的 VLESS Encryption 密钥并写入服务端
