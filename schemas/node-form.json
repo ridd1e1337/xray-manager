@@ -352,6 +352,40 @@
    "hidden_emit": "",
    "from": "flow"
   },
+  "vless_auth": {
+   "label": "VLESS 加密",
+   "kind": "radio",
+   "group": "client",
+   "flag": "--vless-auth",
+   "empty_label": "不启用",
+   "options": [
+    {
+     "value": "x25519",
+     "label": "X25519"
+    },
+    {
+     "value": "mlkem768",
+     "label": "ML-KEM-768（抗量子）"
+    }
+   ],
+   "note": "在传输层之外再加一层加密，密钥对在保存时自动生成并写进分享链接。需要 Xray 内核或 mihomo 客户端，sing-box 客户端不支持。",
+   "from": "xray.inbound.settings.decryption",
+   "from_match": [
+    [
+     "^none$",
+     ""
+    ],
+    [
+     "\\.[A-Za-z0-9_-]{86}$",
+     "mlkem768"
+    ],
+    [
+     "\\.[A-Za-z0-9_-]{43}$",
+     "x25519"
+    ]
+   ],
+   "edit_empty": "none"
+  },
   "transport": {
    "label": "传输",
    "kind": "radio",
@@ -801,6 +835,7 @@
     "expiry",
     "uuid",
     "flow",
+    "vless_auth",
     "transport",
     "t_host",
     "t_path",

@@ -18,15 +18,32 @@ vless_config_apply() {
       --xray-inbound-json|--xray-outbound-json|--transport-json|--tls-json|--sockopt-json)
         value=$(node_json_argument "$value") || return 1
         node_validate_json_object "$key" "$value" || return 1;;
-      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
+      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
       *) log_error "未知 VLESS 参数：$key"; return 1;;
     esac
     options[$key]=$value
   done
   if [[ "$protocol" != vless ]]; then
-    for key in --flow --vless-encryption --vless-decryption --packet-encoding; do
+    for key in --flow --vless-encryption --vless-decryption --vless-auth --packet-encoding; do
       [[ ! -v options[$key] ]] || { log_error "$key 仅用于 VLESS。"; return 1; }
     done
+  fi
+  # --vless-auth generates the paired keys here, so neither the operator nor
+  # the web panel ever has to carry a private key between two fields.
+  if [[ -v options[--vless-auth] ]]; then
+    [[ ! -v options[--vless-encryption] && ! -v options[--vless-decryption] ]] || { log_error '--vless-auth 自动生成密钥，不能与 --vless-encryption / --vless-decryption 同时使用。'; return 1; }
+    case "${options[--vless-auth]}" in
+      none) options[--vless-encryption]=none; options[--vless-decryption]=none;;
+      x25519|mlkem768)
+        if [[ ! -x "$SBM_XRAY_BIN" ]]; then
+          [[ ${SBM_DRY_RUN:-0} != 1 ]] || { log_error '生成 VLESS Encryption 密钥需要先安装 Xray：xm xray install。'; return 1; }
+          _xray_install >&2 || return 1
+        fi
+        value=$(xray_vless_keys "${options[--vless-auth]}") || { log_error '当前 Xray 无法生成 VLESS Encryption 密钥，请先更新内核：xm core update。'; return 1; }
+        options[--vless-decryption]=$(jq -er '.decryption' <<<"$value") || return 1
+        options[--vless-encryption]=$(jq -er '.encryption' <<<"$value") || return 1;;
+      *) log_error '--vless-auth 只能是 x25519、mlkem768 或 none。'; return 1;;
+    esac
   fi
   if [[ "${options[--security]:-}" == reality && ! "$protocol" =~ ^(vless|trojan)$ ]]; then
     log_error 'Xray 的 REALITY 只用于 VLESS 与 Trojan。'; return 1

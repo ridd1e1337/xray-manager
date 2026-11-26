@@ -92,7 +92,7 @@ sb_help_full() {
                  [--security none|tls|reality] [--host H] [--service-name N] [--xhttp-mode MODE]
                  [--tls-server-name SNI] [--fingerprint FP] [--alpn a,b] [--pinned-cert-sha256 HEX[,HEX]]
                  [--verify-name NAME[,NAME]] [--handshake-server DOMAIN] [--handshake-port N]
-                 VLESS：[--flow FLOW] [--vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
+                 VLESS：[--flow FLOW] [--vless-auth x25519|mlkem768|none | --vless-encryption E --vless-decryption D] [--packet-encoding xudp|packetaddr|none]
                  回落（VLESS/Trojan）：[--fallback-dest PORT|HOST:PORT|none] [--fallbacks JSON|@FILE|none]
                  [--sniffing on|route-only|off] [--sniff-dest http,tls,quic,fakedns]
                  [--tcp-fast-open true|false] [--accept-proxy-protocol true|false] [--sockopt-json JSON|@FILE]

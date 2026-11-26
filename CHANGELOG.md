@@ -4,6 +4,13 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.47
+
+- `xm node add vless` / `xm node set` 新增 `--vless-auth x25519|mlkem768|none`：自动生成配对的 VLESS Encryption 密钥并写入服务端
+  decryption 与客户端 encryption，`none` 关闭；不能与 `--vless-encryption` / `--vless-decryption` 同时使用。
+- `xm node schema`：VLESS 新增「VLESS 加密」（不启用 / X25519 / ML-KEM-768），网页面板添加和编辑节点时可直接选择，不需要填写密钥。
+  字段新增 `from_match`（按正则把现有值换成选项值）。
+
 ## 0.1.0-alpha.46
 
 - `xm node schema`：每个字段标明现有节点里对应的值在哪里（`from`）、创建后能否修改（`edit`、`create_only`），并给出修改命令（顶层 `edit`），
