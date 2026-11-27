@@ -18,3 +18,7 @@ __pycache__/
 
 # Runtime leftovers
 .tmp/
+
+# Cores downloaded when xm runs from this checkout
+bin/
+cores/
