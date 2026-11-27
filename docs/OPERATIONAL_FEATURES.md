@@ -329,6 +329,19 @@ OpenList 网站。添加 VLESS 节点时面板会列出这些网站并推荐“�
 `reality_server_names`，渲染为 Xray `serverNames`，客户端可用其中任一域名作 SNI。`site add` 需要该域名已有证书
 （`/etc/xray-manager/certs/域名/`）或 Cloudflare DNS 凭据。共存后添加网站目前只支持 Nginx。
 
+## 对外端口与端口重定向（alpha.55）
+
+```bash
+xm node add vless --port 39443 --public-port 443 --security reality --domain site.example.com \
+  --handshake-server 127.0.0.1 --handshake-port 8444
+xm node set ID --public-port none
+```
+
+443 已被网站占用、而且网站防火墙只放行 CDN 来源时，可以让主机把**其余来源**的 443 重定向到节点端口
+（例如 nftables `ip saddr != @cdn tcp dport 443 redirect to :39443`），节点设置 `--public-port 443`。
+Xray 只监听节点端口；分享链接、订阅、Sub-Store 与客户端配置都写对外端口。管理器不创建重定向规则，也不改防火墙，
+规则由运维自行维护；直接访问节点端口是否放行同样由主机防火墙决定。
+
 ## OpenList 与 Reality 共用 443（alpha.72）
 
 ```bash

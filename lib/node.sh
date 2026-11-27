@@ -204,11 +204,12 @@ _node_add() {
   local id='' name='' port='' domain='' address='' address_supplied=0 address_source=auto path='' method='2022-blake3-aes-256-gcm' network='tcp' mux=true enabled=true obfs='' masquerade='' security='tls' flow='auto' handshake_server='' handshake_port=443 outbound_json='{}' xray_inbound_json='{}' xray_outbound_json='{}'
   local remark='' region='' purpose='' line='' tags='' proxy_listen='127.0.0.1' proxy_listen_supplied=0 vless_preview='' vless_network='' vless_listen='::'
   local -a vless_options=() native_flags=()
-  local security_supplied=0 tunnel_target='' follow_redirect=false wg_subnet='' wg_mtu=1420
+  local security_supplied=0 tunnel_target='' follow_redirect=false wg_subnet='' wg_mtu=1420 public_port=''
   while (($#)); do
     case "$1" in
       --listen) proxy_listen=${2:?}; proxy_listen_supplied=1; shift 2;;
       --id) id=${2:?}; shift 2;; --name) name=${2:?}; shift 2;; --port) port=${2:?}; shift 2;;
+      --public-port) public_port=${2:?}; node_public_port_patch '{}' "$public_port" >/dev/null || return 1; shift 2;;
       --uuid) cred_uuid=${2:?}; shift 2;; --password) cred_password=${2:?}; shift 2;; --short-id) cred_short_id=${2:?}; shift 2;;
       --domain) domain=${2:?}; shift 2;; --address) address=${2:?}; address_supplied=1; address_source=manual; shift 2;; --path) path=${2:?}; shift 2;;
       --method) method=${2:?}; shift 2;; --network) network=${2:?}; shift 2;; --no-mux) mux=false; shift;;
@@ -439,6 +440,7 @@ _node_add() {
     .traffic={configured:false,enabled:false,quota_bytes:null,quota_mode:"total",reset_day:1,upload_rate_bps:null,download_rate_bps:null}
     | .metadata={remark:$remark,region:$region,purpose:$purpose,line:$line,tags:($tags | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)) | unique)}
   ' <<<"$node")
+  [[ -z "$public_port" ]] || node=$(node_public_port_patch "$node" "$public_port") || return 1
   node=$(jq --argjson outbound "$outbound_json" '.singbox={outbound:$outbound}' <<<"$node")
   local i frag
   for ((i = 0; i < ${#native_flags[@]}; i += 2)); do
@@ -570,6 +572,18 @@ _node_rotate() {
 }
 node_rotate() { with_state_transaction node-rotate _node_rotate "$@"; }
 
+# public_port is the port written into share links and subscriptions when
+# clients reach the node through a redirect on this host (for example
+# nftables 443 → the node's port); "none" or the node's own port clears it.
+node_public_port_patch() {
+  local node=$1 value=$2
+  case "$value" in
+    ''|none) jq 'del(.public_port)' <<<"$node";;
+    *) validate_port "$value" || { log_error "无效对外端口：$value"; return 1; }
+       jq --argjson p "$((10#$value))" 'if $p==.port then del(.public_port) else .public_port=$p end' <<<"$node";;
+  esac
+}
+
 _node_set() {
   local id=$1; shift
   local candidate tmp key value node protocol
@@ -588,6 +602,8 @@ _node_set() {
     case "$key" in
       --name) tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.name)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --port) validate_port "$value" || die "无效端口：$value"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$value" '(.nodes[]|select(.id==$id)|.port)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
+      --public-port) node=$(jq --arg id "$id" '.nodes[]|select(.id==$id)' "$candidate") && node=$(node_public_port_patch "$node" "$value") || { rm -f "$candidate"; return 1; }
+        tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --argjson v "$node" '(.nodes[]|select(.id==$id))=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --address) validate_address "$value" || die "无效地址"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)) |= if .protocol=="vmess-ws-cf" then .client_address=$v else .server_address=$v | .server_address_source="manual" end' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --domain) validate_domain "$value" || die "无效域名：$value"; tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.domain)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;
       --path) value=$(normalize_ws_path "$value"); tmp=$(mktemp "$SBM_RUN/edit.XXXXXX"); jq --arg id "$id" --arg v "$value" '(.nodes[]|select(.id==$id)|.ws_path)=$v' "$candidate" >"$tmp"; mv "$tmp" "$candidate";;

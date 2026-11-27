@@ -11,7 +11,7 @@ Simplified example:
 ```json
 {
   "schema_version": 2,
-  "manager_version": "0.1.0-alpha.54",
+  "manager_version": "0.1.0-alpha.55",
   "settings": {
     "log_level": "warn",
     "default_server_address": "",
@@ -64,7 +64,9 @@ Simplified example:
 
 Common fields: `id` (`^[a-z0-9][a-z0-9._-]{0,47}$`), `name`, `protocol`, `enabled`,
 `listen`, `port`, `server_address` (what clients connect to; `server_address_source`
-`auto` follows `xm settings detect-ip`), `metadata`, `traffic`, `users`, `xray`.
+`auto` follows `xm settings detect-ip`), optional `public_port` (the port share links and
+subscriptions advertise when a redirect on the host forwards it to `port`; absent means `port`),
+`metadata`, `traffic`, `users`, `xray`.
 
 | protocol | extra fields | user secret | node secret |
 |---|---|---|---|

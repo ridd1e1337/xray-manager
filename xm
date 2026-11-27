@@ -87,6 +87,7 @@ sb_help_full() {
   xm node enable|disable|delete|rotate <ID>
   xm node clone SRC_ID NEW_ID [--port N] [--name NAME]   复制节点设置，重新生成凭据
   xm node set <ID> --port N|--address HOST|--domain DOMAIN|--name NAME|--path PATH|--listen IP
+                 [--public-port N|none]   分享链接与订阅写的端口（本机端口转发/重定向到节点端口时用）
                  [--remark TEXT] [--region REGION] [--purpose PURPOSE] [--line LINE] [--tags a,b]
                  [--method METHOD] [--network tcp|udp] [--obfs salamander|none] [--masquerade URL]
                  传输（VLESS/VMess/Trojan/SS）：[--transport raw|ws|grpc|httpupgrade|xhttp|kcp|hysteria]
@@ -208,7 +209,7 @@ sb_help_full() {
   xm uninstall [--purge] [--yes]
 
 节点添加常用参数：
-  --id ID --name NAME --port PORT --domain DOMAIN --address HOST
+  --id ID --name NAME --port PORT --public-port PORT --domain DOMAIN --address HOST
   --uuid UUID --password PASSWORD --short-id HEX   指定首个用户的凭据 / Reality Short ID（默认自动生成）
   TLS:   没有可用证书时自动创建 Cloudflare DNS only 记录并签发证书。
          CLI 请先执行 xm cert setup-cloudflare；已有冲突 DNS 会被拒绝，--disabled 不申请证书。

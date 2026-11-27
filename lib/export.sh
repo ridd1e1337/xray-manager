@@ -5,6 +5,7 @@
 wireguard_client_profile() {
   local id=$1 user_id=$2 node secret node_secret
   node=$(state_get_node "$id") || return 1
+  if declare -F nginx_stream_public_node >/dev/null 2>&1; then node=$(nginx_stream_public_node "$node") || return 1; fi
   secret=$(state_get_user_secret "$id" "$user_id") || return 1
   node_secret=$(state_get_secret "$id") || return 1
   jq -n --argjson n "$node" --argjson u "$secret" --argjson s "$node_secret" '

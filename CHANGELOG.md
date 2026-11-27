@@ -4,6 +4,12 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.55
+
+- 节点新增「对外端口」：`xm node add … --public-port N`、`xm node set ID --public-port N|none`，表单「高级」里同名一项。
+  分享链接、订阅、Sub-Store 和各客户端配置写这个端口，Xray 仍监听节点自己的端口。用于本机防火墙把公网端口重定向到节点端口的场景，
+  例如网站只放行 Cloudflare、其余来源的 443 由 nftables 重定向给 Reality 节点。与节点端口相同或填 `none` 即清除；TCP/SNI 复用的路由仍以复用入口端口为准。
+
 ## 0.1.0-alpha.54
 
 - 出站订阅：导入带 `fm=`（FinalMask，如 Sudoku、分片）的 VLESS / Trojan 分享链接时保留这份设置；此前会被丢掉，生成的出站连不上对端。

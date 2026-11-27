@@ -19,7 +19,7 @@ vless_config_apply() {
         value=$(node_json_argument "$value") || return 1
         node_validate_json_object "$key" "$value" || return 1
         ! grep -qE '<redacted>|\*{20,}' <<<"$value" || { log_error '这段设置里有被遮蔽的密钥（来自节点列表），不能写回；请只提交要修改的项。'; return 1; };;
-      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--vless-auth-mode|--reality-mldsa65|--ech|--handshake-server|--handshake-port|--domain|--address|--name|--port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
+      --transport|--security|--flow|--path|--host|--service-name|--xhttp-mode|--tls-server-name|--fingerprint|--alpn|--allow-insecure|--pinned-cert-sha256|--verify-name|--packet-encoding|--vless-encryption|--vless-decryption|--vless-auth|--vless-auth-mode|--reality-mldsa65|--ech|--handshake-server|--handshake-port|--domain|--address|--name|--port|--public-port|--listen|--frontend-address|--frontend-port|--frontend-sni|--fallbacks|--fallback-dest|--sniffing|--sniff-dest|--tcp-fast-open|--accept-proxy-protocol) ;;
       *) log_error "未知 VLESS 参数：$key"; return 1;;
     esac
     options[$key]=$value
@@ -268,6 +268,7 @@ vless_config_apply() {
       *) node=$(jq --arg key "${key#--}" --arg value "$value" '.[($key|gsub("-";"_"))]=$value' <<<"$node") || return 1;;
     esac
   done
+  if [[ -v options[--public-port] ]]; then node=$(node_public_port_patch "$node" "${options[--public-port]}") || return 1; fi
   if [[ -v options[--sockopt-json] ]]; then
     node=$(jq --argjson value "${options[--sockopt-json]}" 'if $value=={} then del(.xray.inbound.streamSettings.sockopt) else .xray.inbound.streamSettings.sockopt=$value end' <<<"$node") || return 1
   fi
