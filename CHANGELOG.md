@@ -4,6 +4,11 @@ xray-manager 由 sb-manager 0.1.0-alpha.82 拆分而来，此后独立编号；�
 
 ## Unreleased
 
+## 0.1.0-alpha.54
+
+- 出站订阅：导入带 `fm=`（FinalMask，如 Sudoku、分片）的 VLESS / Trojan 分享链接时保留这份设置；此前会被丢掉，生成的出站连不上对端。
+  `fm` 无效（不是 JSON 对象，或含有 tcp / udp / quicParams 以外的内容）的链接会被跳过并说明原因。
+
 ## 0.1.0-alpha.53
 
 - `xm node list --json` 遮蔽节点扩展里的私钥（VLESS decryption、ECH 服务端密钥、ML-DSA-65 种子、Reality 私钥、内联证书私钥）：只显示它们存在，不输出内容；`xm node show` 不受影响。

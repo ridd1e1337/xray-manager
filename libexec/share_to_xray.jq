@@ -42,7 +42,14 @@ def stream($q):
         + (if $q.pcs then {pinnedPeerCertSha256:$q.pcs} else {} end))}
      elif $sec == "reality" then {security:"reality", realitySettings:{serverName:($q.sni // ""), fingerprint:($q.fp // "chrome"),
         password:($q.pbk // ""), shortId:($q.sid // ""), spiderX:($q.spx // "/")}}
-     else {} end);
+     else {} end)
+  # fm: the finalmask object (JSON), as written by this manager's VLESS links.
+  + (if ($q.fm // "") == "" then {} else
+       ($q.fm | try fromjson catch null) as $fm |
+       if ($fm | type) == "object" and ($fm | keys - ["tcp", "udp", "quicParams"] | length) == 0
+          and (($fm.tcp // []) | type) == "array" and (($fm.udp // []) | type) == "array" and (($fm.quicParams // {}) | type) == "object"
+       then {finalmask:$fm} else error("链接里的 fm（finalmask）无效") end
+     end);
 . as $link |
 (try (
   ($link | capture("^(?<scheme>[a-z0-9]+)://(?<rest>.*)$")) as $m |
